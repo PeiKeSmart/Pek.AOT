@@ -48,10 +48,10 @@ public class MachineInfo
 
     private static MachineInfo CreateCurrent()
     {
-        var gcInfo = GC.GetGCMemoryInfo();
-        var total = gcInfo.TotalAvailableMemoryBytes > 0 ? (UInt64)gcInfo.TotalAvailableMemoryBytes : 0;
-        var used = GC.GetTotalMemory(false);
-        var available = total > (UInt64)used ? total - (UInt64)used : 0;
+        var total = 0UL;
+        var available = 0UL;
+
+        TryGetMemory(out total, out available);
 
         return new MachineInfo
         {
@@ -65,6 +65,62 @@ public class MachineInfo
         };
     }
 
+    private static void TryGetMemory(out UInt64 total, out UInt64 available)
+    {
+        total = 0;
+        available = 0;
+
+        if (Runtime.Windows && TryGetWindowsMemory(out total, out available)) return;
+        if (Runtime.Linux && TryGetLinuxMemory(out total, out available)) return;
+
+        var gcInfo = GC.GetGCMemoryInfo();
+        total = gcInfo.TotalAvailableMemoryBytes > 0 ? (UInt64)gcInfo.TotalAvailableMemoryBytes : 0;
+        var used = GC.GetTotalMemory(false);
+        available = total > (UInt64)used ? total - (UInt64)used : 0;
+    }
+
+    private static Boolean TryGetWindowsMemory(out UInt64 total, out UInt64 available)
+    {
+        total = 0;
+        available = 0;
+
+        var memory = new MEMORYSTATUSEX();
+        memory.Init();
+        if (!GlobalMemoryStatusEx(ref memory)) return false;
+
+        total = memory.ullTotalPhys;
+        available = memory.ullAvailPhys;
+        return total > 0;
+    }
+
+    private static Boolean TryGetLinuxMemory(out UInt64 total, out UInt64 available)
+    {
+        total = 0;
+        available = 0;
+
+        const String fileName = "/proc/meminfo";
+        if (!File.Exists(fileName)) return false;
+
+        foreach (var line in File.ReadLines(fileName))
+        {
+            if (line.StartsWith("MemTotal:", StringComparison.OrdinalIgnoreCase))
+                total = ParseLinuxMemory(line);
+            else if (line.StartsWith("MemAvailable:", StringComparison.OrdinalIgnoreCase))
+                available = ParseLinuxMemory(line);
+        }
+
+        return total > 0;
+    }
+
+    private static UInt64 ParseLinuxMemory(String line)
+    {
+        var value = line[(line.IndexOf(':') + 1)..].Trim();
+        if (value.EndsWith("kB", StringComparison.OrdinalIgnoreCase))
+            value = value[..^2].Trim();
+
+        return UInt64.TryParse(value, out var size) ? size * 1024 : 0;
+    }
+
     private static String GetProcessorName()
     {
         if (Runtime.Windows)
@@ -75,4 +131,24 @@ public class MachineInfo
 
         return RuntimeInformation.ProcessArchitecture.ToString();
     }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MEMORYSTATUSEX
+    {
+        public UInt32 dwLength;
+        public UInt32 dwMemoryLoad;
+        public UInt64 ullTotalPhys;
+        public UInt64 ullAvailPhys;
+        public UInt64 ullTotalPageFile;
+        public UInt64 ullAvailPageFile;
+        public UInt64 ullTotalVirtual;
+        public UInt64 ullAvailVirtual;
+        public UInt64 ullAvailExtendedVirtual;
+
+        public void Init() => dwLength = (UInt32)Marshal.SizeOf<MEMORYSTATUSEX>();
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern Boolean GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
 }
