@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Pek.Logging;
+using Pek.Configuration;
 
 namespace Pek.Configuration;
 
@@ -429,11 +430,13 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
     /// <typeparam name="TJsonContext">JSON序列化上下文类型</typeparam>
     /// <param name="jsonContext">JSON序列化上下文实例</param>
     /// <param name="fileName">配置文件名（可选）</param>
+    /// <param name="fileFormat">配置文件格式，默认 Xml</param>
     /// <param name="writeIndented">是否格式化JSON（可选）</param>
     /// <param name="useCamelCase">是否使用驼峰命名（可选）</param>
     public static void RegisterConfigForAot<TJsonContext>(
         TJsonContext jsonContext,
         string? fileName = null,
+        ConfigFileFormat fileFormat = ConfigFileFormat.Xml,
         bool writeIndented = true,
         bool useCamelCase = true) where TJsonContext : JsonSerializerContext
     {
@@ -449,7 +452,7 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
             jsonOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         }
 
-        ConfigManager.RegisterConfig<TConfig>(jsonOptions, fileName);
+        ConfigManager.RegisterConfig<TConfig>(jsonOptions, fileName, fileFormat);
     }
 
     /// <summary>
@@ -457,15 +460,17 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
     /// </summary>
     /// <typeparam name="TJsonContext">包含TConfig类型的JSON序列化上下文类型</typeparam>
     /// <param name="fileName">配置文件名（可选）</param>
+    /// <param name="fileFormat">配置文件格式，默认 Xml</param>
     /// <param name="writeIndented">是否格式化JSON（可选）</param>
     /// <param name="useCamelCase">是否使用驼峰命名（可选）</param>
     public static void RegisterForAot<TJsonContext>(
         string? fileName = null,
+        ConfigFileFormat fileFormat = ConfigFileFormat.Xml,
         bool writeIndented = true,
         bool useCamelCase = true) where TJsonContext : JsonSerializerContext, new()
     {
         var jsonContext = new TJsonContext();
-        RegisterConfigForAot(jsonContext, fileName, writeIndented, useCamelCase);
+        RegisterConfigForAot(jsonContext, fileName, fileFormat, writeIndented, useCamelCase);
     }
 }
 

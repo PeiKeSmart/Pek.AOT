@@ -159,7 +159,31 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 3. `JsonTypeInfo` / 显式映射表 / 委托表
 4. 小范围兼容性反射兜底
 
-### 4.3 兼容层改造规则
+### 4.3 完全禁止 suppress 掩盖 AOT 风险
+
+本仓库定位就是 AOT 主用库，因此**完全不允许**使用任何 suppress 来压掉裁剪或 AOT 风险警告，包括但不限于：
+
+- `[UnconditionalSuppressMessage("Trimming", ...)]`
+- `[UnconditionalSuppressMessage("Aot", ...)]`
+- 任何针对 IL2026 / IL3050 / IL2067 / IL2070 等问题的 suppress
+- 任何只有 `Justification`、但没有消除根因的“解释性压警告”做法
+
+出现此类警告时，唯一正确处理方式是：
+
+1. 改实现，消除运行时反射、动态创建、动态代码生成等根因
+2. 改成静态注册、源生成、`JsonTypeInfo`、显式映射、委托表等 AOT 友好方案
+3. 必要时收窄能力边界，宁可减少通用性，也不要保留高风险主链路
+
+如果一段逻辑仍依赖运行时反射、`Activator.CreateInstance(Type)`、`PropertyInfo.GetValue/SetValue`、通用对象图遍历等能力，就算可以通过 suppress 消除警告，也**一律视为不符合本仓库要求**。
+
+对配置/XML/序列化链路执行更严格标准：
+
+- 必须优先复用已注册的 `JsonTypeInfo`
+- 必须优先通过显式类型信息、映射表或委托完成转换
+- 不允许在主链路中保留通用反射读写器
+- 不允许为了兼容旧实现而用 suppress 掩盖真实风险
+
+### 4.4 兼容层改造规则
 
 若为了兼容旧代码新增 `NewLife.*` 命名空间类型：
 
@@ -221,6 +245,7 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 - ❌ 在配置链路中直接调用默认 `JsonSerializer.Serialize/Deserialize`
 - ❌ 在配置链路中使用 `Type + JsonSerializerOptions` 的动态重载，导致 IL2026 / IL3050
 - ❌ 依赖反射扫描自动发现配置类
+- ❌ 在本仓库任何位置使用 `UnconditionalSuppressMessage` 或同类 suppress 掩盖裁剪/AOT 风险
 - ❌ 为兼容旧 API 复制整份业务逻辑，而不是复用 `Pek.*` 实现
 - ❌ 修改静态初始化逻辑时重新引入 `XXTrace` 与 `ConfigManager` 的环形依赖
 - ❌ 让 `JsonSerializerContext` 继承另一个也带 `[JsonSerializable]` 的上下文，导致源生成成员隐藏冲突

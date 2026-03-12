@@ -1,10 +1,13 @@
 ﻿using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
+using System.Xml;
 
 using Pek.IO;
 using Pek.Logging;
+using Pek.Xml;
 
 namespace Pek.Configuration;
 
@@ -76,6 +79,7 @@ public static class ConfigManager
     private static readonly ConcurrentDictionary<Type, object> _configs = new();
     private static readonly ConcurrentDictionary<Type, JsonSerializerOptions> _serializerOptions = new();
     private static readonly ConcurrentDictionary<Type, string> _configFileNames = new();
+    private static readonly ConcurrentDictionary<Type, ConfigFileFormat> _configFileFormats = new();
     private static readonly ConcurrentDictionary<string, Type> _filePathToConfigType = new();
     private static readonly ConcurrentDictionary<Type, ConfigReloadDelegate> _configReloadDelegates = new();
     
@@ -256,12 +260,14 @@ public static class ConfigManager
     /// <typeparam name="TConfig">配置类型</typeparam>
     /// <param name="serializerOptions">序列化选项</param>
     /// <param name="fileName">配置文件名（可选）</param>
-    public static void RegisterConfig<TConfig>(JsonSerializerOptions serializerOptions, string? fileName = null)
+    /// <param name="fileFormat">配置文件格式</param>
+    public static void RegisterConfig<TConfig>(JsonSerializerOptions serializerOptions, string? fileName = null, ConfigFileFormat fileFormat = ConfigFileFormat.Xml)
         where TConfig : Config, new()
     {
         var configType = typeof(TConfig);
         _serializerOptions[configType] = serializerOptions;
-        _configFileNames[configType] = fileName ?? configType.Name;
+        _configFileNames[configType] = ResolveConfigFileName(configType, fileName, fileFormat);
+        _configFileFormats[configType] = fileFormat;
         
         // 注册配置重载委托（消除反射依赖）
         _configReloadDelegates[configType] = () => ReloadConfigInternal<TConfig>();
@@ -411,22 +417,41 @@ public static class ConfigManager
             var filePath = GetConfigFilePath(configType);
             if (File.Exists(filePath))
             {
-                var json = File.ReadAllText(filePath);
+                var content = File.ReadAllText(filePath);
                 
-                if (string.IsNullOrWhiteSpace(json))
+                if (string.IsNullOrWhiteSpace(content))
                 {
                     return CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
 
                 try
                 {
-                    var config = DeserializeConfig(json, configType, options) as TConfig;
-                    return config ?? CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    var format = GetConfigFileFormat(configType);
+                    if (format == ConfigFileFormat.Xml)
+                    {
+                        var config = XmlHelper.ToXmlEntity(content, configType, options) as TConfig;
+                        if (config != null) return config;
+
+                        return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    }
+
+                    var jsonConfig = DeserializeConfig(content, configType, options) as TConfig;
+                    return jsonConfig ?? CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
                 catch (JsonException jsonEx)
                 {
                     XXTrace.WriteLine($"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}");
                     return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                }
+                catch (XmlException xmlEx)
+                {
+                    if (GetConfigFileFormat(configType) == ConfigFileFormat.Xml)
+                    {
+                        XXTrace.WriteLine($"配置文件XML格式错误，尝试按旧JSON迁移: {filePath}, 错误: {xmlEx.Message}");
+                        return TryLoadLegacyJsonAndMigrate<TConfig>(configType, options, content);
+                    }
+
+                    throw;
                 }
             }
         }
@@ -491,8 +516,10 @@ public static class ConfigManager
         // 记录保存时间，用于过滤掉代码保存触发的文件监控事件
         _lastSaveTimes[filePath] = DateTime.Now;
 
-        // 性能优化：先序列化到内存，再一次性写入文件
-        var json = SerializeConfig(config, configType, options);
+        var format = GetConfigFileFormat(configType);
+        var content = format == ConfigFileFormat.Xml
+            ? config.ToXml(configType, options)
+            : SerializeConfig(config, configType, options);
 
         // 确保目录存在
         var directory = Path.GetDirectoryName(filePath);
@@ -503,7 +530,7 @@ public static class ConfigManager
 
         // 原子性写入：先写入临时文件，再替换原文件
         var tempFilePath = $"{filePath}.tmp";
-        File.WriteAllText(tempFilePath, json);
+        File.WriteAllText(tempFilePath, content);
 
         // 原子性替换文件
         if (File.Exists(filePath))
@@ -538,7 +565,44 @@ public static class ConfigManager
             Directory.CreateDirectory(configDir);
         }
 
-        return Path.Combine(configDir, $"{fileName}.config");
+        return Path.Combine(configDir, fileName);
+    }
+
+    private static ConfigFileFormat GetConfigFileFormat(Type configType) => _configFileFormats.TryGetValue(configType, out var format) ? format : ConfigFileFormat.Xml;
+
+    private static String ResolveConfigFileName(Type configType, String? fileName, ConfigFileFormat fileFormat)
+    {
+        if (String.IsNullOrWhiteSpace(fileName))
+        {
+            var attributeFileName = fileFormat == ConfigFileFormat.Json
+                ? configType.GetCustomAttribute<JsonConfigFileAttribute>()?.FileName
+                : configType.GetCustomAttribute<XmlConfigFileAttribute>()?.FileName;
+
+            fileName = String.IsNullOrWhiteSpace(attributeFileName) ? configType.Name : attributeFileName;
+        }
+
+        return Path.HasExtension(fileName) ? fileName : $"{fileName}.config";
+    }
+
+    private static TConfig TryLoadLegacyJsonAndMigrate<TConfig>(Type configType, JsonSerializerOptions options, String content)
+        where TConfig : Config, new()
+    {
+        try
+        {
+            var config = DeserializeConfig(content, configType, options) as TConfig;
+            if (config != null)
+            {
+                XXTrace.WriteLine($"检测到旧 JSON 配置，正在迁移为 XML: {GetConfigFilePath(configType)}");
+                TryWriteConfigFile(config, configType, options, writeLog: false);
+                return config;
+            }
+        }
+        catch (Exception ex)
+        {
+            XXTrace.WriteException(ex);
+        }
+
+        return CreateAndPersistDefaultConfig<TConfig>(configType, options);
     }
     
     /// <summary>
