@@ -40,8 +40,8 @@ internal static class ConfigJsonComparer
         try
         {
             // 使用 JSON 序列化比较（AOT 兼容）
-            var oldJson = JsonSerializer.Serialize(oldConfig, configType, serializerOptions);
-            var newJson = JsonSerializer.Serialize(newConfig, configType, serializerOptions);
+            var oldJson = ConfigManager.SerializeConfig(oldConfig, configType, serializerOptions);
+            var newJson = ConfigManager.SerializeConfig(newConfig, configType, serializerOptions);
             
             if (oldJson != newJson)
             {

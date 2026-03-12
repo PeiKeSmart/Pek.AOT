@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
 
 using Pek.IO;
@@ -351,6 +352,49 @@ public static class ConfigManager
     }
 
     /// <summary>
+    /// 获取配置类型对应的源生成类型信息。
+    /// </summary>
+    /// <param name="configType">配置类型</param>
+    /// <param name="options">序列化选项</param>
+    /// <returns>类型信息</returns>
+    internal static JsonTypeInfo GetJsonTypeInfo(Type configType, JsonSerializerOptions options)
+    {
+        var typeInfo = options.GetTypeInfo(configType);
+        if (typeInfo == null)
+        {
+            throw new InvalidOperationException($"配置类型 {configType.Name} 未注册 JsonTypeInfo");
+        }
+
+        return typeInfo;
+    }
+
+    /// <summary>
+    /// 使用源生成类型信息序列化配置对象。
+    /// </summary>
+    /// <param name="config">配置对象</param>
+    /// <param name="configType">配置类型</param>
+    /// <param name="options">序列化选项</param>
+    /// <returns>JSON 字符串</returns>
+    internal static String SerializeConfig(Object config, Type configType, JsonSerializerOptions options)
+    {
+        var typeInfo = GetJsonTypeInfo(configType, options);
+        return JsonSerializer.Serialize(config, typeInfo);
+    }
+
+    /// <summary>
+    /// 使用源生成类型信息反序列化配置对象。
+    /// </summary>
+    /// <param name="json">JSON 字符串</param>
+    /// <param name="configType">配置类型</param>
+    /// <param name="options">序列化选项</param>
+    /// <returns>配置对象</returns>
+    internal static Object? DeserializeConfig(String json, Type configType, JsonSerializerOptions options)
+    {
+        var typeInfo = GetJsonTypeInfo(configType, options);
+        return JsonSerializer.Deserialize(json, typeInfo);
+    }
+
+    /// <summary>
     /// 加载配置（简化版本）
     /// </summary>
     private static TConfig LoadConfig<TConfig>() where TConfig : Config, new()
@@ -376,7 +420,7 @@ public static class ConfigManager
 
                 try
                 {
-                    var config = JsonSerializer.Deserialize<TConfig>(json, options);
+                    var config = DeserializeConfig(json, configType, options) as TConfig;
                     return config ?? CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
                 catch (JsonException jsonEx)
@@ -448,7 +492,7 @@ public static class ConfigManager
         _lastSaveTimes[filePath] = DateTime.Now;
 
         // 性能优化：先序列化到内存，再一次性写入文件
-        var json = JsonSerializer.Serialize(config, configType, options);
+        var json = SerializeConfig(config, configType, options);
 
         // 确保目录存在
         var directory = Path.GetDirectoryName(filePath);

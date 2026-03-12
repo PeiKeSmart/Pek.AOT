@@ -41,6 +41,6 @@ public class TestSettings : Config<TestSettings>
 /// AOT兼容的JSON序列化上下文
 /// </summary>
 [JsonSerializable(typeof(TestSettings))]
-public partial class TestSettingsJsonContext : ConfigJsonContext
+public partial class TestSettingsJsonContext : JsonSerializerContext
 {
 }

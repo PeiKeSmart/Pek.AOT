@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Pek.Configuration` 是一个简单易用的配置管理系统，支持 JSON 格式的配置文件，并提供了 AOT 兼容的序列化支持。配置系统会自动在应用程序根目录下的 `Config` 文件夹中查找或创建配置文件。
+`Pek.Configuration` 是一个简单易用的配置管理系统，支持 JSON 格式的配置文件，并提供了 AOT 兼容的序列化支持。配置系统会自动在应用程序根目录下的 `Config` 文件夹中查找或创建配置文件；首次访问 `Config<T>.Current` 时，如果配置文件不存在，会立即按默认值生成对应 `.config` 文件。
 
 ## 特性
 
@@ -10,7 +10,7 @@
 - **AOT 兼容**：支持 .NET Native 和 Blazor WebAssembly 等 AOT 编译环境
 - **类型安全**：使用泛型和强类型配置类
 - **线程安全**：支持多线程环境下的配置访问
-- **自动序列化/反序列化**：使用 System.Text.Json
+- **自动序列化/反序列化**：使用 `System.Text.Json` 源生成上下文和 `JsonTypeInfo`
 - **懒加载**：配置只在首次访问时加载，提高性能
 - **智能自动重新加载**：支持配置文件外部修改后自动更新内存中的配置对象，同时过滤代码保存操作
 - **通用配置变更通知**：提供统一的事件管理机制，支持多种订阅方式
@@ -27,23 +27,24 @@ using Pek.Configuration;
 
 public class AppConfig : Config<AppConfig>
 {
-    public string ApiUrl { get; set; } = "https://api.example.com";
-    public int MaxRetries { get; set; } = 3;
-    public bool EnableLogging { get; set; } = true;
-    
-    // 静态构造函数，注册配置
-    static AppConfig()
-    {
-        RegisterConfigForAot(AppConfigJsonContext.Default);
-    }
+    public String ApiUrl { get; set; } = "https://api.example.com";
+    public Int32 MaxRetries { get; set; } = 3;
+    public Boolean EnableLogging { get; set; } = true;
+
+    static AppConfig() => RegisterForAot<AppConfigJsonContext>();
 }
 
-// AOT兼容的JSON序列化上下文
 [JsonSerializable(typeof(AppConfig))]
 public partial class AppConfigJsonContext : JsonSerializerContext
 {
 }
 ```
+
+### 1.1 AOT 序列化约束
+
+- 配置类必须通过 `RegisterForAot<TJsonContext>()` 注册源生成上下文
+- 配置加载、保存、快照、比较统一走 `ConfigManager.SerializeConfig()` / `ConfigManager.DeserializeConfig()`，不要直接调用 `JsonSerializer.Serialize(object, Type, JsonSerializerOptions)` 或 `JsonSerializer.Deserialize(string, Type, JsonSerializerOptions)`
+- 配置上下文只声明当前配置及其依赖类型，避免多个 `JsonSerializerContext` 继承叠加导致源生成成员冲突
 
 ### 2. 访问配置
 
@@ -276,11 +277,12 @@ ConfigManager.AnyConfigChanged -= handler;
 配置类在首次访问时会自动初始化，无需显式调用初始化方法：
 
 1. 当首次访问 `Config<T>.Current` 属性时，会调用 `EnsureInitialized()` 方法
-2. `EnsureInitialized()` 检查配置类是否已初始化，如果未初始化，则使用 `RuntimeHelpers.RunClassConstructor()` 触发静态构造函数
-3. 静态构造函数中调用 `RegisterConfigForAot()` 方法注册配置类的序列化选项
-4. 初始化完成后，设置标志位，确保静态构造函数只被调用一次
+2. `EnsureInitialized()` 检查配置类是否已初始化，如果未初始化，则通过创建 `TConfig` 实例触发派生类静态构造函数
+3. 静态构造函数中调用 `RegisterForAot<TJsonContext>()` 注册配置类的序列化选项
+4. 初始化完成后，设置标志位，确保初始化逻辑只执行一次
+5. 如果配置文件不存在、为空或 JSON 无法反序列化，系统会创建默认配置并立即写回 `Config/{文件名}.config`
 
-**重要说明**：此机制不使用反射，确保在AOT环境下也能正常工作。
+**重要说明**：此机制不使用反射，也不依赖 `RuntimeHelpers.RunClassConstructor(typeof(TConfig).TypeHandle)`，确保在 AOT 环境下也能正常工作。
 
 这种机制确保了：
 - 配置类只在需要时才初始化（懒加载）
@@ -296,7 +298,7 @@ ConfigManager.AnyConfigChanged -= handler;
 ```csharp
 static AppConfig()
 {
-    RegisterConfigForAot(AppConfigJsonContext.Default, "CustomAppSettings");
+    RegisterForAot<AppConfigJsonContext>("CustomAppSettings");
 }
 ```
 
@@ -305,7 +307,7 @@ static AppConfig()
 ```csharp
 static AppConfig()
 {
-    RegisterConfigForAot(AppConfigJsonContext.Default, writeIndented: true, useCamelCase: false);
+    RegisterForAot<AppConfigJsonContext>(writeIndented: true, useCamelCase: false);
 }
 ```
 

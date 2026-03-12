@@ -29,7 +29,7 @@ public abstract class Config
             var configType = GetType();
             if (ConfigManager.TryGetSerializerOptions(configType, out var options))
             {
-                _configSnapshot = JsonSerializer.Serialize(this, configType, options);
+                _configSnapshot = ConfigManager.SerializeConfig(this, configType, options);
             }
         }
         catch (Exception ex)
@@ -53,7 +53,7 @@ public abstract class Config
                 var configType = GetType();
                 if (ConfigManager.TryGetSerializerOptions(configType, out var options))
                 {
-                    oldConfig = JsonSerializer.Deserialize(_configSnapshot, configType, options);
+                    oldConfig = ConfigManager.DeserializeConfig(_configSnapshot, configType, options);
                 }
             }
         }
@@ -91,8 +91,8 @@ public abstract class Config
             if (ConfigManager.TryGetSerializerOptions(configType, out var options))
             {
                 // 序列化两个配置对象
-                var oldJson = JsonSerializer.Serialize(oldConfig, configType, options);
-                var newJson = JsonSerializer.Serialize(this, configType, options);
+                var oldJson = ConfigManager.SerializeConfig(oldConfig, configType, options);
+                var newJson = ConfigManager.SerializeConfig(this, configType, options);
                 
                 // 如果JSON不同，则表示有变更
                 if (oldJson != newJson)
@@ -397,8 +397,7 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
                 {
                     try
                     {
-                        // AOT兼容的初始化方式
-                        RuntimeHelpers.RunClassConstructor(typeof(TConfig).TypeHandle);
+                        _ = new TConfig();
                         _initialized = true;
                     }
                     catch (Exception ex)

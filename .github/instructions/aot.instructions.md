@@ -104,6 +104,12 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 
 涉及配置持久化、快照、比较、重载时，优先通过 `ConfigManager.TryGetSerializerOptions()` 获取已注册的 `JsonSerializerOptions`，不要绕开注册表直接使用默认序列化选项。
 
+进一步要求：
+
+- 优先通过 `ConfigManager.SerializeConfig()` / `ConfigManager.DeserializeConfig()` 复用统一序列化入口
+- 禁止在配置链路中调用 `JsonSerializer.Serialize(Object, Type, JsonSerializerOptions)`、`JsonSerializer.Deserialize(String, Type, JsonSerializerOptions)` 等依赖运行时类型分析的动态重载
+- 必须确保 `JsonSerializerOptions.GetTypeInfo(type)` 可以拿到对应 `JsonTypeInfo`，否则视为注册不完整
+
 ### 3.4 注意静态初始化顺序
 
 配置类、日志类存在初始化先后依赖时：
@@ -113,6 +119,15 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 - 优先先完成注册，再做惰性加载
 
 如果修改 `XXTrace`、`ConfigManager`、配置默认值回退逻辑，必须检查是否重新引入初始化环。
+
+### 3.5 配置初始化触发方式
+
+`Config<TConfig>.Current` 的初始化应优先依赖类型自身的静态构造触发，不要重新引入 `RuntimeHelpers.RunClassConstructor(typeof(TConfig).TypeHandle)` 这类会带来裁剪分析不确定性的写法。
+
+推荐方式：
+
+- 通过访问静态成员或创建 `new TConfig()` 触发派生类静态构造
+- 注册逻辑保持在配置类型自己的静态构造函数中
 
 ---
 
@@ -141,7 +156,7 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 
 1. 泛型静态注册
 2. 源生成上下文
-3. 显式映射表 / 委托表
+3. `JsonTypeInfo` / 显式映射表 / 委托表
 4. 小范围兼容性反射兜底
 
 ### 4.3 兼容层改造规则
@@ -204,9 +219,11 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 - ❌ 新增配置类但未注册 `RegisterForAot<TJsonContext>()`
 - ❌ 新增复杂属性类型但遗漏 `[JsonSerializable]`
 - ❌ 在配置链路中直接调用默认 `JsonSerializer.Serialize/Deserialize`
+- ❌ 在配置链路中使用 `Type + JsonSerializerOptions` 的动态重载，导致 IL2026 / IL3050
 - ❌ 依赖反射扫描自动发现配置类
 - ❌ 为兼容旧 API 复制整份业务逻辑，而不是复用 `Pek.*` 实现
 - ❌ 修改静态初始化逻辑时重新引入 `XXTrace` 与 `ConfigManager` 的环形依赖
+- ❌ 让 `JsonSerializerContext` 继承另一个也带 `[JsonSerializable]` 的上下文，导致源生成成员隐藏冲突
 - ❌ 只改代码不改 README / 样例，导致仓库示例失真
 - ❌ 仅验证单一目标框架就宣称 AOT 兼容完成
 
