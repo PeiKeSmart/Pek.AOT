@@ -363,11 +363,19 @@ public class TextFileLog : Logger, IDisposable
         ThreadPool.GetMaxThreads(out var maxWorker, out var maxIo);
         ThreadPool.GetAvailableThreads(out var availableWorker, out var availableIo);
         builder.AppendFormat("#ThreadPool: Min={0}/{1}, Max={2}/{3}, Available={4}/{5}\r\n", minWorker, minIo, maxWorker, maxIo, availableWorker, availableIo);
-        builder.AppendFormat("#SystemStarted: {0}\r\n", TimeSpan.FromMilliseconds(Runtime.TickCount64));
+        builder.AppendFormat("#SystemStarted: {0}\r\n", FormatSystemStarted(Runtime.TickCount64));
         builder.AppendFormat("#Date: {0:yyyy-MM-dd}\r\n", DateTime.Now.AddHours(setting.UtcIntervalHours));
         builder.AppendFormat("#详解：{0}\r\n", "https://newlifex.com/core/log");
         builder.AppendFormat("#字段: {0}\r\n", "时间 线程ID 线程池Y/网页W/普通N 线程名/任务ID/定时T/线程池P/长任务L 消息内容");
         builder.AppendFormat("#Fields: {0}\r\n", setting.LogLineFormat.Replace('|', ' '));
         return builder.ToString();
+    }
+
+    private static String FormatSystemStarted(Int64 tickCount)
+    {
+        var uptime = TimeSpan.FromMilliseconds(tickCount);
+        var hours = (Int64)uptime.TotalHours;
+
+        return $"{hours:D2}:{uptime:mm\\:ss\\.fffffff}";
     }
 }
