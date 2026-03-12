@@ -24,3 +24,4 @@ bld/
 /BinTest
 /BinUnitTest
 Pek.AOT/Properties/PublishProfiles/FolderProfile.pubxml
+Samples/XXTraceSample/Properties/PublishProfiles/FolderProfile.pubxml
