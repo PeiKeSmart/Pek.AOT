@@ -4,8 +4,8 @@ using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text;
 
-using NewLife;
-using NewLife.Threading;
+using Pek;
+using Pek.Threading;
 
 namespace Pek.Logging;
 

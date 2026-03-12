@@ -1,6 +1,6 @@
 using Pek.Logging;
 
-namespace NewLife.Threading;
+namespace Pek.Threading;
 
 /// <summary>定时器调度器</summary>
 public class TimerScheduler : IDisposable

@@ -11,7 +11,7 @@ public static class PathHelper
 
     static PathHelper()
     {
-        var directory = NewLife.Runtime.GetEnvironmentVariable("BasePath");
+        var directory = Pek.Runtime.GetEnvironmentVariable("BasePath");
         if (String.IsNullOrWhiteSpace(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
         if (String.IsNullOrWhiteSpace(directory)) directory = Environment.CurrentDirectory;
         if (String.IsNullOrWhiteSpace(directory)) directory = Path.GetTempPath();

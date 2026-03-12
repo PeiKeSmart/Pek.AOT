@@ -1,5 +1,5 @@
-using NewLife;
-using NewLife.Threading;
+using Pek;
+using Pek.Threading;
 
 namespace Pek.Logging;
 

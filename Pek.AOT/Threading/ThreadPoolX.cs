@@ -1,6 +1,6 @@
 using Pek.Logging;
 
-namespace NewLife.Threading;
+namespace Pek.Threading;
 
 /// <summary>线程池助手</summary>
 public static class ThreadPoolX

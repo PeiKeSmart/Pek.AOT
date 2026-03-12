@@ -2,7 +2,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace NewLife;
+namespace Pek;
 
 /// <summary>运行时辅助</summary>
 public static class Runtime

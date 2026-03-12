@@ -1,4 +1,4 @@
-namespace NewLife.Threading;
+namespace Pek.Threading;
 
 /// <summary>不可重入定时器</summary>
 public class TimerX : ITimer, IDisposable

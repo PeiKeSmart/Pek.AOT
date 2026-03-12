@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace NewLife;
+namespace Pek;
 
 /// <summary>机器信息</summary>
 public class MachineInfo
