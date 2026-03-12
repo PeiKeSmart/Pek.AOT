@@ -371,19 +371,18 @@ public static class ConfigManager
                 
                 if (string.IsNullOrWhiteSpace(json))
                 {
-                    XXTrace.WriteLine($"配置文件为空，使用默认配置: {filePath}");
-                    return new TConfig();
+                    return CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
 
                 try
                 {
                     var config = JsonSerializer.Deserialize<TConfig>(json, options);
-                    return config ?? new TConfig();
+                    return config ?? CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
                 catch (JsonException jsonEx)
                 {
                     XXTrace.WriteLine($"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}");
-                    return new TConfig(); // 直接返回默认配置，不进行备份
+                    return CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
             }
         }
@@ -392,7 +391,22 @@ public static class ConfigManager
             XXTrace.WriteException(ex);
         }
 
-        return new TConfig();
+        return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+    }
+
+    /// <summary>
+    /// 创建并静默持久化默认配置，确保首次访问即可生成配置文件。
+    /// </summary>
+    /// <typeparam name="TConfig">配置类型</typeparam>
+    /// <param name="configType">配置类型</param>
+    /// <param name="options">序列化选项</param>
+    /// <returns>默认配置实例</returns>
+    private static TConfig CreateAndPersistDefaultConfig<TConfig>(Type configType, JsonSerializerOptions options)
+        where TConfig : Config, new()
+    {
+        var config = new TConfig();
+        TryWriteConfigFile(config, configType, options, writeLog: false);
+        return config;
     }
 
     /// <summary>
@@ -410,42 +424,58 @@ public static class ConfigManager
 
         try
         {
-            var filePath = GetConfigFilePath(configType);
-            
-            // 记录保存时间，用于过滤掉代码保存触发的文件监控事件
-            _lastSaveTimes[filePath] = DateTime.Now;
-
-            // 性能优化：先序列化到内存，再一次性写入文件
-            var json = JsonSerializer.Serialize(config, configType, options);
-
-            // 确保目录存在
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            // 原子性写入：先写入临时文件，再替换原文件
-            var tempFilePath = $"{filePath}.tmp";
-            File.WriteAllText(tempFilePath, json);
-            
-            // 原子性替换文件
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
-            File.Move(tempFilePath, filePath);
-
-            XXTrace.WriteLine($"保存配置到文件：{filePath}");
-
-            // 更新缓存
-            _configs[configType] = config;
+            TryWriteConfigFile(config, configType, options, writeLog: true);
         }
         catch (Exception ex)
         {
             XXTrace.WriteException(ex);
             throw new InvalidOperationException($"保存配置文件失败: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// 写入配置文件。
+    /// </summary>
+    /// <param name="config">配置实例</param>
+    /// <param name="configType">配置类型</param>
+    /// <param name="options">序列化选项</param>
+    /// <param name="writeLog">是否写入日志</param>
+    private static void TryWriteConfigFile(Config config, Type configType, JsonSerializerOptions options, Boolean writeLog)
+    {
+        var filePath = GetConfigFilePath(configType);
+
+        // 记录保存时间，用于过滤掉代码保存触发的文件监控事件
+        _lastSaveTimes[filePath] = DateTime.Now;
+
+        // 性能优化：先序列化到内存，再一次性写入文件
+        var json = JsonSerializer.Serialize(config, configType, options);
+
+        // 确保目录存在
+        var directory = Path.GetDirectoryName(filePath);
+        if (!String.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        // 原子性写入：先写入临时文件，再替换原文件
+        var tempFilePath = $"{filePath}.tmp";
+        File.WriteAllText(tempFilePath, json);
+
+        // 原子性替换文件
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+
+        File.Move(tempFilePath, filePath);
+
+        if (writeLog)
+        {
+            XXTrace.WriteLine($"保存配置到文件：{filePath}");
+        }
+
+        // 更新缓存
+        _configs[configType] = config;
     }
 
     /// <summary>
