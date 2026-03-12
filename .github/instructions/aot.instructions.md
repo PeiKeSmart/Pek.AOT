@@ -1,0 +1,228 @@
+---
+applyTo: "Pek.AOT/**"
+---
+
+# AOT 协作指令
+
+适用于 `Pek.AOT` 仓库中的 AOT 兼容实现、配置系统、日志系统、定时调度与兼容层开发任务。
+
+---
+
+## 1. 定位与边界
+
+### 1.1 仓库定位
+
+本仓库不是泛化的 NativeAOT 教程仓库，而是 **PeiKeSmart/NewLife 常用能力的 AOT 可用实现与兼容替代**。
+
+当前重点包括：
+
+- `Pek.Configuration`：AOT 兼容配置系统
+- `Pek.Logging`：AOT 可用日志与 `XXTrace` 配置
+- `Threading`：避免动态代理依赖的定时与调度能力
+- `IO` / `Runtime` / `MachineInfo`：基础运行时与路径能力
+- `NewLife.*` 兼容命名空间：为旧调用方提供迁移友好的 API 表面
+
+### 1.2 本指令负责内容
+
+**包含**：
+
+- 新增或修改 AOT 兼容类型
+- 配置类、序列化上下文、注册逻辑
+- 对 `NewLife.*` 兼容 API 的迁移与补齐
+- 避免裁剪失败、反射失效、动态代码依赖的实现改造
+- 与 AOT 行为强相关的 README、样例同步
+
+**不包含**：
+
+- XCode 数据建模与实体生成
+- 网络协议与 Socket 开发
+- 性能基准测试设计
+
+---
+
+## 2. 核心原则
+
+### 2.1 先复用现有 AOT 模式，再新增实现
+
+新增能力前，先从本仓库检索是否已有相同模式：
+
+- 配置类优先复用 `Config<TConfig>` + `RegisterForAot<TJsonContext>()`
+- 序列化优先复用 `System.Text.Json` 源生成上下文
+- 兼容层优先保持既有命名空间、类型名、成员签名
+
+禁止为了“更现代”而随意改坏旧调用方兼容性。
+
+### 2.2 优先消除根因，不做表面 AOT 兼容
+
+当问题根因是反射、动态代码、隐式序列化、静态初始化顺序时，应直接改造根因，禁止只加注释或回避异常。
+
+### 2.3 保持多目标框架一致行为
+
+当前项目目标框架为 `net8.0;net9.0;net10.0`。新增能力必须评估三个目标框架下行为是否一致，不允许只在单一目标框架成立。
+
+---
+
+## 3. 配置系统规则
+
+### 3.1 新增配置类的标准写法
+
+新增配置类时，必须同时满足以下要求：
+
+1. 配置类继承 `Config<TConfig>`
+2. 配置类提供静态构造函数
+3. 静态构造函数中调用 `RegisterForAot<TJsonContext>()`
+4. 提供对应的 `JsonSerializerContext` 类型
+5. 用 `[JsonSerializable(typeof(...))]` 显式标注配置类型及其依赖类型
+
+推荐模式：
+
+```csharp
+public class AppSetting : Config<AppSetting>
+{
+    static AppSetting() => RegisterForAot<AppSettingJsonContext>();
+}
+
+[JsonSerializable(typeof(AppSetting))]
+public partial class AppSettingJsonContext : JsonSerializerContext
+{
+}
+```
+
+### 3.2 序列化类型必须显式登记
+
+新增配置属性后，如果属性类型不是简单基础类型，必须检查对应 `JsonSerializerContext` 是否已覆盖：
+
+- 枚举
+- 自定义对象
+- 集合元素类型
+- `Dictionary<TKey, TValue>`
+- 嵌套对象图
+
+**禁止**假设运行时反射会自动兜底。
+
+### 3.3 配置序列化必须走已注册选项
+
+涉及配置持久化、快照、比较、重载时，优先通过 `ConfigManager.TryGetSerializerOptions()` 获取已注册的 `JsonSerializerOptions`，不要绕开注册表直接使用默认序列化选项。
+
+### 3.4 注意静态初始化顺序
+
+配置类、日志类存在初始化先后依赖时：
+
+- 不要在静态构造函数首段写日志
+- 不要在类型初始化阶段做重 IO、重依赖调用
+- 优先先完成注册，再做惰性加载
+
+如果修改 `XXTrace`、`ConfigManager`、配置默认值回退逻辑，必须检查是否重新引入初始化环。
+
+---
+
+## 4. AOT 兼容实现规则
+
+### 4.1 禁止优先引入以下实现方式
+
+以下方式在本仓库中默认视为高风险，除非已有同类先例且有明确必要性，否则不要新增：
+
+- 基于程序集扫描的自动注册
+- 依赖 `Type.GetType()` + 约定字符串的核心路径
+- `Activator.CreateInstance()` 驱动的通用工厂
+- `MethodInfo.Invoke()`、`PropertyInfo.GetValue()` 等热点反射调用
+- `Expression.Compile()`、运行时代码生成、动态代理
+- 依赖裁剪器保留隐式成员而不做显式声明
+
+允许存在少量兼容性反射，但必须证明：
+
+1. 不在高频路径
+2. 有失败兜底
+3. 不影响 AOT 主链路
+
+### 4.2 优先采用显式、静态、可裁剪的实现
+
+优先顺序：
+
+1. 泛型静态注册
+2. 源生成上下文
+3. 显式映射表 / 委托表
+4. 小范围兼容性反射兜底
+
+### 4.3 兼容层改造规则
+
+若为了兼容旧代码新增 `NewLife.*` 命名空间类型：
+
+- 优先保持原 API 名称和主要签名稳定
+- 行为可以内部转发到 `Pek.*` 实现
+- 不要为兼容层再复制一套完整逻辑，优先复用主实现
+- 若发现兼容层与主实现重复，优先提取公共逻辑，而不是双份维护
+
+---
+
+## 5. 文档与样例同步
+
+以下变更通常需要同步文档或样例：
+
+- 新增配置类注册方式
+- 修改配置文件名约定
+- 新增 `JsonSerializable` 依赖类型
+- 修改 `TimerX` / `XXTrace` 等对外使用方式
+- 调整兼容命名空间或迁移方式
+
+优先检查并同步：
+
+- `Pek.AOT/Configuration/README.md`
+- 根目录 `Readme.MD`
+- `Samples/TimerXSample`
+- `Samples/XXTraceSample`
+
+文档内容必须与当前代码一致。若发现 README 仍引用旧 API（如旧注册方法名），应在本次改动中一并修正。
+
+---
+
+## 6. 验证要求
+
+### 6.1 代码变更的最低验证
+
+涉及源码修改时至少做到：
+
+1. 编译受影响项目
+2. 检查新增 `JsonSerializerContext` 是否成功生成
+3. 检查配置注册路径是否仍可触发
+
+### 6.2 以下场景要提高验证强度
+
+| 场景 | 至少验证 |
+|------|---------|
+| 修改配置系统 | 编译 `Pek.AOT.csproj`，并验证配置加载/保存链路 |
+| 修改日志配置 | 编译相关样例或验证 `XXTraceSetting` 注册路径 |
+| 修改定时器/线程调度 | 编译样例并检查公开 API 无回归 |
+| 修改兼容层公共 API | 检查旧命名空间调用是否仍能通过编译 |
+
+如果无法执行运行验证，必须明确说明未验证部分与风险点。
+
+---
+
+## 7. 常见反模式（禁止）
+
+- ❌ 新增配置类但未注册 `RegisterForAot<TJsonContext>()`
+- ❌ 新增复杂属性类型但遗漏 `[JsonSerializable]`
+- ❌ 在配置链路中直接调用默认 `JsonSerializer.Serialize/Deserialize`
+- ❌ 依赖反射扫描自动发现配置类
+- ❌ 为兼容旧 API 复制整份业务逻辑，而不是复用 `Pek.*` 实现
+- ❌ 修改静态初始化逻辑时重新引入 `XXTrace` 与 `ConfigManager` 的环形依赖
+- ❌ 只改代码不改 README / 样例，导致仓库示例失真
+- ❌ 仅验证单一目标框架就宣称 AOT 兼容完成
+
+---
+
+## 8. 工作流
+
+触发检查 → 检索现有 AOT 实现 → 识别反射/动态依赖 → 选定静态化方案 → 实施 → 编译验证 → 同步文档/样例 → 说明风险
+
+处理 AOT 相关任务时，默认优先检查：
+
+- 是否已存在同类 `JsonSerializerContext`
+- 是否已存在兼容层转发实现
+- 是否会影响静态初始化顺序
+- 是否需要同步 README 和 Sample
+
+---
+
+（完）
