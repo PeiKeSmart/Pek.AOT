@@ -1,3 +1,5 @@
+using NewLife.Threading;
+
 namespace Pek.Logging;
 
 /// <summary>XXTrace 日志入口</summary>
@@ -36,6 +38,8 @@ public static class XXTrace
 
             e.SetObserved();
         };
+
+        ThreadPoolX.Init();
     }
 
     /// <summary>输出日志</summary>

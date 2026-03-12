@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <PublishAot>true</PublishAot>
+    <UseWindowsThreadPool>false</UseWindowsThreadPool>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
