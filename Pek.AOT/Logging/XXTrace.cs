@@ -19,10 +19,10 @@ public static class XXTrace
     }
 
     /// <summary>是否启用调试</summary>
-    public static Boolean Debug => XXTraceSetting.Current.Debug;
+    public static Boolean Debug => GetSetting().Debug;
 
     /// <summary>日志目录</summary>
-    public static String LogPath => XXTraceSetting.Current.LogPath;
+    public static String LogPath => GetSetting().LogPath;
 
     static XXTrace()
     {
@@ -71,7 +71,8 @@ public static class XXTrace
         if (_useConsole) return;
         _useConsole = true;
 
-        var consoleLog = new ConsoleLog { UseColor = useColor, Level = XXTraceSetting.Current.LogLevel };
+        var setting = GetSetting();
+        var consoleLog = new ConsoleLog { UseColor = useColor, Level = setting.LogLevel };
         if (useFileLog)
             _log = new CompositeLog(consoleLog, Log);
         else
@@ -94,13 +95,30 @@ public static class XXTrace
         {
             if (_log != Logger.Null) return;
 
-            var setting = XXTraceSetting.Current;
-            setting.Normalize();
+            if (!TryGetSetting(out var setting)) return;
+
             _log = setting.LogFileFormat.Contains("{1}", StringComparison.Ordinal)
                 ? new LevelLog(setting.LogPath, setting.LogFileFormat) { Level = setting.LogLevel }
                 : TextFileLog.Create(setting.LogPath, setting.LogFileFormat);
 
             _log.Level = setting.LogLevel;
+        }
+    }
+
+    internal static XXTraceSetting GetSetting() => TryGetSetting(out var setting) ? setting : XXTraceSetting.CreateDefault();
+
+    private static Boolean TryGetSetting(out XXTraceSetting setting)
+    {
+        try
+        {
+            setting = XXTraceSetting.Current;
+            setting.Normalize();
+            return true;
+        }
+        catch
+        {
+            setting = XXTraceSetting.CreateDefault();
+            return false;
         }
     }
 

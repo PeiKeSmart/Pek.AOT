@@ -2,9 +2,8 @@
 using System.Text.Json;
 using System.Threading.Channels;
 
-using NewLife.Log;
-
 using Pek.IO;
+using Pek.Logging;
 
 namespace Pek.Configuration;
 
@@ -118,7 +117,7 @@ public static class ConfigManager
             {
                 var changes = string.Join(", ", e.PropertyChanges.Take(3).Select(c => c.ToString()));
                 var moreInfo = e.PropertyChanges.Count > 3 ? $" 等{e.PropertyChanges.Count}个属性" : "";
-                XTrace.WriteLine($"[INFO] 配置 {e.ConfigName} 变更: {changes}{moreInfo}");
+                XXTrace.WriteLine($"[INFO] 配置 {e.ConfigName} 变更: {changes}{moreInfo}");
             }
             
             // ConfigManager 已经在 ReloadConfigInternal 中更新了 _configs 缓存
@@ -126,7 +125,6 @@ public static class ConfigManager
             // 无需额外的实例同步操作
         };
         
-        XTrace.WriteLine("[INFO] 配置系统已启动（Channel + 析构函数清理）");
     }
 
     /// <summary>
@@ -167,28 +165,28 @@ public static class ConfigManager
         {
             try
             {
-                XTrace.WriteLine("[INFO] 开始自动清理Channel配置系统资源...");
+                XXTrace.WriteLine("[INFO] 开始自动清理Channel配置系统资源...");
 
                 // 1. 停止Channel写入
                 try
                 {
                     _channelWriter?.Complete();
-                    XTrace.WriteLine("[INFO] Channel写入已停止");
+                    XXTrace.WriteLine("[INFO] Channel写入已停止");
                 }
                 catch (Exception ex)
                 {
-                    XTrace.WriteLine($"[WARNING] 停止Channel写入时出错: {ex.Message}");
+                    XXTrace.WriteLine($"[WARNING] 停止Channel写入时出错: {ex.Message}");
                 }
                 
                 // 2. 取消后台任务
                 try
                 {
                     _cancellationTokenSource?.Cancel();
-                    XTrace.WriteLine("[INFO] 后台任务取消信号已发送");
+                    XXTrace.WriteLine("[INFO] 后台任务取消信号已发送");
                 }
                 catch (Exception ex)
                 {
-                    XTrace.WriteLine($"[WARNING] 取消后台任务时出错: {ex.Message}");
+                    XXTrace.WriteLine($"[WARNING] 取消后台任务时出错: {ex.Message}");
                 }
                 
                 // 3. 等待后台任务完成（有超时限制，避免析构函数阻塞）
@@ -197,11 +195,11 @@ public static class ConfigManager
                     // 在析构函数中使用较短的超时时间
                     if (_queueProcessorTask.Wait(TimeSpan.FromSeconds(3)))
                     {
-                        XTrace.WriteLine("[INFO] 后台任务已正常完成");
+                        XXTrace.WriteLine("[INFO] 后台任务已正常完成");
                     }
                     else
                     {
-                        XTrace.WriteLine("[WARNING] 后台任务未能在3秒内完成，强制继续清理");
+                        XXTrace.WriteLine("[WARNING] 后台任务未能在3秒内完成，强制继续清理");
                     }
                 }
                 
@@ -214,11 +212,11 @@ public static class ConfigManager
                         {
                             _fileWatcher.Stop();
                             _fileWatcher = null;
-                            XTrace.WriteLine("[INFO] 文件监控器已自动停止");
+                            XXTrace.WriteLine("[INFO] 文件监控器已自动停止");
                         }
                         catch (Exception ex)
                         {
-                            XTrace.WriteLine($"[WARNING] 停止文件监控器时出错: {ex.Message}");
+                            XXTrace.WriteLine($"[WARNING] 停止文件监控器时出错: {ex.Message}");
                         }
                     }
                 }
@@ -227,21 +225,21 @@ public static class ConfigManager
                 try
                 {
                     _cancellationTokenSource?.Dispose();
-                    XTrace.WriteLine("[INFO] CancellationTokenSource已释放");
+                    XXTrace.WriteLine("[INFO] CancellationTokenSource已释放");
                 }
                 catch (Exception ex)
                 {
-                    XTrace.WriteLine($"[WARNING] 释放CancellationTokenSource时出错: {ex.Message}");
+                    XXTrace.WriteLine($"[WARNING] 释放CancellationTokenSource时出错: {ex.Message}");
                 }
 
-                XTrace.WriteLine("[INFO] Channel配置系统资源自动清理完成");
+                XXTrace.WriteLine("[INFO] Channel配置系统资源自动清理完成");
             }
             catch (Exception ex)
             {
                 // 清理过程中的异常不应该抛出，静默处理
                 try
                 {
-                    XTrace.WriteLine($"[ERROR] 自动清理过程中发生异常: {ex.Message}");
+                    XXTrace.WriteLine($"[ERROR] 自动清理过程中发生异常: {ex.Message}");
                 }
                 catch
                 {
@@ -373,7 +371,7 @@ public static class ConfigManager
                 
                 if (string.IsNullOrWhiteSpace(json))
                 {
-                    XTrace.WriteLine($"配置文件为空，使用默认配置: {filePath}");
+                    XXTrace.WriteLine($"配置文件为空，使用默认配置: {filePath}");
                     return new TConfig();
                 }
 
@@ -384,14 +382,14 @@ public static class ConfigManager
                 }
                 catch (JsonException jsonEx)
                 {
-                    XTrace.WriteLine($"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}");
+                    XXTrace.WriteLine($"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}");
                     return new TConfig(); // 直接返回默认配置，不进行备份
                 }
             }
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
         }
 
         return new TConfig();
@@ -438,14 +436,14 @@ public static class ConfigManager
             }
             File.Move(tempFilePath, filePath);
 
-            XTrace.WriteLine($"保存配置到文件：{filePath}");
+            XXTrace.WriteLine($"保存配置到文件：{filePath}");
 
             // 更新缓存
             _configs[configType] = config;
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             throw new InvalidOperationException($"保存配置文件失败: {ex.Message}", ex);
         }
     }
@@ -497,11 +495,11 @@ public static class ConfigManager
                 _fileWatcher.EventHandler += OnConfigFileChanged;
                 _fileWatcher.Start();
                 
-                XTrace.WriteLine("配置文件监控器已启动");
+                XXTrace.WriteLine("配置文件监控器已启动");
             }
             catch (Exception ex)
             {
-                XTrace.WriteException(ex);
+                XXTrace.WriteException(ex);
             }
         }
     }
@@ -509,7 +507,7 @@ public static class ConfigManager
     /// <summary>
     /// 配置文件变更事件处理 - 简化版本
     /// </summary>
-    private static void OnConfigFileChanged(object sender, FileWatcherEventArgs args)
+    private static void OnConfigFileChanged(object? sender, FileWatcherEventArgs args)
     {
         // 快速过滤：只处理 .config 文件的修改事件
         if (!args.FullPath.EndsWith(".config", StringComparison.OrdinalIgnoreCase) ||
@@ -522,7 +520,7 @@ public static class ConfigManager
         // 检查是否是代码保存导致的变更（防抖机制）
         if (IsCodeSaveTriggered(args.FullPath))
         {
-            XTrace.WriteLine($"忽略代码保存导致的文件变更: {args.FullPath}");
+            XXTrace.WriteLine($"忽略代码保存导致的文件变更: {args.FullPath}");
             return;
         }
 
@@ -537,11 +535,11 @@ public static class ConfigManager
 
         if (_channelWriter.TryWrite(queueItem))
         {
-            XTrace.WriteLine($"[队列] 配置变更已加入队列: {configType.Name}");
+            XXTrace.WriteLine($"[队列] 配置变更已加入队列: {configType.Name}");
         }
         else
         {
-            XTrace.WriteLine($"[队列] 配置变更入队失败: {configType.Name}");
+            XXTrace.WriteLine($"[队列] 配置变更入队失败: {configType.Name}");
         }
     }
 
@@ -574,29 +572,29 @@ public static class ConfigManager
                     if (await ProcessSingleConfigChangeAsync(item).ConfigureAwait(false))
                     {
                         processedCount++;
-                        XTrace.WriteLine($"[Channel] 成功处理配置变更: {item.ConfigType.Name}");
+                        XXTrace.WriteLine($"[Channel] 成功处理配置变更: {item.ConfigType.Name}");
                     }
                     else
                     {
-                        XTrace.WriteLine($"[Channel] 配置变更处理失败: {item.ConfigType.Name}");
+                        XXTrace.WriteLine($"[Channel] 配置变更处理失败: {item.ConfigType.Name}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    XTrace.WriteException(ex);
+                    XXTrace.WriteException(ex);
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            XTrace.WriteLine("[Channel] 配置变更处理器已取消");
+            XXTrace.WriteLine("[Channel] 配置变更处理器已取消");
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
         }
 
-        XTrace.WriteLine($"[Channel] 配置变更处理器已停止，总共处理了 {processedCount} 个配置变更");
+        XXTrace.WriteLine($"[Channel] 配置变更处理器已停止，总共处理了 {processedCount} 个配置变更");
     }
 
     /// <summary>
@@ -624,7 +622,7 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             return false;
         }
     }
@@ -640,18 +638,18 @@ public static class ConfigManager
         // 重新加载配置
         if (!_configReloadDelegates.TryGetValue(item.ConfigType, out var reloadDelegate))
         {
-            XTrace.WriteLine($"[Channel] 未找到配置重载委托: {item.ConfigType.Name}");
+            XXTrace.WriteLine($"[Channel] 未找到配置重载委托: {item.ConfigType.Name}");
             return false;
         }
 
         var newConfig = reloadDelegate();
         if (newConfig == null)
         {
-            XTrace.WriteLine($"[Channel] 配置重新加载返回null: {item.ConfigType.Name}");
+            XXTrace.WriteLine($"[Channel] 配置重新加载返回null: {item.ConfigType.Name}");
             return false;
         }
 
-        XTrace.WriteLine($"[Channel] 配置重新加载成功: {item.ConfigType.Name}");
+        XXTrace.WriteLine($"[Channel] 配置重新加载成功: {item.ConfigType.Name}");
 
         // 触发配置变更事件
         ConfigChanged?.Invoke(null, new ConfigChangedEventArgs(item.ConfigType, oldConfig ?? newConfig, newConfig, GetPropertyChanges(oldConfig, newConfig)));
@@ -681,7 +679,7 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             return ConfigJsonComparer.GetPropertyChangesSimple(oldConfig, newConfig);
         }
     }

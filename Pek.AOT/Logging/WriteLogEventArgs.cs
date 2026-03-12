@@ -1,3 +1,6 @@
+using NewLife;
+using NewLife.Threading;
+
 namespace Pek.Logging;
 
 /// <summary>写日志事件参数</summary>
@@ -39,6 +42,9 @@ public class WriteLogEventArgs : EventArgs
 
     /// <summary>是否线程池线程</summary>
     public Boolean IsPool { get; set; }
+
+    /// <summary>是否 Web 线程</summary>
+    public Boolean IsWeb { get; set; }
 
     /// <summary>线程名称</summary>
     public String? ThreadName { get; set; }
@@ -85,6 +91,7 @@ public class WriteLogEventArgs : EventArgs
         Time = default;
         ThreadId = 0;
         IsPool = false;
+        IsWeb = false;
         ThreadName = null;
         TaskId = 0;
     }
@@ -108,7 +115,7 @@ public class WriteLogEventArgs : EventArgs
                     parts.Add(ThreadId.ToString("00"));
                     break;
                 case "Kind":
-                    parts.Add(IsPool ? "Y" : "N");
+                    parts.Add(IsPool ? (IsWeb ? "W" : "Y") : "N");
                     break;
                 case "Name":
                     parts.Add(name);
@@ -127,17 +134,19 @@ public class WriteLogEventArgs : EventArgs
 
     private void Init()
     {
-        var setting = XXTraceSetting.Current;
+        var setting = XXTrace.GetSetting();
         Time = DateTime.Now.AddHours(setting.UtcIntervalHours);
         var thread = Thread.CurrentThread;
         ThreadId = thread.ManagedThreadId;
         IsPool = thread.IsThreadPoolThread;
+        IsWeb = Runtime.IsWeb && thread.IsThreadPoolThread;
         ThreadName = CurrentThreadName ?? thread.Name;
         TaskId = Task.CurrentId ?? -1;
     }
 
     private String ResolveName()
     {
+        if (TimerX.Current != null) return "T";
         if (String.IsNullOrWhiteSpace(ThreadName)) return TaskId >= 0 ? TaskId.ToString() : "-";
 
         if (ThreadName.StartsWith(".NET TP", StringComparison.OrdinalIgnoreCase) ||
@@ -145,12 +154,15 @@ public class WriteLogEventArgs : EventArgs
             ThreadName.StartsWith(".NET ThreadPool", StringComparison.OrdinalIgnoreCase))
             return TaskId >= 0 ? TaskId.ToString() : "P";
 
+        if (ThreadName.Equals("IO Threadpool worker", StringComparison.OrdinalIgnoreCase)) return "IO";
+        if (ThreadName.Equals(".NET Long Running Task", StringComparison.OrdinalIgnoreCase)) return "L";
+
         return ThreadName;
     }
 
     private static String[] GetFields()
     {
-        var format = XXTraceSetting.Current.LogLineFormat;
+        var format = XXTrace.GetSetting().LogLineFormat;
         if (String.IsNullOrWhiteSpace(format)) format = "Time|ThreadId|Kind|Name|Message";
 
         if (!String.Equals(format, _cachedFormat, StringComparison.Ordinal))

@@ -2,7 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using NewLife.Log;
+
+using Pek.Logging;
 
 namespace Pek.Configuration;
 
@@ -33,7 +34,7 @@ public abstract class Config
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             _configSnapshot = null;
         }
     }
@@ -58,7 +59,7 @@ public abstract class Config
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
         }
 
         // 保存配置
@@ -116,7 +117,7 @@ public abstract class Config
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             // 发生异常时返回通用变更信息
             changes.Add(new ConfigPropertyChange
             {
@@ -145,7 +146,7 @@ public abstract class Config
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             // 如果解析失败，返回通用变更信息
             changes.Add(new ConfigPropertyChange
             {
@@ -325,26 +326,26 @@ public abstract class Config
             var changes = GetPropertyChanges(oldConfig);
             if (changes.Count > 0)
             {
-                XTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置保存变更:");
+                XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置保存变更:");
                 foreach (var change in changes.Take(5)) // 限制显示前5个变更
                 {
-                    XTrace.WriteLine($"  • {change.PropertyName}: {change.OldValue} → {change.NewValue}");
+                    XXTrace.WriteLine($"  • {change.PropertyName}: {change.OldValue} → {change.NewValue}");
                 }
                 
                 if (changes.Count > 5)
                 {
-                    XTrace.WriteLine($"  ... 还有 {changes.Count - 5} 个属性变更");
+                    XXTrace.WriteLine($"  ... 还有 {changes.Count - 5} 个属性变更");
                 }
             }
             else
             {
-                XTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（无变更）");
+                XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（无变更）");
             }
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
-            XTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（变更检测失败）");
+            XXTrace.WriteException(ex);
+            XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（变更检测失败）");
         }
     }
 }
@@ -402,7 +403,7 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
                     }
                     catch (Exception ex)
                     {
-                        XTrace.WriteException(ex);
+                        XXTrace.WriteException(ex);
                         // 即使初始化失败，也要标记为已初始化，避免重复尝试
                         _initialized = true;
                     }

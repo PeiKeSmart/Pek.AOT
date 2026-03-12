@@ -1,10 +1,11 @@
 using NewLife;
-using NewLife.Log;
 using NewLife.Threading;
 
+using Pek.Logging;
+
 ThreadPoolX.Init();
-XTrace.Log = new ConsoleLog { Level = LogLevel.Debug };
-TimerScheduler.Default.Log = XTrace.Log;
+XXTrace.Log = new Pek.Logging.ConsoleLog { Level = Pek.Logging.LogLevel.Debug };
+TimerScheduler.Default.Log = Pek.Logging.Logger.Null;
 
 Console.WriteLine("TimerX Sample");
 Console.WriteLine($"TickCount64: {Runtime.TickCount64}");
@@ -81,10 +82,11 @@ static async Task RunAbsoluteTimerTestAsync()
     Ensure(task == completed.Task, "绝对定时器在限定时间内未触发");
     Ensure(firedAt.HasValue, "绝对定时器未记录触发时间");
 
-    var delta = Math.Abs((firedAt.Value - target).TotalMilliseconds);
+    var firedTime = firedAt.GetValueOrDefault();
+    var delta = Math.Abs((firedTime - target).TotalMilliseconds);
     Ensure(delta < 400, $"绝对定时器偏差过大: {delta:n0}ms");
 
-    Console.WriteLine($"Absolute Test: target={target:HH:mm:ss.fff}, fired={firedAt.Value:HH:mm:ss.fff}, delta={delta:n0}ms");
+    Console.WriteLine($"Absolute Test: target={target:HH:mm:ss.fff}, fired={firedTime:HH:mm:ss.fff}, delta={delta:n0}ms");
 }
 
 static async Task RunCronTimerTestAsync()
@@ -100,11 +102,13 @@ static async Task RunCronTimerTestAsync()
     }, "Cron", "*/1 * * * * *", "CronScheduler");
 
     var task = await Task.WhenAny(completed.Task, Task.Delay(5000));
+    var cronCount = timer.Crons?.Length ?? 0;
+    var firedTime = firedAt.GetValueOrDefault();
     Ensure(task == completed.Task, "Cron 定时器在限定时间内未触发");
-    Ensure(timer.Crons != null && timer.Crons.Length == 1, "Cron 定时器表达式解析失败");
-    Ensure(firedAt.HasValue && firedAt.Value > start, "Cron 定时器触发时间无效");
+    Ensure(cronCount == 1, "Cron 定时器表达式解析失败");
+    Ensure(firedAt.HasValue && firedTime > start, "Cron 定时器触发时间无效");
 
-    Console.WriteLine($"Cron Test: next={timer.NextTime:HH:mm:ss.fff}, fired={firedAt.Value:HH:mm:ss.fff}, cronCount={timer.Crons.Length}");
+    Console.WriteLine($"Cron Test: next={timer.NextTime:HH:mm:ss.fff}, fired={firedTime:HH:mm:ss.fff}, cronCount={cronCount}");
 }
 
 static void Ensure(Boolean condition, String message)

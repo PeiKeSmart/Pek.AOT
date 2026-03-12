@@ -75,6 +75,15 @@ public class XXTraceSetting : Config<XXTraceSetting>
         Normalize();
         base.Save();
     }
+
+    /// <summary>创建默认日志配置</summary>
+    /// <returns>默认配置</returns>
+    public static XXTraceSetting CreateDefault()
+    {
+        var setting = new XXTraceSetting();
+        setting.Normalize();
+        return setting;
+    }
 }
 
 /// <summary>XXTraceSetting 的 AOT 序列化上下文</summary>

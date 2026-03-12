@@ -1,4 +1,4 @@
-using NewLife.Log;
+using Pek.Logging;
 
 namespace NewLife.Threading;
 
@@ -32,7 +32,7 @@ public static class ThreadPoolX
             }
             catch (Exception ex)
             {
-                XTrace.WriteException(ex);
+                XXTrace.WriteException(ex);
             }
         }, null);
     }
@@ -53,7 +53,7 @@ public static class ThreadPoolX
             }
             catch (Exception ex)
             {
-                XTrace.WriteException(ex);
+                XXTrace.WriteException(ex);
             }
         }, null);
     }

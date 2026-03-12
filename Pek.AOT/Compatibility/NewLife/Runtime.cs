@@ -139,7 +139,7 @@ public static class Runtime
         foreach (DictionaryEntry item in Environment.GetEnvironmentVariables())
         {
             if (item.Key is String key && String.Equals(key, variable, StringComparison.OrdinalIgnoreCase))
-                return item.Value as String;
+                return item.Value?.ToString() ?? String.Empty;
         }
 
         return String.Empty;

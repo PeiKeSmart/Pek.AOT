@@ -1,6 +1,6 @@
 using System.Reflection;
 
-using NewLife.Log;
+using Pek.Logging;
 
 namespace NewLife.Threading;
 
@@ -210,7 +210,7 @@ public class TimerScheduler : IDisposable
             }
             catch (Exception ex)
             {
-                XTrace.WriteException(ex);
+                XXTrace.WriteException(ex);
             }
 
             if (_disposing) break;
@@ -226,7 +226,7 @@ public class TimerScheduler : IDisposable
     {
         if (timer.Period is < 10 and > 0)
         {
-            XTrace.WriteLine("为了避免占用过多CPU资源，TimerX禁止小于{1}ms<10ms的任务调度，关闭任务{0}", timer, timer.Period);
+            XXTrace.WriteLine("为了避免占用过多CPU资源，TimerX禁止小于{1}ms<10ms的任务调度，关闭任务{0}", timer, timer.Period);
             timer.Dispose();
             return false;
         }
@@ -248,8 +248,6 @@ public class TimerScheduler : IDisposable
         TimerX.Current = timer;
         WriteLogEventArgs.CurrentThreadName = Name == "Default" ? "T" : Name;
         timer.hasSetNext = false;
-        DefaultSpan.Current = null;
-        using var span = timer.Tracer?.NewSpan(timer.TracerName ?? $"timer:{timer.Method.Name}", timer.Timers.ToString());
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -273,8 +271,7 @@ public class TimerScheduler : IDisposable
         }
         catch (Exception ex)
         {
-            span?.SetError(ex, null);
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
         }
         finally
         {
@@ -288,8 +285,6 @@ public class TimerScheduler : IDisposable
         TimerX.Current = timer;
         WriteLogEventArgs.CurrentThreadName = Name == "Default" ? "T" : Name;
         timer.hasSetNext = false;
-        DefaultSpan.Current = null;
-        using var span = timer.Tracer?.NewSpan(timer.TracerName ?? $"timer:{timer.Method.Name}", timer.Timers.ToString());
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -313,8 +308,7 @@ public class TimerScheduler : IDisposable
         }
         catch (Exception ex)
         {
-            span?.SetError(ex, null);
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
         }
         finally
         {
@@ -326,7 +320,7 @@ public class TimerScheduler : IDisposable
     private void OnExecuted(TimerX timer, Int32 cost)
     {
         timer.Cost = timer.Cost == 0 ? cost : (timer.Cost + cost) / 2;
-        if (cost > MaxCost && !timer.Async && !timer.IsAsyncTask) XTrace.WriteLine("任务 {0} 耗时过长 {1:n0}ms，建议使用异步任务Async=true", timer, cost);
+        if (cost > MaxCost && !timer.Async && !timer.IsAsyncTask) XXTrace.WriteLine("任务 {0} 耗时过长 {1:n0}ms，建议使用异步任务Async=true", timer, cost);
 
         timer.Timers++;
         OnFinish(timer);

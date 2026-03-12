@@ -43,7 +43,7 @@ public class TextFileLog : Logger, IDisposable
 
     internal TextFileLog(String path, Boolean isFile, String? fileFormat = null)
     {
-        var setting = XXTraceSetting.Current;
+        var setting = XXTrace.GetSetting();
         LogPath = path;
         _isFile = isFile;
         FileFormat = String.IsNullOrWhiteSpace(fileFormat) ? setting.LogFileFormat : fileFormat;
@@ -99,7 +99,7 @@ public class TextFileLog : Logger, IDisposable
 
         if (Interlocked.CompareExchange(ref _writing, 1, 0) != 0) return;
 
-        if (XXTraceSetting.Current.LogLevel <= LogLevel.Debug || level >= LogLevel.Error)
+        if (XXTrace.GetSetting().LogLevel <= LogLevel.Debug || level >= LogLevel.Error)
         {
             try
             {
@@ -131,7 +131,7 @@ public class TextFileLog : Logger, IDisposable
 
     private void WriteFile()
     {
-        var now = TimerX.Now.AddHours(XXTraceSetting.Current.UtcIntervalHours);
+        var now = TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours);
         var logFile = GetLogFile();
         if (String.IsNullOrWhiteSpace(logFile)) return;
 
@@ -170,7 +170,7 @@ public class TextFileLog : Logger, IDisposable
         try
         {
             if (!_logs.IsEmpty) WriteFile();
-            if (_writer != null && closeTime < TimerX.Now.AddHours(XXTraceSetting.Current.UtcIntervalHours))
+            if (_writer != null && closeTime < TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours))
             {
                 _writer.Dispose();
                 _writer = null;
@@ -214,7 +214,7 @@ public class TextFileLog : Logger, IDisposable
         if (_isFile) return GetBasePath(LogPath);
 
         var basePath = GetBasePath(LogPath);
-        var candidate = Path.Combine(basePath, String.Format(FileFormat, TimerX.Now.AddHours(XXTraceSetting.Current.UtcIntervalHours), Level));
+        var candidate = Path.Combine(basePath, String.Format(FileFormat, TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours), Level));
         if (MaxBytes == 0) return candidate;
 
         var maxBytes = MaxBytes * 1024L * 1024L;
@@ -236,6 +236,17 @@ public class TextFileLog : Logger, IDisposable
         var directory = new DirectoryInfo(directoryPath);
         if (!directory.Exists) return;
 
+        try
+        {
+            foreach (var item in directory.GetFiles("*.del"))
+            {
+                item.Delete();
+            }
+        }
+        catch
+        {
+        }
+
         var extension = Path.GetExtension(FileFormat);
         if (String.IsNullOrWhiteSpace(extension)) extension = ".log";
 
@@ -253,12 +264,23 @@ public class TextFileLog : Logger, IDisposable
 
         foreach (var item in files.OrderBy(e => e.CreationTimeUtc).Take(files.Length - Backups))
         {
+            var message = String.Format("日志文件达到上限 {0}，删除 {1}，大小 {2:n0}Byte", Backups, item.Name, item.Length);
+            _logs.Enqueue(new WriteLogEventArgs().Set(LogLevel.Info).Set(message, null).GetAndReset());
+            Interlocked.Increment(ref _logCount);
+
             try
             {
                 item.Delete();
             }
             catch
             {
+                try
+                {
+                    item.MoveTo(item.FullName + ".del");
+                }
+                catch
+                {
+                }
             }
         }
     }
@@ -267,7 +289,7 @@ public class TextFileLog : Logger, IDisposable
 
     private static String GetHead()
     {
-        var setting = XXTraceSetting.Current;
+        var setting = XXTrace.GetSetting();
         var process = Process.GetCurrentProcess();
         var assembly = Assembly.GetEntryAssembly();
         var name = assembly?.GetCustomAttribute<AssemblyTitleAttribute>()?.Title;
@@ -279,6 +301,11 @@ public class TextFileLog : Logger, IDisposable
         var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
         var currentDirectory = Environment.CurrentDirectory;
         var fileName = String.Empty;
+        var target = String.Empty;
+        var targetFramework = assembly?.GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>();
+        if (targetFramework != null)
+            target = !String.IsNullOrWhiteSpace(targetFramework.FrameworkDisplayName) ? targetFramework.FrameworkDisplayName : targetFramework.FrameworkName;
+        if (!String.IsNullOrWhiteSpace(framework)) target = framework;
         try
         {
             fileName = process.MainModule?.FileName ?? String.Empty;
@@ -329,7 +356,7 @@ public class TextFileLog : Logger, IDisposable
         if (Runtime.Container) applicationType += "(Container)";
 
         builder.AppendFormat("#ApplicationType: {0}\r\n", applicationType);
-        builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, framework);
+        builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, target);
         builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", os, Environment.MachineName, Environment.UserName);
         builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
         if (machine.Memory > 0)

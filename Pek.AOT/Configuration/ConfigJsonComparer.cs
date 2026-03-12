@@ -1,5 +1,6 @@
 using System.Text.Json;
-using NewLife.Log;
+
+using Pek.Logging;
 
 namespace Pek.Configuration;
 
@@ -51,7 +52,7 @@ internal static class ConfigJsonComparer
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             changes.Add(new ConfigPropertyChange
             {
                 PropertyName = "Configuration",
@@ -114,7 +115,7 @@ internal static class ConfigJsonComparer
         }
         catch (Exception ex)
         {
-            XTrace.WriteException(ex);
+            XXTrace.WriteException(ex);
             changes.Add(new ConfigPropertyChange
             {
                 PropertyName = "JSON比较",

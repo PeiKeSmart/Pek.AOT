@@ -1,7 +1,5 @@
 using System.Reflection;
 
-using NewLife.Log;
-
 namespace NewLife.Threading;
 
 /// <summary>不可重入定时器</summary>
@@ -28,7 +26,6 @@ public class TimerX : ITimer, IDisposable
         _createdAt = Scheduler.GetNow();
         _nextTick = Runtime.TickCount64;
         _baseTime = _createdAt.AddMilliseconds(-_nextTick);
-        TracerName = $"timer:{method.Name}";
     }
 
     /// <summary>实例化定时器</summary>
@@ -217,12 +214,6 @@ public class TimerX : ITimer, IDisposable
 
     /// <summary>Cron 集合</summary>
     public Cron[]? Crons => _crons;
-
-    /// <summary>追踪器</summary>
-    public ITracer? Tracer { get; set; }
-
-    /// <summary>追踪名称</summary>
-    public String TracerName { get; set; }
 
     /// <summary>是否已设置下一次时间</summary>
     internal Boolean hasSetNext;
