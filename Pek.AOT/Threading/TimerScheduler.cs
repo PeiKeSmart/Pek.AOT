@@ -1,5 +1,3 @@
-using System.Reflection;
-
 using Pek.Logging;
 
 namespace NewLife.Threading;
@@ -251,23 +249,7 @@ public class TimerScheduler : IDisposable
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var target = timer.Target.Target;
-            if (target == null && !timer.Method.IsStatic)
-            {
-                Remove(timer, "委托已不存在（GC回收委托所在对象）");
-                timer.Dispose();
-                return;
-            }
-
-            var callback = CreateDelegate<TimerCallback>(timer.Method, target);
-            if (callback == null)
-            {
-                Remove(timer, "委托绑定失败");
-                timer.Dispose();
-                return;
-            }
-
-            callback(timer.State);
+            timer.Invoke();
         }
         catch (Exception ex)
         {
@@ -288,23 +270,7 @@ public class TimerScheduler : IDisposable
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var target = timer.Target.Target;
-            if (target == null && !timer.Method.IsStatic)
-            {
-                Remove(timer, "委托已不存在（GC回收委托所在对象）");
-                timer.Dispose();
-                return;
-            }
-
-            var callback = CreateDelegate<Func<Object?, Task>>(timer.Method, target);
-            if (callback == null)
-            {
-                Remove(timer, "异步委托绑定失败");
-                timer.Dispose();
-                return;
-            }
-
-            await callback(timer.State).ConfigureAwait(false);
+            await timer.InvokeAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -345,19 +311,4 @@ public class TimerScheduler : IDisposable
     }
 
     private void WriteLog(String format, params Object?[] args) => Log?.Info(Name + format, args);
-
-    private static TDelegate? CreateDelegate<TDelegate>(MethodInfo method, Object? target) where TDelegate : class
-    {
-        try
-        {
-            var delegateType = typeof(TDelegate);
-            return target == null
-                ? Delegate.CreateDelegate(delegateType, method, false) as TDelegate
-                : Delegate.CreateDelegate(delegateType, target, method, false) as TDelegate;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }

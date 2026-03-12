@@ -14,21 +14,9 @@ public static class Runtime
 
     static Runtime()
     {
-        try
-        {
-            Mono = Type.GetType("Mono.Runtime") != null;
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            Unity = Type.GetType("UnityEngine.Application, UnityEngine") != null;
-        }
-        catch
-        {
-        }
+        var framework = RuntimeInformation.FrameworkDescription;
+        Mono = framework.Contains("Mono", StringComparison.OrdinalIgnoreCase);
+        Unity = !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_VERSION")) || !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_PLAYER"));
     }
 
     /// <summary>是否控制台环境</summary>
@@ -76,14 +64,10 @@ public static class Runtime
         {
             if (_isWeb >= 0) return _isWeb == 1;
 
-            try
-            {
-                _isWeb = AppDomain.CurrentDomain.GetAssemblies().Any(e => e.GetName().Name == "Microsoft.AspNetCore") ? 1 : 0;
-            }
-            catch
-            {
-                _isWeb = 0;
-            }
+            var applicationName = GetEnvironmentVariable("ASPNETCORE_APPLICATIONNAME");
+            var environment = GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+            var urls = GetEnvironmentVariable("ASPNETCORE_URLS");
+            _isWeb = !String.IsNullOrWhiteSpace(applicationName) || !String.IsNullOrWhiteSpace(environment) || !String.IsNullOrWhiteSpace(urls) ? 1 : 0;
 
             return _isWeb == 1;
         }

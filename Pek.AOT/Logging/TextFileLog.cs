@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -291,21 +290,15 @@ public class TextFileLog : Logger, IDisposable
     {
         var setting = XXTrace.GetSetting();
         var process = Process.GetCurrentProcess();
-        var assembly = Assembly.GetEntryAssembly();
-        var name = assembly?.GetCustomAttribute<AssemblyTitleAttribute>()?.Title;
-        if (String.IsNullOrWhiteSpace(name)) name = assembly?.GetCustomAttribute<AssemblyProductAttribute>()?.Product;
-        if (String.IsNullOrWhiteSpace(name)) name = assembly?.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description;
+        var name = AppDomain.CurrentDomain.FriendlyName;
         if (String.IsNullOrWhiteSpace(name)) name = process.ProcessName;
 
-        var framework = RuntimeInformation.FrameworkDescription;
         var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
         var currentDirectory = Environment.CurrentDirectory;
         var fileName = String.Empty;
-        var target = String.Empty;
-        var targetFramework = assembly?.GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>();
-        if (targetFramework != null)
-            target = !String.IsNullOrWhiteSpace(targetFramework.FrameworkDisplayName) ? targetFramework.FrameworkDisplayName : targetFramework.FrameworkName;
-        if (!String.IsNullOrWhiteSpace(framework)) target = framework;
+        var target = RuntimeInformation.FrameworkDescription;
+        var targetFramework = AppContext.TargetFrameworkName;
+        if (!String.IsNullOrWhiteSpace(targetFramework)) target = $"{target} ({targetFramework})";
         try
         {
             fileName = process.MainModule?.FileName ?? String.Empty;
