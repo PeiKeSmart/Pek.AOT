@@ -21,10 +21,10 @@ jobs:
           10.x
     - name: Restore
       run: |
-        dotnet restore DH.Grpc/DH.Grpc.csproj
+        dotnet restore Pek.AOT/Pek.AOT.csproj
     - name: Build
       run: |
-        dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d") -c Release -o out DH.Grpc/DH.Grpc.csproj
+        dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d") -c Release -o out Pek.AOT/Pek.AOT.csproj
     - name: Publish
       run: |
         dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.nugetKey }}

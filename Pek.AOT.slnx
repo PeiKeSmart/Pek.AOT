@@ -1,5 +1,8 @@
 <Solution>
-  <Folder Name="/Samples/" />
+  <Folder Name="/Samples/">
+    <Project Path="Samples/TimerXSample/TimerXSample.csproj" />
+    <Project Path="Samples/XXTraceSample/XXTraceSample.csproj" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".github/workflows/publish-beta.yml" />
@@ -9,6 +12,4 @@
     <File Path="Readme.MD" />
   </Folder>
   <Project Path="Pek.AOT/Pek.AOT.csproj" />
-  <Project Path="Samples/TimerXSample/TimerXSample.csproj" />
-  <Project Path="Samples/XXTraceSample/XXTraceSample.csproj" />
 </Solution>
