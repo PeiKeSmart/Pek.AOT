@@ -1,6 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime;
+using System.Runtime.InteropServices;
 using System.Text;
 
+using NewLife;
 using NewLife.Threading;
 
 namespace Pek.Logging;
@@ -258,14 +263,90 @@ public class TextFileLog : Logger, IDisposable
         }
     }
 
-    private static String GetBasePath(String path) => Path.IsPathRooted(path) ? path : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path);
+    private static String GetBasePath(String path) => path.GetBasePath();
 
     private static String GetHead()
     {
         var setting = XXTraceSetting.Current;
+        var process = Process.GetCurrentProcess();
+        var assembly = Assembly.GetEntryAssembly();
+        var name = assembly?.GetCustomAttribute<AssemblyTitleAttribute>()?.Title;
+        if (String.IsNullOrWhiteSpace(name)) name = assembly?.GetCustomAttribute<AssemblyProductAttribute>()?.Product;
+        if (String.IsNullOrWhiteSpace(name)) name = assembly?.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description;
+        if (String.IsNullOrWhiteSpace(name)) name = process.ProcessName;
+
+        var framework = RuntimeInformation.FrameworkDescription;
+        var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var currentDirectory = Environment.CurrentDirectory;
+        var fileName = String.Empty;
+        try
+        {
+            fileName = process.MainModule?.FileName ?? String.Empty;
+        }
+        catch
+        {
+        }
+
+        if (String.IsNullOrWhiteSpace(fileName) || fileName.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase) || fileName.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                fileName = process.StartInfo.FileName;
+            }
+            catch
+            {
+            }
+        }
+
+        var machine = MachineInfo.Current;
+        var os = !String.IsNullOrWhiteSpace(machine.OSName)
+            ? $"{machine.OSName} {machine.OSVersion}".Trim()
+            : Environment.OSVersion.ToString();
+
         var builder = new StringBuilder();
-        builder.AppendFormat("#BaseDirectory: {0}\r\n", AppDomain.CurrentDomain.BaseDirectory);
+        builder.AppendFormat("#Software: {0}\r\n", name);
+        builder.AppendFormat("#ProcessID: {0}{1}\r\n", process.Id, Environment.Is64BitProcess ? " x64" : String.Empty);
+        builder.AppendFormat("#AppDomain: {0}\r\n", AppDomain.CurrentDomain.FriendlyName);
+        if (!String.IsNullOrWhiteSpace(fileName)) builder.AppendFormat("#FileName: {0}\r\n", fileName);
+        builder.AppendFormat("#BaseDirectory: {0}\r\n", baseDirectory);
+        if (!String.Equals(baseDirectory.TrimEnd('\\', '/'), currentDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            builder.AppendFormat("#CurrentDirectory: {0}\r\n", currentDirectory);
+
+        var basePath = PathHelper.BasePath;
+        if (!String.IsNullOrWhiteSpace(basePath) && !String.Equals(basePath.TrimEnd('\\', '/'), baseDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            builder.AppendFormat("#BasePath: {0}\r\n", basePath);
+
+        builder.AppendFormat("#TempPath: {0}\r\n", Path.GetTempPath());
+        if (!String.IsNullOrWhiteSpace(Environment.CommandLine)) builder.AppendFormat("#CommandLine: {0}\r\n", Environment.CommandLine);
+
+        var applicationType = Runtime.IsWeb
+            ? "Web"
+            : !Environment.UserInteractive
+                ? "Service"
+                : Runtime.IsConsole
+                    ? "Console"
+                    : "WinForm";
+        if (Runtime.Container) applicationType += "(Container)";
+
+        builder.AppendFormat("#ApplicationType: {0}\r\n", applicationType);
+        builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, framework);
+        builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", os, Environment.MachineName, Environment.UserName);
+        builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
+        if (machine.Memory > 0)
+            builder.AppendFormat("#Memory: {0:n0}M/{1:n0}M\r\n", machine.AvailableMemory / 1024 / 1024, machine.Memory / 1024 / 1024);
+        if (!String.IsNullOrWhiteSpace(machine.Processor)) builder.AppendFormat("#Processor: {0}\r\n", machine.Processor);
+        if (!String.IsNullOrWhiteSpace(machine.Product)) builder.AppendFormat("#Product: {0} / {1}\r\n", machine.Product, machine.Vendor);
+        if (machine.Temperature > 0) builder.AppendFormat("#Temperature: {0}\r\n", machine.Temperature);
+        builder.AppendFormat("#GC: IsServerGC={0}, LatencyMode={1}\r\n", GCSettings.IsServerGC, GCSettings.LatencyMode);
+
+        ThreadPool.GetMinThreads(out var minWorker, out var minIo);
+        ThreadPool.GetMaxThreads(out var maxWorker, out var maxIo);
+        ThreadPool.GetAvailableThreads(out var availableWorker, out var availableIo);
+        builder.AppendFormat("#ThreadPool: Min={0}/{1}, Max={2}/{3}, Available={4}/{5}\r\n", minWorker, minIo, maxWorker, maxIo, availableWorker, availableIo);
+        builder.AppendFormat("#SystemStarted: {0}\r\n", TimeSpan.FromMilliseconds(Runtime.TickCount64));
         builder.AppendFormat("#Date: {0:yyyy-MM-dd}\r\n", DateTime.Now.AddHours(setting.UtcIntervalHours));
+        builder.AppendFormat("#详解：{0}\r\n", "https://newlifex.com/core/log");
+        builder.AppendFormat("#字段: {0}\r\n", "时间 线程ID 线程池Y/网页W/普通N 线程名/任务ID/定时T/线程池P/长任务L 消息内容");
         builder.AppendFormat("#Fields: {0}\r\n", setting.LogLineFormat.Replace('|', ' '));
         return builder.ToString();
     }
