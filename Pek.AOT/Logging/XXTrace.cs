@@ -109,19 +109,18 @@ public static class XXTrace
         }
     }
 
-    internal static XXTraceSetting GetSetting() => TryGetSetting(out var setting) ? setting : XXTraceSetting.CreateDefault();
+    internal static XXTraceSetting GetSetting() => TryGetSetting(out var setting) ? setting : new XXTraceSetting();
 
     private static Boolean TryGetSetting(out XXTraceSetting setting)
     {
         try
         {
             setting = XXTraceSetting.Current;
-            setting.Normalize();
             return true;
         }
         catch
         {
-            setting = XXTraceSetting.CreateDefault();
+            setting = new XXTraceSetting();
             return false;
         }
     }

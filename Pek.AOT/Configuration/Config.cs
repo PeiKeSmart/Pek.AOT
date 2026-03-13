@@ -74,6 +74,16 @@ public abstract class Config
     }
 
     /// <summary>
+    /// 从配置文件加载完成后触发
+    /// </summary>
+    protected virtual void OnLoaded() { }
+
+    /// <summary>
+    /// 调用加载完成钩子
+    /// </summary>
+    internal void InvokeOnLoaded() => OnLoaded();
+
+    /// <summary>
     /// 获取配置变更信息（子类可重写以提供更精确的变更检测）
     /// </summary>
     /// <param name="oldConfig">旧配置对象</param>
@@ -472,6 +482,23 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
         var jsonContext = new TJsonContext();
         RegisterConfigForAot(jsonContext, fileName, fileFormat, writeIndented, useCamelCase);
     }
+}
+
+/// <summary>
+/// 面向 AOT 的双泛型配置基类
+/// </summary>
+/// <remarks>
+/// 适用于希望保留 DH.NCore 风格配置声明的场景。
+/// 通过泛型参数显式绑定 JsonSerializerContext，避免在每个配置类中手工调用 RegisterForAot。
+/// 文件名和格式仍然由 ConfigAttribute、XmlConfigFileAttribute、JsonConfigFileAttribute 决定。
+/// </remarks>
+/// <typeparam name="TConfig">配置类型</typeparam>
+/// <typeparam name="TJsonContext">AOT 序列化上下文类型</typeparam>
+public abstract class Config<TConfig, TJsonContext> : Config<TConfig>
+    where TConfig : Config<TConfig, TJsonContext>, new()
+    where TJsonContext : JsonSerializerContext, new()
+{
+    static Config() => RegisterForAot<TJsonContext>();
 }
 
 /// <summary>

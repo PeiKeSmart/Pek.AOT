@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -17,8 +19,9 @@ public static class XmlHelper
     /// <param name="encoding">编码</param>
     /// <param name="rootName">根节点名称</param>
     /// <param name="omitXmlDeclaration">是否忽略 XML 声明</param>
+    /// <param name="attachComment">是否写入 Description/DisplayName 注释</param>
     /// <returns>Xml 字符串</returns>
-    public static String ToXml(this Object obj, Type type, JsonSerializerOptions options, Encoding? encoding = null, String? rootName = null, Boolean omitXmlDeclaration = false)
+    public static String ToXml(this Object obj, Type type, JsonSerializerOptions options, Encoding? encoding = null, String? rootName = null, Boolean omitXmlDeclaration = false, Boolean attachComment = true)
     {
         if (obj == null) return String.Empty;
         if (type == null) throw new ArgumentNullException(nameof(type));
@@ -28,7 +31,11 @@ public static class XmlHelper
         var typeInfo = GetTypeInfo(type, options);
         var node = JsonSerializer.SerializeToNode(obj, typeInfo);
         var elementName = String.IsNullOrWhiteSpace(rootName) ? type.Name : rootName;
-        var root = BuildXmlElement(elementName, node);
+        var root = BuildXmlElement(elementName, node, typeInfo, options, attachComment);
+        var typeComment = attachComment ? GetComment(type) : null;
+        var document = String.IsNullOrWhiteSpace(typeComment)
+            ? new XDocument(new XDeclaration("1.0", "utf-8", null), root)
+            : new XDocument(new XDeclaration("1.0", "utf-8", null), new XComment(typeComment), root);
 
         using var stream = new MemoryStream();
         using var writer = XmlWriter.Create(stream, new XmlWriterSettings
@@ -37,7 +44,7 @@ public static class XmlHelper
             Indent = true,
             OmitXmlDeclaration = omitXmlDeclaration
         });
-        root.Save(writer);
+        document.Save(writer);
         writer.Flush();
         return encoding.GetString(stream.ToArray());
     }
@@ -49,12 +56,13 @@ public static class XmlHelper
     /// <param name="file">目标文件</param>
     /// <param name="encoding">编码</param>
     /// <param name="rootName">根节点名称</param>
-    public static void ToXmlFile(this Object obj, Type type, JsonSerializerOptions options, String file, Encoding? encoding = null, String? rootName = null)
+    /// <param name="attachComment">是否写入 Description/DisplayName 注释</param>
+    public static void ToXmlFile(this Object obj, Type type, JsonSerializerOptions options, String file, Encoding? encoding = null, String? rootName = null, Boolean attachComment = true)
     {
         if (String.IsNullOrWhiteSpace(file)) throw new ArgumentNullException(nameof(file));
 
         file.EnsureDirectory(true);
-        var xml = obj.ToXml(type, options, encoding, rootName);
+        var xml = obj.ToXml(type, options, encoding, rootName, false, attachComment);
         File.WriteAllText(file, xml, encoding ?? new UTF8Encoding(false));
     }
 
@@ -137,16 +145,32 @@ public static class XmlHelper
         return typeInfo;
     }
 
-    private static XElement BuildXmlElement(String name, JsonNode? node)
+    private static XElement BuildXmlElement(String name, JsonNode? node, JsonTypeInfo? typeInfo, JsonSerializerOptions options, Boolean attachComment)
     {
         var element = new XElement(name);
         if (node == null) return element;
 
         if (node is JsonObject obj)
         {
+            if (typeInfo?.Kind == JsonTypeInfoKind.Object)
+            {
+                foreach (var property in typeInfo.Properties)
+                {
+                    if (!obj.TryGetPropertyValue(property.Name, out var propertyNode)) continue;
+
+                    var propertyComment = attachComment ? GetComment(property.AttributeProvider) : null;
+                    if (!String.IsNullOrWhiteSpace(propertyComment)) element.Add(new XComment(propertyComment));
+
+                    var childTypeInfo = TryGetTypeInfo(property.PropertyType, options);
+                    element.Add(BuildXmlElement(property.Name, propertyNode, childTypeInfo, options, attachComment));
+                }
+
+                return element;
+            }
+
             foreach (var property in obj)
             {
-                element.Add(BuildXmlElement(property.Key, property.Value));
+                element.Add(BuildXmlElement(property.Key, property.Value, null, options, attachComment));
             }
 
             return element;
@@ -156,7 +180,7 @@ public static class XmlHelper
         {
             foreach (var item in array)
             {
-                element.Add(BuildXmlElement("Item", item));
+                element.Add(BuildXmlElement("Item", item, null, options, attachComment));
             }
 
             return element;
@@ -322,5 +346,43 @@ public static class XmlHelper
 
         valueType = typeof(Object);
         return false;
+    }
+
+    private static JsonTypeInfo? TryGetTypeInfo(Type type, JsonSerializerOptions options)
+    {
+        try
+        {
+            return options.GetTypeInfo(type);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static String? GetComment(MemberInfo member)
+    {
+        var description = member.GetCustomAttribute<DescriptionAttribute>()?.Description;
+        if (!String.IsNullOrWhiteSpace(description)) return description;
+
+        var displayName = member.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName;
+        return String.IsNullOrWhiteSpace(displayName) ? null : displayName;
+    }
+
+    private static String? GetComment(ICustomAttributeProvider? attributeProvider)
+    {
+        if (attributeProvider == null) return null;
+
+        if (attributeProvider is MemberInfo member) return GetComment(member);
+
+        var descriptions = attributeProvider.GetCustomAttributes(typeof(DescriptionAttribute), true);
+        if (descriptions.Length > 0 && descriptions[0] is DescriptionAttribute description && !String.IsNullOrWhiteSpace(description.Description))
+            return description.Description;
+
+        var displayNames = attributeProvider.GetCustomAttributes(typeof(DisplayNameAttribute), true);
+        if (displayNames.Length > 0 && displayNames[0] is DisplayNameAttribute displayName && !String.IsNullOrWhiteSpace(displayName.DisplayName))
+            return displayName.DisplayName;
+
+        return null;
     }
 }

@@ -265,9 +265,10 @@ public static class ConfigManager
         where TConfig : Config, new()
     {
         var configType = typeof(TConfig);
+        var resolvedFormat = ResolveConfigFileFormat(configType, fileFormat);
         _serializerOptions[configType] = serializerOptions;
-        _configFileNames[configType] = ResolveConfigFileName(configType, fileName, fileFormat);
-        _configFileFormats[configType] = fileFormat;
+        _configFileNames[configType] = ResolveConfigFileName(configType, fileName, resolvedFormat);
+        _configFileFormats[configType] = resolvedFormat;
         
         // 注册配置重载委托（消除反射依赖）
         _configReloadDelegates[configType] = () => ReloadConfigInternal<TConfig>();
@@ -430,13 +431,15 @@ public static class ConfigManager
                     if (format == ConfigFileFormat.Xml)
                     {
                         var config = XmlHelper.ToXmlEntity(content, configType, options) as TConfig;
-                        if (config != null) return config;
+                        if (config != null) return FinalizeLoadedConfig(config, configType, options);
 
                         return CreateAndPersistDefaultConfig<TConfig>(configType, options);
                     }
 
                     var jsonConfig = DeserializeConfig(content, configType, options) as TConfig;
-                    return jsonConfig ?? CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    return jsonConfig != null
+                        ? FinalizeLoadedConfig(jsonConfig, configType, options)
+                        : CreateAndPersistDefaultConfig<TConfig>(configType, options);
                 }
                 catch (JsonException jsonEx)
                 {
@@ -474,7 +477,34 @@ public static class ConfigManager
         where TConfig : Config, new()
     {
         var config = new TConfig();
+        config = FinalizeLoadedConfig(config, configType, options, persistOnChange: false);
         TryWriteConfigFile(config, configType, options, writeLog: false);
+        return config;
+    }
+
+    private static TConfig FinalizeLoadedConfig<TConfig>(TConfig config, Type configType, JsonSerializerOptions options, Boolean persistOnChange = true)
+        where TConfig : Config, new()
+    {
+        String? before = null;
+        if (persistOnChange)
+            before = SerializeConfig(config, configType, options);
+
+        try
+        {
+            config.InvokeOnLoaded();
+        }
+        catch (Exception ex)
+        {
+            XXTrace.WriteException(ex);
+        }
+
+        if (persistOnChange)
+        {
+            var after = SerializeConfig(config, configType, options);
+            if (!String.Equals(before, after, StringComparison.Ordinal))
+                TryWriteConfigFile(config, configType, options, writeLog: false);
+        }
+
         return config;
     }
 
@@ -570,6 +600,20 @@ public static class ConfigManager
 
     private static ConfigFileFormat GetConfigFileFormat(Type configType) => _configFileFormats.TryGetValue(configType, out var format) ? format : ConfigFileFormat.Xml;
 
+    private static ConfigFileFormat ResolveConfigFileFormat(Type configType, ConfigFileFormat fallbackFormat)
+    {
+        if (configType.GetCustomAttribute<JsonConfigFileAttribute>() != null) return ConfigFileFormat.Json;
+        if (configType.GetCustomAttribute<XmlConfigFileAttribute>() != null) return ConfigFileFormat.Xml;
+
+        var config = configType.GetCustomAttribute<ConfigAttribute>();
+        if (String.IsNullOrWhiteSpace(config?.Provider)) return fallbackFormat;
+
+        if (String.Equals(config.Provider, "json", StringComparison.OrdinalIgnoreCase)) return ConfigFileFormat.Json;
+        if (String.Equals(config.Provider, "xml", StringComparison.OrdinalIgnoreCase)) return ConfigFileFormat.Xml;
+
+        throw new InvalidOperationException($"配置类型 {configType.Name} 使用了不受支持的 Provider '{config.Provider}'。当前 Pek.AOT 仅支持 xml/json 本地配置。");
+    }
+
     private static String ResolveConfigFileName(Type configType, String? fileName, ConfigFileFormat fileFormat)
     {
         if (String.IsNullOrWhiteSpace(fileName))
@@ -578,10 +622,26 @@ public static class ConfigManager
                 ? configType.GetCustomAttribute<JsonConfigFileAttribute>()?.FileName
                 : configType.GetCustomAttribute<XmlConfigFileAttribute>()?.FileName;
 
-            fileName = String.IsNullOrWhiteSpace(attributeFileName) ? configType.Name : attributeFileName;
+            if (String.IsNullOrWhiteSpace(attributeFileName))
+                attributeFileName = configType.GetCustomAttribute<ConfigAttribute>()?.Name;
+
+            fileName = String.IsNullOrWhiteSpace(attributeFileName) ? GetDefaultConfigName(configType) : attributeFileName;
         }
 
         return Path.HasExtension(fileName) ? fileName : $"{fileName}.config";
+    }
+
+    private static String GetDefaultConfigName(Type configType)
+    {
+        var name = configType.Name;
+
+        if (name.Length > 6 && name.EndsWith("Config", StringComparison.Ordinal))
+            return name[..^6];
+
+        if (name.Length > 7 && name.EndsWith("Setting", StringComparison.Ordinal))
+            return name[..^7];
+
+        return name;
     }
 
     private static TConfig TryLoadLegacyJsonAndMigrate<TConfig>(Type configType, JsonSerializerOptions options, String content)
