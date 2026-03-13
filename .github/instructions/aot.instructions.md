@@ -230,7 +230,7 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 | 场景 | 至少验证 |
 |------|---------|
 | 修改配置系统 | 编译 `Pek.AOT.csproj`，并验证配置加载/保存链路 |
-| 修改日志配置 | 编译相关样例或验证 `XXTraceSetting` 注册路径 |
+| 修改日志配置 | 编译相关样例或验证 `Setting` 注册路径 |
 | 修改定时器/线程调度 | 编译样例并检查公开 API 无回归 |
 | 修改兼容层公共 API | 检查旧命名空间调用是否仍能通过编译 |
 

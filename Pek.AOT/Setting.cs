@@ -2,13 +2,14 @@ using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 using Pek.Configuration;
+using Pek.Logging;
 
-namespace Pek.Logging;
+namespace Pek;
 
-/// <summary>XXTrace 日志配置</summary>
+/// <summary>核心设置</summary>
 [DisplayName("核心设置")]
 [Config("Core")]
-public class XXTraceSetting : Config<XXTraceSetting, XXTraceSettingJsonContext>
+public class Setting : Config<Setting, SettingJsonContext>
 {
     /// <summary>是否启用全局调试</summary>
     [Description("全局调试。XXTrace.Debug")]
@@ -69,12 +70,11 @@ public class XXTraceSetting : Config<XXTraceSetting, XXTraceSettingJsonContext>
     /// <summary>服务地址</summary>
     [Description("服务地址。用于内部构造其它Url或向注册中心登记，多地址逗号隔开")]
     public String ServiceAddress { get; set; } = String.Empty;
-
 }
 
-/// <summary>XXTraceSetting 的 AOT 序列化上下文</summary>
+/// <summary>Setting 的 AOT 序列化上下文</summary>
 [JsonSerializable(typeof(LogLevel))]
-[JsonSerializable(typeof(XXTraceSetting))]
-public partial class XXTraceSettingJsonContext : JsonSerializerContext
+[JsonSerializable(typeof(Setting))]
+public partial class SettingJsonContext : JsonSerializerContext
 {
 }

@@ -13,6 +13,12 @@
 
 配置文件统一保存在应用根目录下的 `Config/` 目录中，默认扩展名仍为 `.config`，但内容格式由注册时的 `ConfigFileFormat` 决定。
 
+XML 输出遵循更接近 DH.NCore 的风格：
+
+- 节点名称使用属性原始名称，例如 `LogLevel`
+- 枚举值使用名称文本，例如 `Info`
+- `DisplayName` / `Description` 会写入 XML 注释
+
 ## 当前行为
 
 - 默认格式：XML
@@ -128,18 +134,17 @@ public partial class CoreConfigJsonContext : JsonSerializerContext
 using System.ComponentModel;
 using System.Text.Json.Serialization;
 using Pek.Configuration;
+using Pek.Net;
 
 [DisplayName("网络设置")]
 [Config("Socket")]
-public class SocketSetting : Config<SocketSetting>
+public class SocketSetting : Config<SocketSetting, SocketSettingJsonContext>
 {
     [Description("网络调试")]
     public Boolean Debug { get; set; }
 
     [Description("会话超时时间。每个Tcp/Udp连接会话，超过一定时间不活跃时做超时下线处理，默认20*60秒")]
     public Int32 SessionTimeout { get; set; } = 20 * 60;
-
-    static SocketSetting() => RegisterForAot<SocketSettingJsonContext>();
 }
 
 [JsonSerializable(typeof(SocketSetting))]
@@ -158,10 +163,33 @@ public partial class SocketSettingJsonContext : JsonSerializerContext
 
 ```csharp
 [Config("Socket", "json")]
-public class SocketSetting : Config<SocketSetting>
+public class SocketSetting : Config<SocketSetting, SocketSettingJsonContext>
 {
-    static SocketSetting() => RegisterForAot<SocketSettingJsonContext>();
 }
+```
+
+### 5. XXTrace 配置示例
+
+```csharp
+using Pek;
+using Pek.Logging;
+
+var setting = Setting.Current;
+
+Console.WriteLine(setting.LogLevel);
+XXTrace.UseConsole();
+XXTrace.WriteLine("hello");
+```
+
+默认会生成 `Config/Core.config`，其中关键片段类似：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<!--核心设置-->
+<Setting>
+    <!--日志等级。只输出大于等于该级别的日志，All/Debug/Info/Warn/Error/Fatal，默认Info-->
+    <LogLevel>Info</LogLevel>
+</Setting>
 ```
 
 当前 `ConfigAttribute.Provider` 仅支持 `xml` 和 `json`。像 `http` 这类 DH.NCore 中存在、但 Pek.AOT 尚未实现的 provider，会在注册时直接报错。

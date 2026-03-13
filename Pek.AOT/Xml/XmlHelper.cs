@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -31,8 +32,8 @@ public static class XmlHelper
         var typeInfo = GetTypeInfo(type, options);
         var node = JsonSerializer.SerializeToNode(obj, typeInfo);
         var elementName = String.IsNullOrWhiteSpace(rootName) ? type.Name : rootName;
-        var root = BuildXmlElement(elementName, node, typeInfo, options, attachComment);
-        var typeComment = attachComment ? GetComment(type) : null;
+        var root = BuildXmlElement(elementName, node, typeInfo, options, attachComment, type);
+        var typeComment = attachComment ? SanitizeComment(GetComment(type)) : null;
         var document = String.IsNullOrWhiteSpace(typeComment)
             ? new XDocument(new XDeclaration("1.0", "utf-8", null), root)
             : new XDocument(new XDeclaration("1.0", "utf-8", null), new XComment(typeComment), root);
@@ -145,7 +146,7 @@ public static class XmlHelper
         return typeInfo;
     }
 
-    private static XElement BuildXmlElement(String name, JsonNode? node, JsonTypeInfo? typeInfo, JsonSerializerOptions options, Boolean attachComment)
+    private static XElement BuildXmlElement(String name, JsonNode? node, JsonTypeInfo? typeInfo, JsonSerializerOptions options, Boolean attachComment, Type? declaredType)
     {
         var element = new XElement(name);
         if (node == null) return element;
@@ -158,11 +159,11 @@ public static class XmlHelper
                 {
                     if (!obj.TryGetPropertyValue(property.Name, out var propertyNode)) continue;
 
-                    var propertyComment = attachComment ? GetComment(property.AttributeProvider) : null;
+                    var propertyComment = attachComment ? SanitizeComment(GetComment(property.AttributeProvider)) : null;
                     if (!String.IsNullOrWhiteSpace(propertyComment)) element.Add(new XComment(propertyComment));
 
                     var childTypeInfo = TryGetTypeInfo(property.PropertyType, options);
-                    element.Add(BuildXmlElement(property.Name, propertyNode, childTypeInfo, options, attachComment));
+                    element.Add(BuildXmlElement(GetXmlPropertyName(property), propertyNode, childTypeInfo, options, attachComment, property.PropertyType));
                 }
 
                 return element;
@@ -170,7 +171,7 @@ public static class XmlHelper
 
             foreach (var property in obj)
             {
-                element.Add(BuildXmlElement(property.Key, property.Value, null, options, attachComment));
+                element.Add(BuildXmlElement(property.Key, property.Value, null, options, attachComment, null));
             }
 
             return element;
@@ -178,9 +179,10 @@ public static class XmlHelper
 
         if (node is JsonArray array)
         {
+            var itemType = TryGetEnumerableItemType(declaredType);
             foreach (var item in array)
             {
-                element.Add(BuildXmlElement("Item", item, null, options, attachComment));
+                element.Add(BuildXmlElement("Item", item, TryGetTypeInfo(itemType ?? typeof(Object), options), options, attachComment, itemType));
             }
 
             return element;
@@ -188,7 +190,7 @@ public static class XmlHelper
 
         if (node is JsonValue value)
         {
-            element.Value = GetScalarText(value);
+            element.Value = GetScalarText(value, declaredType);
             return element;
         }
 
@@ -233,7 +235,7 @@ public static class XmlHelper
         var result = new JsonObject();
         foreach (var property in typeInfo.Properties)
         {
-            var child = element.Element(property.Name);
+            var child = element.Element(GetXmlPropertyName(property)) ?? element.Element(property.Name);
             if (child == null) continue;
 
             result[property.Name] = BuildJsonNode(child, property.PropertyType, options);
@@ -252,8 +254,20 @@ public static class XmlHelper
 
         if (type.IsEnum)
         {
-            if (Int64.TryParse(text, out var enumNumber))
+            if (Int64.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var enumNumber))
                 node = JsonValue.Create(enumNumber)!;
+            else if (Enum.TryParse(type, text, true, out var enumValue) && enumValue != null)
+            {
+                var underlyingType = Enum.GetUnderlyingType(type);
+                node = underlyingType == typeof(Byte) ? JsonValue.Create((Byte)enumValue)! :
+                    underlyingType == typeof(SByte) ? JsonValue.Create((SByte)enumValue)! :
+                    underlyingType == typeof(Int16) ? JsonValue.Create((Int16)enumValue)! :
+                    underlyingType == typeof(UInt16) ? JsonValue.Create((UInt16)enumValue)! :
+                    underlyingType == typeof(Int32) ? JsonValue.Create((Int32)enumValue)! :
+                    underlyingType == typeof(UInt32) ? JsonValue.Create((UInt32)enumValue)! :
+                    underlyingType == typeof(Int64) ? JsonValue.Create((Int64)enumValue)! :
+                    JsonValue.Create((UInt64)enumValue)!;
+            }
             else
                 node = JsonValue.Create(text)!;
 
@@ -281,8 +295,20 @@ public static class XmlHelper
         return false;
     }
 
-    private static String GetScalarText(JsonValue value)
+    private static String GetScalarText(JsonValue value, Type? declaredType)
     {
+        var effectiveType = Nullable.GetUnderlyingType(declaredType ?? typeof(Object)) ?? declaredType;
+        if (effectiveType?.IsEnum == true)
+        {
+            var raw = value.ToJsonString().Trim('"');
+            if (String.IsNullOrWhiteSpace(raw)) return raw;
+
+            if (Int64.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var enumNumber))
+                return Enum.GetName(effectiveType, Enum.ToObject(effectiveType, enumNumber)) ?? raw;
+
+            return raw;
+        }
+
         if (value.TryGetValue<Boolean>(out var booleanValue)) return XmlConvert.ToString(booleanValue);
         if (value.TryGetValue<Byte>(out var byteValue)) return XmlConvert.ToString(byteValue);
         if (value.TryGetValue<SByte>(out var sbyteValue)) return XmlConvert.ToString(sbyteValue);
@@ -302,6 +328,18 @@ public static class XmlHelper
         if (value.TryGetValue<String>(out var stringValue)) return stringValue ?? String.Empty;
 
         return value.ToJsonString().Trim('"');
+    }
+
+    private static String GetXmlPropertyName(JsonPropertyInfo property)
+    {
+        if (property.AttributeProvider is MemberInfo member) return member.Name;
+        return property.Name;
+    }
+
+    private static Type? TryGetEnumerableItemType(Type? type)
+    {
+        if (type == null) return null;
+        return IsEnumerableType(type, out var itemType) ? itemType : null;
     }
 
     private static Boolean IsEnumerableType(Type type, out Type itemType)
@@ -384,5 +422,15 @@ public static class XmlHelper
             return displayName.DisplayName;
 
         return null;
+    }
+
+    private static String? SanitizeComment(String? comment)
+    {
+        if (String.IsNullOrWhiteSpace(comment)) return comment;
+
+        comment = comment.Replace("--", "- -", StringComparison.Ordinal);
+        if (comment.EndsWith("-", StringComparison.Ordinal)) comment += " ";
+
+        return comment;
     }
 }

@@ -18,6 +18,14 @@ namespace Pek.Configuration;
 public delegate object ConfigReloadDelegate();
 
 /// <summary>
+/// 配置安全重载委托
+/// </summary>
+/// <param name="config">重载后的配置对象</param>
+/// <param name="error">失败原因</param>
+/// <returns>是否成功</returns>
+public delegate Boolean ConfigTryReloadDelegate(out object? config, out string? error);
+
+/// <summary>
 /// 配置变更事件参数（增强版本）
 /// </summary>
 public class ConfigChangedEventArgs : EventArgs
@@ -75,6 +83,8 @@ internal class ConfigChangeQueueItem
 /// </summary>
 public static class ConfigManager
 {
+    private const String LogScope = "Pek.Configuration";
+
     // 核心数据存储
     private static readonly ConcurrentDictionary<Type, object> _configs = new();
     private static readonly ConcurrentDictionary<Type, JsonSerializerOptions> _serializerOptions = new();
@@ -82,6 +92,7 @@ public static class ConfigManager
     private static readonly ConcurrentDictionary<Type, ConfigFileFormat> _configFileFormats = new();
     private static readonly ConcurrentDictionary<string, Type> _filePathToConfigType = new();
     private static readonly ConcurrentDictionary<Type, ConfigReloadDelegate> _configReloadDelegates = new();
+    private static readonly ConcurrentDictionary<Type, ConfigTryReloadDelegate> _configTryReloadDelegates = new();
     
     // 文件监控
     private static FileWatcher? _fileWatcher;
@@ -122,7 +133,7 @@ public static class ConfigManager
             {
                 var changes = string.Join(", ", e.PropertyChanges.Take(3).Select(c => c.ToString()));
                 var moreInfo = e.PropertyChanges.Count > 3 ? $" 等{e.PropertyChanges.Count}个属性" : "";
-                XXTrace.WriteLine($"[INFO] 配置 {e.ConfigName} 变更: {changes}{moreInfo}");
+                WriteConfigLog("Change", $"配置变更 Config={e.ConfigName} Detail={changes}{moreInfo}");
             }
             
             // ConfigManager 已经在 ReloadConfigInternal 中更新了 _configs 缓存
@@ -272,6 +283,7 @@ public static class ConfigManager
         
         // 注册配置重载委托（消除反射依赖）
         _configReloadDelegates[configType] = () => ReloadConfigInternal<TConfig>();
+        _configTryReloadDelegates[configType] = (out object? config, out string? error) => TryReloadConfigInternal<TConfig>(out config, out error);
         
         // 建立文件路径到配置类型的映射
         var filePath = GetConfigFilePath(configType);
@@ -406,11 +418,22 @@ public static class ConfigManager
     /// </summary>
     private static TConfig LoadConfig<TConfig>() where TConfig : Config, new()
     {
+        if (TryLoadConfig<TConfig>(true, out var config, out _)) return config;
+
+        throw new InvalidOperationException($"配置类型 {typeof(TConfig).Name} 加载失败");
+    }
+
+    private static Boolean TryLoadConfig<TConfig>(Boolean createDefaultOnError, out TConfig config, out String? error) where TConfig : Config, new()
+    {
         var configType = typeof(TConfig);
+        error = null;
+        config = default!;
 
         if (!_serializerOptions.TryGetValue(configType, out var options))
         {
-            throw new InvalidOperationException($"配置类型 {configType.Name} 未注册序列化选项");
+            error = $"配置类型 {configType.Name} 未注册序列化选项";
+            if (!createDefaultOnError) return false;
+            throw new InvalidOperationException(error);
         }
 
         try
@@ -422,7 +445,8 @@ public static class ConfigManager
                 
                 if (string.IsNullOrWhiteSpace(content))
                 {
-                    return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    return true;
                 }
 
                 try
@@ -430,28 +454,72 @@ public static class ConfigManager
                     var format = GetConfigFileFormat(configType);
                     if (format == ConfigFileFormat.Xml)
                     {
-                        var config = XmlHelper.ToXmlEntity(content, configType, options) as TConfig;
-                        if (config != null) return FinalizeLoadedConfig(config, configType, options);
+                        try
+                        {
+                            var xmlConfig = XmlHelper.ToXmlEntity(content, configType, options) as TConfig;
+                            if (xmlConfig != null)
+                            {
+                                config = FinalizeLoadedConfig(xmlConfig, configType, options, sourceContent: content);
+                                return true;
+                            }
+                        }
+                        catch (JsonException jsonEx)
+                        {
+                            error = $"配置文件XML内容错误: {filePath}, 错误: {jsonEx.Message}";
+                            if (!createDefaultOnError) return false;
 
-                        return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                            XXTrace.WriteLine(error);
+                            config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                            return true;
+                        }
+
+                        config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                        return true;
                     }
 
                     var jsonConfig = DeserializeConfig(content, configType, options) as TConfig;
-                    return jsonConfig != null
-                        ? FinalizeLoadedConfig(jsonConfig, configType, options)
-                        : CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    if (jsonConfig != null)
+                    {
+                        config = FinalizeLoadedConfig(jsonConfig, configType, options);
+                        return true;
+                    }
+
+                    config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    return true;
                 }
                 catch (JsonException jsonEx)
                 {
-                    XXTrace.WriteLine($"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}");
-                    return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    error = $"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}";
+                    if (!createDefaultOnError) return false;
+
+                    XXTrace.WriteLine(error);
+                    config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                    return true;
                 }
                 catch (XmlException xmlEx)
                 {
                     if (GetConfigFileFormat(configType) == ConfigFileFormat.Xml)
                     {
-                        XXTrace.WriteLine($"配置文件XML格式错误，尝试按旧JSON迁移: {filePath}, 错误: {xmlEx.Message}");
-                        return TryLoadLegacyJsonAndMigrate<TConfig>(configType, options, content);
+                        var trimmed = content.TrimStart();
+                        if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
+                        {
+                            if (!createDefaultOnError)
+                            {
+                                error = $"配置文件XML格式错误，待按旧JSON迁移: {filePath}, 错误: {xmlEx.Message}";
+                                return false;
+                            }
+
+                            XXTrace.WriteLine($"配置文件XML格式错误，尝试按旧JSON迁移: {filePath}, 错误: {xmlEx.Message}");
+                            config = TryLoadLegacyJsonAndMigrate<TConfig>(configType, options, content);
+                            return true;
+                        }
+
+                        error = $"配置文件XML格式错误: {filePath}, 错误: {xmlEx.Message}";
+                        if (!createDefaultOnError) return false;
+
+                        XXTrace.WriteLine(error);
+                        config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+                        return true;
                     }
 
                     throw;
@@ -460,10 +528,14 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
+            error = ex.Message;
+            if (!createDefaultOnError) return false;
+
             XXTrace.WriteException(ex);
         }
 
-        return CreateAndPersistDefaultConfig<TConfig>(configType, options);
+        config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
+        return true;
     }
 
     /// <summary>
@@ -482,10 +554,11 @@ public static class ConfigManager
         return config;
     }
 
-    private static TConfig FinalizeLoadedConfig<TConfig>(TConfig config, Type configType, JsonSerializerOptions options, Boolean persistOnChange = true)
+    private static TConfig FinalizeLoadedConfig<TConfig>(TConfig config, Type configType, JsonSerializerOptions options, Boolean persistOnChange = true, String? sourceContent = null)
         where TConfig : Config, new()
     {
         String? before = null;
+        Boolean shouldPersist = false;
         if (persistOnChange)
             before = SerializeConfig(config, configType, options);
 
@@ -501,12 +574,23 @@ public static class ConfigManager
         if (persistOnChange)
         {
             var after = SerializeConfig(config, configType, options);
-            if (!String.Equals(before, after, StringComparison.Ordinal))
+            if (!String.Equals(before, after, StringComparison.Ordinal)) shouldPersist = true;
+
+            if (GetConfigFileFormat(configType) == ConfigFileFormat.Xml && !String.IsNullOrWhiteSpace(sourceContent))
+            {
+                var currentXml = config.ToXml(configType, options);
+                if (!String.Equals(NormalizeContentForCompare(sourceContent), NormalizeContentForCompare(currentXml), StringComparison.Ordinal))
+                    shouldPersist = true;
+            }
+
+            if (shouldPersist)
                 TryWriteConfigFile(config, configType, options, writeLog: false);
         }
 
         return config;
     }
+
+    private static String NormalizeContentForCompare(String content) => content.Replace("\r\n", "\n").Trim();
 
     /// <summary>
     /// 保存配置（性能优化版本）
@@ -652,7 +736,7 @@ public static class ConfigManager
             var config = DeserializeConfig(content, configType, options) as TConfig;
             if (config != null)
             {
-                XXTrace.WriteLine($"检测到旧 JSON 配置，正在迁移为 XML: {GetConfigFilePath(configType)}");
+                WriteConfigLog("Migrate", $"检测到旧JSON配置并迁移为XML Path={GetConfigFilePath(configType)}");
                 TryWriteConfigFile(config, configType, options, writeLog: false);
                 return config;
             }
@@ -693,7 +777,7 @@ public static class ConfigManager
                 _fileWatcher.EventHandler += OnConfigFileChanged;
                 _fileWatcher.Start();
                 
-                XXTrace.WriteLine("配置文件监控器已启动");
+                WriteConfigLog("Watch", $"配置文件监控器已启动 Path={configDir}");
             }
             catch (Exception ex)
             {
@@ -718,7 +802,7 @@ public static class ConfigManager
         // 检查是否是代码保存导致的变更（防抖机制）
         if (IsCodeSaveTriggered(args.FullPath))
         {
-            XXTrace.WriteLine($"忽略代码保存导致的文件变更: {args.FullPath}");
+            WriteConfigLog("Watch", $"忽略代码保存触发的文件变更 Path={args.FullPath}");
             return;
         }
 
@@ -733,11 +817,11 @@ public static class ConfigManager
 
         if (_channelWriter.TryWrite(queueItem))
         {
-            XXTrace.WriteLine($"[队列] 配置变更已加入队列: {configType.Name}");
+            WriteConfigLog("Queue", $"配置变更已加入队列 Config={configType.Name} Path={args.FullPath}");
         }
         else
         {
-            XXTrace.WriteLine($"[队列] 配置变更入队失败: {configType.Name}");
+            WriteConfigLog("Queue", $"配置变更入队失败 Config={configType.Name} Path={args.FullPath}");
         }
     }
 
@@ -770,11 +854,11 @@ public static class ConfigManager
                     if (await ProcessSingleConfigChangeAsync(item).ConfigureAwait(false))
                     {
                         processedCount++;
-                        XXTrace.WriteLine($"[Channel] 成功处理配置变更: {item.ConfigType.Name}");
+                        WriteConfigLog("Reload", $"配置变更处理成功 Config={item.ConfigType.Name}");
                     }
                     else
                     {
-                        XXTrace.WriteLine($"[Channel] 配置变更处理失败: {item.ConfigType.Name}");
+                        WriteConfigLog("Reload", $"配置变更处理失败 Config={item.ConfigType.Name}");
                     }
                 }
                 catch (Exception ex)
@@ -785,14 +869,14 @@ public static class ConfigManager
         }
         catch (OperationCanceledException)
         {
-            XXTrace.WriteLine("[Channel] 配置变更处理器已取消");
+            WriteConfigLog("Reload", "配置变更处理器已取消");
         }
         catch (Exception ex)
         {
             XXTrace.WriteException(ex);
         }
 
-        XXTrace.WriteLine($"[Channel] 配置变更处理器已停止，总共处理了 {processedCount} 个配置变更");
+        WriteConfigLog("Reload", $"配置变更处理器已停止 Count={processedCount}");
     }
 
     /// <summary>
@@ -808,11 +892,27 @@ public static class ConfigManager
                 return true; // 文件不存在视为成功处理
             }
 
-            // 简单延迟，确保文件写入完成
-            await Task.Delay(200, _cancellationTokenSource.Token).ConfigureAwait(false);
+            // 简单延迟，确保编辑器或外部进程完成文件写入
+            await Task.Delay(500, _cancellationTokenSource.Token).ConfigureAwait(false);
+            await WaitForFileStableAsync(item.FilePath).ConfigureAwait(false);
 
-            // 重新加载配置并触发事件
-            return ReloadAndTriggerEvents(item);
+            // 重新加载配置并触发事件。手工保存时可能短暂读到半写入内容，因此允许短暂重试。
+            for (var i = 0; i < 3; i++)
+            {
+                if (TryReloadAndTriggerEvents(item, out var error)) return true;
+
+                if (i < 2)
+                {
+                    await Task.Delay(250, _cancellationTokenSource.Token).ConfigureAwait(false);
+                    await WaitForFileStableAsync(item.FilePath).ConfigureAwait(false);
+                }
+                else if (!String.IsNullOrWhiteSpace(error))
+                {
+                    WriteConfigLog("Reload", $"配置重载失败，保留旧配置 Config={item.ConfigType.Name} Error={TrimLogMessage(error)}");
+                }
+            }
+
+            return false;
         }
         catch (OperationCanceledException)
         {
@@ -825,29 +925,47 @@ public static class ConfigManager
         }
     }
 
+    private static async Task WaitForFileStableAsync(String filePath)
+    {
+        DateTime? lastWriteTime = null;
+
+        for (var i = 0; i < 5; i++)
+        {
+            _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+            if (!File.Exists(filePath)) return;
+
+            var currentWriteTime = File.GetLastWriteTimeUtc(filePath);
+            if (lastWriteTime != null && currentWriteTime == lastWriteTime.Value) return;
+
+            lastWriteTime = currentWriteTime;
+            await Task.Delay(150, _cancellationTokenSource.Token).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// 重新加载配置并触发事件
     /// </summary>
-    private static bool ReloadAndTriggerEvents(ConfigChangeQueueItem item)
+    private static bool TryReloadAndTriggerEvents(ConfigChangeQueueItem item, out String? error)
     {
+        error = null;
+
         // 获取旧配置
         var oldConfig = _configs.TryGetValue(item.ConfigType, out var cached) ? cached : null;
 
         // 重新加载配置
-        if (!_configReloadDelegates.TryGetValue(item.ConfigType, out var reloadDelegate))
+        if (!_configTryReloadDelegates.TryGetValue(item.ConfigType, out var reloadDelegate))
         {
-            XXTrace.WriteLine($"[Channel] 未找到配置重载委托: {item.ConfigType.Name}");
+            error = $"未找到配置重载委托: {item.ConfigType.Name}";
             return false;
         }
 
-        var newConfig = reloadDelegate();
-        if (newConfig == null)
+        if (!reloadDelegate(out var newConfig, out error) || newConfig == null)
         {
-            XXTrace.WriteLine($"[Channel] 配置重新加载返回null: {item.ConfigType.Name}");
             return false;
         }
 
-        XXTrace.WriteLine($"[Channel] 配置重新加载成功: {item.ConfigType.Name}");
+        WriteConfigLog("Reload", $"配置重新加载成功 Config={item.ConfigType.Name}");
 
         // 触发配置变更事件
         ConfigChanged?.Invoke(null, new ConfigChangedEventArgs(item.ConfigType, oldConfig ?? newConfig, newConfig, GetPropertyChanges(oldConfig, newConfig)));
@@ -894,4 +1012,22 @@ public static class ConfigManager
         _configs[configType] = config;
         return config;
     }
+
+    private static Boolean TryReloadConfigInternal<TConfig>(out object? config, out String? error) where TConfig : Config, new()
+    {
+        var configType = typeof(TConfig);
+        if (TryLoadConfig<TConfig>(false, out var loaded, out error))
+        {
+            _configs[configType] = loaded;
+            config = loaded;
+            return true;
+        }
+
+        config = null;
+        return false;
+    }
+
+    private static String TrimLogMessage(String message) => message.Length <= 160 ? message : message[..160] + "...";
+
+    private static void WriteConfigLog(String stage, String message) => XXTrace.WriteScope(LogScope, stage, message);
 }

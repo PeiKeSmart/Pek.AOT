@@ -337,26 +337,26 @@ public abstract class Config
             var changes = GetPropertyChanges(oldConfig);
             if (changes.Count > 0)
             {
-                XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置保存变更:");
+                XXTrace.WriteScope("Pek.Configuration", "Save", "配置保存变更 Config={0}", configName);
                 foreach (var change in changes.Take(5)) // 限制显示前5个变更
                 {
-                    XXTrace.WriteLine($"  • {change.PropertyName}: {change.OldValue} → {change.NewValue}");
+                    XXTrace.WriteScope("Pek.Configuration", "Save", "变更 Detail={0}", change.ToString());
                 }
                 
                 if (changes.Count > 5)
                 {
-                    XXTrace.WriteLine($"  ... 还有 {changes.Count - 5} 个属性变更");
+                    XXTrace.WriteScope("Pek.Configuration", "Save", "变更截断 Remaining={0}", changes.Count - 5);
                 }
             }
             else
             {
-                XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（无变更）");
+                XXTrace.WriteScope("Pek.Configuration", "Save", "配置已保存 Config={0} Status=NoChange", configName);
             }
         }
         catch (Exception ex)
         {
             XXTrace.WriteException(ex);
-            XXTrace.WriteLine($"[CONFIG-SAVE] {configName} 配置已保存（变更检测失败）");
+            XXTrace.WriteScope("Pek.Configuration", "Save", "配置已保存 Config={0} Status=CompareFailed", configName);
         }
     }
 }
@@ -506,6 +506,8 @@ public abstract class Config<TConfig, TJsonContext> : Config<TConfig>
 /// </summary>
 public class ConfigPropertyChange
 {
+    private const Int32 MaxLogLength = 96;
+
     /// <summary>
     /// 属性名称
     /// </summary>
@@ -520,4 +522,16 @@ public class ConfigPropertyChange
     /// 新值
     /// </summary>
     public string NewValue { get; set; } = null!;
+
+    /// <summary>转为日志输出文本</summary>
+    /// <returns>变更说明</returns>
+    public override String ToString() => $"{PropertyName}: {TrimValue(OldValue)} -> {TrimValue(NewValue)}";
+
+    private static String TrimValue(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return String.Empty;
+
+        value = value.Replace("\r", " ").Replace("\n", " ");
+        return value.Length <= MaxLogLength ? value : value[..MaxLogLength] + "...";
+    }
 }
