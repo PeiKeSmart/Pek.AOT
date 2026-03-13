@@ -181,28 +181,28 @@ public static class ConfigManager
         {
             try
             {
-                XXTrace.WriteLine("[INFO] 开始自动清理Channel配置系统资源...");
+                WriteConfigLog("Cleanup", "开始自动清理配置系统资源");
 
                 // 1. 停止Channel写入
                 try
                 {
                     _channelWriter?.Complete();
-                    XXTrace.WriteLine("[INFO] Channel写入已停止");
+                    WriteConfigLog("Cleanup", "Channel写入已停止");
                 }
                 catch (Exception ex)
                 {
-                    XXTrace.WriteLine($"[WARNING] 停止Channel写入时出错: {ex.Message}");
+                    WriteConfigLog("Cleanup", $"停止Channel写入时出错 Error={TrimLogMessage(ex.Message)}");
                 }
                 
                 // 2. 取消后台任务
                 try
                 {
                     _cancellationTokenSource?.Cancel();
-                    XXTrace.WriteLine("[INFO] 后台任务取消信号已发送");
+                    WriteConfigLog("Cleanup", "后台任务取消信号已发送");
                 }
                 catch (Exception ex)
                 {
-                    XXTrace.WriteLine($"[WARNING] 取消后台任务时出错: {ex.Message}");
+                    WriteConfigLog("Cleanup", $"取消后台任务时出错 Error={TrimLogMessage(ex.Message)}");
                 }
                 
                 // 3. 等待后台任务完成（有超时限制，避免析构函数阻塞）
@@ -211,11 +211,11 @@ public static class ConfigManager
                     // 在析构函数中使用较短的超时时间
                     if (_queueProcessorTask.Wait(TimeSpan.FromSeconds(3)))
                     {
-                        XXTrace.WriteLine("[INFO] 后台任务已正常完成");
+                        WriteConfigLog("Cleanup", "后台任务已正常完成");
                     }
                     else
                     {
-                        XXTrace.WriteLine("[WARNING] 后台任务未能在3秒内完成，强制继续清理");
+                        WriteConfigLog("Cleanup", "后台任务未能在3秒内完成，继续清理");
                     }
                 }
                 
@@ -228,11 +228,11 @@ public static class ConfigManager
                         {
                             _fileWatcher.Stop();
                             _fileWatcher = null;
-                            XXTrace.WriteLine("[INFO] 文件监控器已自动停止");
+                            WriteConfigLog("Cleanup", "文件监控器已自动停止");
                         }
                         catch (Exception ex)
                         {
-                            XXTrace.WriteLine($"[WARNING] 停止文件监控器时出错: {ex.Message}");
+                            WriteConfigLog("Cleanup", $"停止文件监控器时出错 Error={TrimLogMessage(ex.Message)}");
                         }
                     }
                 }
@@ -241,21 +241,21 @@ public static class ConfigManager
                 try
                 {
                     _cancellationTokenSource?.Dispose();
-                    XXTrace.WriteLine("[INFO] CancellationTokenSource已释放");
+                    WriteConfigLog("Cleanup", "CancellationTokenSource已释放");
                 }
                 catch (Exception ex)
                 {
-                    XXTrace.WriteLine($"[WARNING] 释放CancellationTokenSource时出错: {ex.Message}");
+                    WriteConfigLog("Cleanup", $"释放CancellationTokenSource时出错 Error={TrimLogMessage(ex.Message)}");
                 }
 
-                XXTrace.WriteLine("[INFO] Channel配置系统资源自动清理完成");
+                WriteConfigLog("Cleanup", "配置系统资源自动清理完成");
             }
             catch (Exception ex)
             {
                 // 清理过程中的异常不应该抛出，静默处理
                 try
                 {
-                    XXTrace.WriteLine($"[ERROR] 自动清理过程中发生异常: {ex.Message}");
+                    WriteConfigLog("Cleanup", $"自动清理过程中发生异常 Error={TrimLogMessage(ex.Message)}");
                 }
                 catch
                 {
@@ -468,7 +468,7 @@ public static class ConfigManager
                             error = $"配置文件XML内容错误: {filePath}, 错误: {jsonEx.Message}";
                             if (!createDefaultOnError) return false;
 
-                            XXTrace.WriteLine(error);
+                            WriteConfigLog("Load", error);
                             config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
                             return true;
                         }
@@ -492,7 +492,7 @@ public static class ConfigManager
                     error = $"配置文件JSON格式错误: {filePath}, 错误: {jsonEx.Message}";
                     if (!createDefaultOnError) return false;
 
-                    XXTrace.WriteLine(error);
+                    WriteConfigLog("Load", error);
                     config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
                     return true;
                 }
@@ -509,7 +509,7 @@ public static class ConfigManager
                                 return false;
                             }
 
-                            XXTrace.WriteLine($"配置文件XML格式错误，尝试按旧JSON迁移: {filePath}, 错误: {xmlEx.Message}");
+                            WriteConfigLog("Migrate", $"配置文件XML格式错误，尝试按旧JSON迁移 Path={filePath} Error={TrimLogMessage(xmlEx.Message)}");
                             config = TryLoadLegacyJsonAndMigrate<TConfig>(configType, options, content);
                             return true;
                         }
@@ -517,7 +517,7 @@ public static class ConfigManager
                         error = $"配置文件XML格式错误: {filePath}, 错误: {xmlEx.Message}";
                         if (!createDefaultOnError) return false;
 
-                        XXTrace.WriteLine(error);
+                        WriteConfigLog("Load", error);
                         config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
                         return true;
                     }
@@ -656,7 +656,7 @@ public static class ConfigManager
 
         if (writeLog)
         {
-            XXTrace.WriteLine($"保存配置到文件：{filePath}");
+            WriteConfigLog("Save", $"保存配置文件 Path={filePath}");
         }
 
         // 更新缓存

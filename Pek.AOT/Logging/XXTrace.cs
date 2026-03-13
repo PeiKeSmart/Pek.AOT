@@ -67,7 +67,9 @@ public static class XXTrace
     public static void WriteScope(String scope, String stage, String message)
     {
         if (String.IsNullOrWhiteSpace(scope) || String.IsNullOrWhiteSpace(stage) || message == null) return;
-        Log.Info(FormatScope(scope, stage, message));
+        var log = Log;
+        if (!IsEnabled(log, LogLevel.Info)) return;
+        log.Info(FormatScope(scope, stage, message));
     }
 
     /// <summary>按统一前缀输出格式化日志</summary>
@@ -78,7 +80,23 @@ public static class XXTrace
     public static void WriteScope(String scope, String stage, String format, params Object?[] args)
     {
         if (String.IsNullOrWhiteSpace(scope) || String.IsNullOrWhiteSpace(stage) || format == null) return;
-        Log.Info(FormatScope(scope, stage, format), args);
+        var log = Log;
+        if (!IsEnabled(log, LogLevel.Info)) return;
+        log.Info(FormatScope(scope, stage, format), args);
+    }
+
+    /// <summary>按统一前缀输出格式化日志，并附加固定前缀</summary>
+    /// <param name="scope">模块范围，例如 Pek.Configuration</param>
+    /// <param name="stage">阶段或子模块，例如 Config</param>
+    /// <param name="prefix">正文固定前缀</param>
+    /// <param name="format">格式化模板</param>
+    /// <param name="args">格式化参数</param>
+    public static void WriteScope(String scope, String stage, String prefix, String format, params Object?[] args)
+    {
+        if (String.IsNullOrWhiteSpace(scope) || String.IsNullOrWhiteSpace(stage) || format == null) return;
+        var log = Log;
+        if (!IsEnabled(log, LogLevel.Info)) return;
+        log.Info(FormatScope(scope, stage, prefix, format), args);
     }
 
     /// <summary>格式化统一前缀日志文本</summary>
@@ -87,6 +105,14 @@ public static class XXTrace
     /// <param name="message">日志正文</param>
     /// <returns>格式化后的日志文本</returns>
     public static String FormatScope(String scope, String stage, String message) => $"[{scope}][{stage}] {message}";
+
+    /// <summary>格式化统一前缀日志文本，并附加固定前缀</summary>
+    /// <param name="scope">模块范围</param>
+    /// <param name="stage">阶段或子模块</param>
+    /// <param name="prefix">正文固定前缀</param>
+    /// <param name="message">日志正文</param>
+    /// <returns>格式化后的日志文本</returns>
+    public static String FormatScope(String scope, String stage, String prefix, String message) => $"[{scope}][{stage}] {prefix}{message}";
 
     /// <summary>输出异常</summary>
     /// <param name="exception">异常对象</param>
@@ -137,6 +163,8 @@ public static class XXTrace
             _log.Level = setting.LogLevel;
         }
     }
+
+    private static Boolean IsEnabled(ILog log, LogLevel level) => log.Enable && level >= log.Level;
 
     internal static Setting GetSetting() => TryGetSetting(out var setting) ? setting : new Setting();
 

@@ -4,6 +4,7 @@ using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text;
 
+using Pek.Collections;
 using Pek;
 using Pek.Threading;
 
@@ -13,16 +14,24 @@ namespace Pek.Logging;
 public class TextFileLog : Logger, IDisposable
 {
     private static readonly ConcurrentDictionary<String, TextFileLog> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly WaitCallback _writeCallback = state => ((TextFileLog)state!).WriteFileAsync();
+    private static readonly TimeSpan _fastRetryWindow = TimeSpan.FromMilliseconds(200);
 
     private readonly Boolean _isFile;
     private readonly ConcurrentQueue<String> _logs = new();
     private readonly TimerX _timer;
     private StreamWriter? _writer;
     private String? _currentLogFile;
+    private String? _pendingPayload;
+    private Int32 _pendingCount;
     private Int32 _logFileError;
+    private Int32 _retryCount;
     private Int32 _writing;
     private Int32 _logCount;
+    private DateTime _lastRetryFailure;
+    private DateTime _lastRetrySignal;
     private DateTime _nextClose;
+    private DateTime _nextRetry;
     private Boolean _isFirst = true;
 
     /// <summary>日志目录</summary>
@@ -95,10 +104,12 @@ public class TextFileLog : Logger, IDisposable
 
         _logs.Enqueue(item.GetAndReset());
         Interlocked.Increment(ref _logCount);
+        TryAccelerateRetry();
 
         if (Interlocked.CompareExchange(ref _writing, 1, 0) != 0) return;
 
-        if (XXTrace.GetSetting().LogLevel <= LogLevel.Debug || level >= LogLevel.Error)
+        var setting = XXTrace.GetSetting();
+        if (setting.LogLevel <= LogLevel.Debug || level >= LogLevel.Error)
         {
             try
             {
@@ -111,27 +122,30 @@ public class TextFileLog : Logger, IDisposable
         }
         else
         {
-            ThreadPool.UnsafeQueueUserWorkItem(_ =>
-            {
-                try
-                {
-                    WriteFile();
-                }
-                catch
-                {
-                }
-                finally
-                {
-                    _writing = 0;
-                }
-            }, null);
+            ThreadPool.UnsafeQueueUserWorkItem(_writeCallback, this);
+        }
+    }
+
+    private void WriteFileAsync()
+    {
+        try
+        {
+            WriteFile();
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _writing = 0;
         }
     }
 
     private void WriteFile()
     {
-        var now = TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours);
-        var logFile = GetLogFile();
+        var setting = XXTrace.GetSetting();
+        var now = TimerX.Now.AddHours(setting.UtcIntervalHours);
+        var logFile = GetLogFile(now);
         if (String.IsNullOrWhiteSpace(logFile)) return;
 
         if (!_isFile && !String.Equals(logFile, _currentLogFile, StringComparison.OrdinalIgnoreCase))
@@ -147,15 +161,38 @@ public class TextFileLog : Logger, IDisposable
         _writer ??= InitWriter(logFile);
         if (_writer == null) return;
 
-        while (_logs.TryDequeue(out var item))
+        var payload = GetWritePayload(out var batchCount);
+        if (String.IsNullOrEmpty(payload) || batchCount <= 0)
         {
-            Interlocked.Decrement(ref _logCount);
-            _writer.Write(item);
-            _writer.WriteLine();
+            _nextClose = now.AddSeconds(5);
+            return;
         }
+        try
+        {
+            _writer.Write(payload);
+            _writer.Flush();
 
-        _writer.Flush();
-        _nextClose = now.AddSeconds(5);
+            Interlocked.Add(ref _logCount, -batchCount);
+            _pendingPayload = null;
+            _pendingCount = 0;
+            _retryCount = 0;
+            _lastRetryFailure = DateTime.MinValue;
+            _lastRetrySignal = DateTime.MinValue;
+            _nextRetry = DateTime.MinValue;
+            _nextClose = now.AddSeconds(5);
+        }
+        catch
+        {
+            _pendingPayload = payload;
+            _pendingCount = batchCount;
+            _retryCount++;
+            _lastRetryFailure = TimerX.Now;
+            _nextRetry = _lastRetryFailure.AddMilliseconds(GetRetryDelay(_retryCount));
+
+            _writer?.Dispose();
+            _writer = null;
+            throw;
+        }
     }
 
     private void DoWriteAndClose(Object? state)
@@ -168,8 +205,9 @@ public class TextFileLog : Logger, IDisposable
     {
         try
         {
-            if (!_logs.IsEmpty) WriteFile();
-            if (_writer != null && closeTime < TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours))
+            var setting = XXTrace.GetSetting();
+            if (_pendingPayload != null || !_logs.IsEmpty) WriteFile();
+            if (_writer != null && closeTime < TimerX.Now.AddHours(setting.UtcIntervalHours))
             {
                 _writer.Dispose();
                 _writer = null;
@@ -208,12 +246,12 @@ public class TextFileLog : Logger, IDisposable
         }
     }
 
-    private String? GetLogFile()
+    private String? GetLogFile(DateTime now)
     {
         if (_isFile) return GetBasePath(LogPath);
 
         var basePath = GetBasePath(LogPath);
-        var candidate = Path.Combine(basePath, String.Format(FileFormat, TimerX.Now.AddHours(XXTrace.GetSetting().UtcIntervalHours), Level));
+        var candidate = Path.Combine(basePath, String.Format(FileFormat, now, Level));
         if (MaxBytes == 0) return candidate;
 
         var maxBytes = MaxBytes * 1024L * 1024L;
@@ -227,6 +265,58 @@ public class TextFileLog : Logger, IDisposable
         }
 
         return null;
+    }
+
+    private String? GetWritePayload(out Int32 count)
+    {
+        if (_pendingPayload != null)
+        {
+            count = _pendingCount;
+            if (_nextRetry > TimerX.Now) return null;
+            return _pendingPayload;
+        }
+
+        var builder = Pool.StringBuilder.Get();
+        count = 0;
+        try
+        {
+            while (_logs.TryDequeue(out var item))
+            {
+                count++;
+                builder.Append(item);
+                builder.AppendLine();
+            }
+
+            return count > 0 ? builder.ToString() : null;
+        }
+        finally
+        {
+            Pool.StringBuilder.Return(builder);
+        }
+    }
+
+    private static Double GetRetryDelay(Int32 retryCount)
+    {
+        if (retryCount <= 1) return 200;
+        if (retryCount == 2) return 500;
+        if (retryCount == 3) return 1000;
+        if (retryCount == 4) return 2000;
+
+        return 5000;
+    }
+
+    private void TryAccelerateRetry()
+    {
+        if (_pendingPayload == null || _nextRetry <= DateTime.MinValue) return;
+
+        var now = TimerX.Now;
+        if (_nextRetry <= now) return;
+        if (_lastRetryFailure == DateTime.MinValue) return;
+        if (now - _lastRetryFailure < _fastRetryWindow) return;
+        if (_lastRetrySignal != DateTime.MinValue && now - _lastRetrySignal < _fastRetryWindow) return;
+
+        _lastRetrySignal = now;
+        _nextRetry = now;
     }
 
     private void CleanupBackups()
@@ -323,52 +413,59 @@ public class TextFileLog : Logger, IDisposable
             ? $"{machine.OSName} {machine.OSVersion}".Trim()
             : Environment.OSVersion.ToString();
 
-        var builder = new StringBuilder();
-        builder.AppendFormat("#Software: {0}\r\n", name);
-        builder.AppendFormat("#ProcessID: {0}{1}\r\n", process.Id, Environment.Is64BitProcess ? " x64" : String.Empty);
-        builder.AppendFormat("#AppDomain: {0}\r\n", AppDomain.CurrentDomain.FriendlyName);
-        if (!String.IsNullOrWhiteSpace(fileName)) builder.AppendFormat("#FileName: {0}\r\n", fileName);
-        builder.AppendFormat("#BaseDirectory: {0}\r\n", baseDirectory);
-        if (!String.Equals(baseDirectory.TrimEnd('\\', '/'), currentDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
-            builder.AppendFormat("#CurrentDirectory: {0}\r\n", currentDirectory);
+        var builder = Pool.StringBuilder.Get();
+        try
+        {
+            builder.AppendFormat("#Software: {0}\r\n", name);
+            builder.AppendFormat("#ProcessID: {0}{1}\r\n", process.Id, Environment.Is64BitProcess ? " x64" : String.Empty);
+            builder.AppendFormat("#AppDomain: {0}\r\n", AppDomain.CurrentDomain.FriendlyName);
+            if (!String.IsNullOrWhiteSpace(fileName)) builder.AppendFormat("#FileName: {0}\r\n", fileName);
+            builder.AppendFormat("#BaseDirectory: {0}\r\n", baseDirectory);
+            if (!String.Equals(baseDirectory.TrimEnd('\\', '/'), currentDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                builder.AppendFormat("#CurrentDirectory: {0}\r\n", currentDirectory);
 
-        var basePath = PathHelper.BasePath;
-        if (!String.IsNullOrWhiteSpace(basePath) && !String.Equals(basePath.TrimEnd('\\', '/'), baseDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
-            builder.AppendFormat("#BasePath: {0}\r\n", basePath);
+            var basePath = PathHelper.BasePath;
+            if (!String.IsNullOrWhiteSpace(basePath) && !String.Equals(basePath.TrimEnd('\\', '/'), baseDirectory.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                builder.AppendFormat("#BasePath: {0}\r\n", basePath);
 
-        builder.AppendFormat("#TempPath: {0}\r\n", Path.GetTempPath());
-        if (!String.IsNullOrWhiteSpace(Environment.CommandLine)) builder.AppendFormat("#CommandLine: {0}\r\n", Environment.CommandLine);
+            builder.AppendFormat("#TempPath: {0}\r\n", Path.GetTempPath());
+            if (!String.IsNullOrWhiteSpace(Environment.CommandLine)) builder.AppendFormat("#CommandLine: {0}\r\n", Environment.CommandLine);
 
-        var applicationType = Runtime.IsWeb
-            ? "Web"
-            : !Environment.UserInteractive
-                ? "Service"
-                : Runtime.IsConsole
-                    ? "Console"
-                    : "WinForm";
-        if (Runtime.Container) applicationType += "(Container)";
+            var applicationType = Runtime.IsWeb
+                ? "Web"
+                : !Environment.UserInteractive
+                    ? "Service"
+                    : Runtime.IsConsole
+                        ? "Console"
+                        : "WinForm";
+            if (Runtime.Container) applicationType += "(Container)";
 
-        builder.AppendFormat("#ApplicationType: {0}\r\n", applicationType);
-        builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, target);
-        builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", os, Environment.MachineName, Environment.UserName);
-        builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
-        if (machine.Memory > 0)
-            builder.AppendFormat("#Memory: {0:n0}M/{1:n0}M\r\n", machine.AvailableMemory / 1024 / 1024, machine.Memory / 1024 / 1024);
-        if (!String.IsNullOrWhiteSpace(machine.Processor)) builder.AppendFormat("#Processor: {0}\r\n", machine.Processor);
-        if (!String.IsNullOrWhiteSpace(machine.Product)) builder.AppendFormat("#Product: {0} / {1}\r\n", machine.Product, machine.Vendor);
-        if (machine.Temperature > 0) builder.AppendFormat("#Temperature: {0}\r\n", machine.Temperature);
-        builder.AppendFormat("#GC: IsServerGC={0}, LatencyMode={1}\r\n", GCSettings.IsServerGC, GCSettings.LatencyMode);
+            builder.AppendFormat("#ApplicationType: {0}\r\n", applicationType);
+            builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, target);
+            builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", os, Environment.MachineName, Environment.UserName);
+            builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
+            if (machine.Memory > 0)
+                builder.AppendFormat("#Memory: {0:n0}M/{1:n0}M\r\n", machine.AvailableMemory / 1024 / 1024, machine.Memory / 1024 / 1024);
+            if (!String.IsNullOrWhiteSpace(machine.Processor)) builder.AppendFormat("#Processor: {0}\r\n", machine.Processor);
+            if (!String.IsNullOrWhiteSpace(machine.Product)) builder.AppendFormat("#Product: {0} / {1}\r\n", machine.Product, machine.Vendor);
+            if (machine.Temperature > 0) builder.AppendFormat("#Temperature: {0}\r\n", machine.Temperature);
+            builder.AppendFormat("#GC: IsServerGC={0}, LatencyMode={1}\r\n", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
-        ThreadPool.GetMinThreads(out var minWorker, out var minIo);
-        ThreadPool.GetMaxThreads(out var maxWorker, out var maxIo);
-        ThreadPool.GetAvailableThreads(out var availableWorker, out var availableIo);
-        builder.AppendFormat("#ThreadPool: Min={0}/{1}, Max={2}/{3}, Available={4}/{5}\r\n", minWorker, minIo, maxWorker, maxIo, availableWorker, availableIo);
-        builder.AppendFormat("#SystemStarted: {0}\r\n", FormatSystemStarted(Runtime.TickCount64));
-        builder.AppendFormat("#Date: {0:yyyy-MM-dd}\r\n", DateTime.Now.AddHours(setting.UtcIntervalHours));
-        builder.AppendFormat("#详解：{0}\r\n", "https://newlifex.com/core/log");
-        builder.AppendFormat("#字段: {0}\r\n", "时间 线程ID 线程池Y/网页W/普通N 线程名/任务ID/定时T/线程池P/长任务L 消息内容");
-        builder.AppendFormat("#Fields: {0}\r\n", setting.LogLineFormat.Replace('|', ' '));
-        return builder.ToString();
+            ThreadPool.GetMinThreads(out var minWorker, out var minIo);
+            ThreadPool.GetMaxThreads(out var maxWorker, out var maxIo);
+            ThreadPool.GetAvailableThreads(out var availableWorker, out var availableIo);
+            builder.AppendFormat("#ThreadPool: Min={0}/{1}, Max={2}/{3}, Available={4}/{5}\r\n", minWorker, minIo, maxWorker, maxIo, availableWorker, availableIo);
+            builder.AppendFormat("#SystemStarted: {0}\r\n", FormatSystemStarted(Runtime.TickCount64));
+            builder.AppendFormat("#Date: {0:yyyy-MM-dd}\r\n", DateTime.Now.AddHours(setting.UtcIntervalHours));
+            builder.AppendFormat("#详解：{0}\r\n", "https://newlifex.com/core/log");
+            builder.AppendFormat("#字段: {0}\r\n", "时间 线程ID 线程池Y/网页W/普通N 线程名/任务ID/定时T/线程池P/长任务L 消息内容");
+            builder.AppendFormat("#Fields: {0}\r\n", setting.LogLineFormat.Replace('|', ' '));
+            return builder.ToString();
+        }
+        finally
+        {
+            Pool.StringBuilder.Return(builder);
+        }
     }
 
     private static String FormatSystemStarted(Int64 tickCount)

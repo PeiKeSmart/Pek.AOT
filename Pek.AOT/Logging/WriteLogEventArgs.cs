@@ -1,3 +1,4 @@
+using Pek.Collections;
 using Pek;
 using Pek.Threading;
 
@@ -103,33 +104,41 @@ public class WriteLogEventArgs : EventArgs
         var message = Exception == null ? Message : (Message ?? String.Empty) + Exception;
         var name = ResolveName();
         var fields = GetFields();
-        var parts = new List<String>(fields.Length);
+        var builder = Pool.StringBuilder.Get();
+
+        try
+        {
         foreach (var field in fields)
         {
             switch (field)
             {
                 case "Time":
-                    parts.Add(Time.ToString("HH:mm:ss.fff"));
+                    AppendPart(builder, Time.ToString("HH:mm:ss.fff"));
                     break;
                 case "ThreadId":
-                    parts.Add(ThreadId.ToString("00"));
+                    AppendPart(builder, ThreadId.ToString("00"));
                     break;
                 case "Kind":
-                    parts.Add(IsPool ? (IsWeb ? "W" : "Y") : "N");
+                    AppendPart(builder, IsPool ? (IsWeb ? "W" : "Y") : "N");
                     break;
                 case "Name":
-                    parts.Add(name);
+                    AppendPart(builder, name);
                     break;
                 case "Level":
-                    parts.Add($"[{Level}]");
+                    AppendPart(builder, $"[{Level}]");
                     break;
                 case "Message":
-                    parts.Add(message ?? String.Empty);
+                    AppendPart(builder, message);
                     break;
             }
         }
 
-        return String.Join(' ', parts.Where(e => !String.IsNullOrEmpty(e)));
+            return builder.ToString();
+        }
+        finally
+        {
+            Pool.StringBuilder.Return(builder);
+        }
     }
 
     private void Init()
@@ -172,5 +181,13 @@ public class WriteLogEventArgs : EventArgs
         }
 
         return _cachedLines ?? ["Time", "ThreadId", "Kind", "Name", "Message"];
+    }
+
+    private static void AppendPart(System.Text.StringBuilder builder, String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return;
+
+        if (builder.Length > 0) builder.Append(' ');
+        builder.Append(value);
     }
 }

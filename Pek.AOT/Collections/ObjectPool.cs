@@ -9,6 +9,8 @@ namespace Pek.Collections;
 /// <typeparam name="T">池化类型</typeparam>
 public class ObjectPool<T> : DisposeBase, IPool<T> where T : notnull
 {
+    private const String LogScope = "Pek.Collections";
+
     private readonly ConcurrentStack<Item> _free = new();
     private readonly ConcurrentQueue<Item> _free2 = new();
     private readonly ConcurrentDictionary<T, Item> _busy = new();
@@ -230,8 +232,8 @@ public class ObjectPool<T> : DisposeBase, IPool<T> where T : notnull
     /// <param name="args">格式化参数</param>
     public void WriteLog(String format, params Object?[] args)
     {
-        if (Log == null || !Log.Enable) return;
-        Log.Info(Name + "." + format, args);
+        if (Log == null || !Log.Enable || LogLevel.Info < Log.Level) return;
+        Log.Info(XXTrace.FormatScope(LogScope, "ObjectPool", Name + ".", format), args);
     }
 
     private void Init()

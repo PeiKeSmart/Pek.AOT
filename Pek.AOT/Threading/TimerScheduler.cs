@@ -5,6 +5,8 @@ namespace Pek.Threading;
 /// <summary>定时器调度器</summary>
 public class TimerScheduler : IDisposable
 {
+    private const String LogScope = "Pek.Threading";
+
     private static readonly Dictionary<String, TimerScheduler> _cache = [];
 
     [ThreadStatic]
@@ -224,7 +226,7 @@ public class TimerScheduler : IDisposable
     {
         if (timer.Period is < 10 and > 0)
         {
-            XXTrace.WriteLine("为了避免占用过多CPU资源，TimerX禁止小于{1}ms<10ms的任务调度，关闭任务{0}", timer, timer.Period);
+            XXTrace.WriteScope(LogScope, "TimerScheduler", "关闭过小周期任务 Timer={0} Period={1}ms", timer, timer.Period);
             timer.Dispose();
             return false;
         }
@@ -286,7 +288,8 @@ public class TimerScheduler : IDisposable
     private void OnExecuted(TimerX timer, Int32 cost)
     {
         timer.Cost = timer.Cost == 0 ? cost : (timer.Cost + cost) / 2;
-        if (cost > MaxCost && !timer.Async && !timer.IsAsyncTask) XXTrace.WriteLine("任务 {0} 耗时过长 {1:n0}ms，建议使用异步任务Async=true", timer, cost);
+        if (cost > MaxCost && !timer.Async && !timer.IsAsyncTask)
+            XXTrace.WriteScope(LogScope, "TimerScheduler", "任务执行耗时过长 Timer={0} Cost={1:n0}ms Suggest=Async", timer, cost);
 
         timer.Timers++;
         OnFinish(timer);
@@ -310,5 +313,9 @@ public class TimerScheduler : IDisposable
         }
     }
 
-    private void WriteLog(String format, params Object?[] args) => Log?.Info(Name + format, args);
+    private void WriteLog(String format, params Object?[] args)
+    {
+        if (Log == null || !Log.Enable || LogLevel.Info < Log.Level) return;
+        Log.Info(XXTrace.FormatScope(LogScope, "TimerScheduler", Name + " ", format), args);
+    }
 }
