@@ -1,11 +1,30 @@
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
+
+using Pek.Data;
+using Pek.Serialization;
 
 namespace Pek;
 
+/// <summary>机器信息接口</summary>
+public interface IMachineInfo
+{
+    /// <summary>初始化静态数据</summary>
+    /// <param name="info">机器信息实例</param>
+    void Init(MachineInfo info);
+
+    /// <summary>刷新动态数据</summary>
+    /// <param name="info">机器信息实例</param>
+    void Refresh(MachineInfo info);
+}
+
 /// <summary>机器信息</summary>
-public class MachineInfo
+public class MachineInfo : IExtend
 {
     private static readonly Lazy<MachineInfo> _current = new(CreateCurrent);
+    private readonly Dictionary<String, Object?> _items = [];
+
+    static MachineInfo() => JsonHelper.Register(MachineInfoJsonContext.Default.MachineInfo);
 
     /// <summary>系统名称</summary>
     public String OSName { get; set; } = String.Empty;
@@ -34,6 +53,21 @@ public class MachineInfo
     /// <summary>当前机器信息</summary>
     public static MachineInfo Current => _current.Value;
 
+    /// <summary>机器信息提供者</summary>
+    public static IMachineInfo? Provider { get; set; }
+
+    /// <summary>扩展数据项字典</summary>
+    public IDictionary<String, Object?> Items => _items;
+
+    /// <summary>获取或设置扩展数据项</summary>
+    /// <param name="key">扩展数据键</param>
+    /// <returns>扩展值</returns>
+    public Object? this[String key]
+    {
+        get => _items.TryGetValue(key, out var value) ? value : null;
+        set => _items[key] = value;
+    }
+
     /// <summary>异步注册机器信息</summary>
     /// <returns>机器信息</returns>
     public static Task<MachineInfo> RegisterAsync() => Task.FromResult(Current);
@@ -53,7 +87,7 @@ public class MachineInfo
 
         TryGetMemory(out total, out available);
 
-        return new MachineInfo
+        var info = new MachineInfo
         {
             OSName = RuntimeInformation.OSDescription,
             OSVersion = Environment.OSVersion.VersionString,
@@ -63,6 +97,11 @@ public class MachineInfo
             Product = Environment.MachineName,
             Vendor = Environment.UserDomainName,
         };
+
+        Provider?.Init(info);
+        Provider?.Refresh(info);
+
+        return info;
     }
 
     private static void TryGetMemory(out UInt64 total, out UInt64 available)
@@ -151,4 +190,10 @@ public class MachineInfo
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern Boolean GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
+}
+
+/// <summary>MachineInfo 的 AOT 序列化上下文</summary>
+[JsonSerializable(typeof(MachineInfo))]
+public partial class MachineInfoJsonContext : JsonSerializerContext
+{
 }
