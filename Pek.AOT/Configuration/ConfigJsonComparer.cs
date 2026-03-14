@@ -205,7 +205,7 @@ internal static class ConfigJsonComparer
         var allPropertyNames = oldProperties.Keys.Union(newProperties.Keys);
         foreach (var propName in allPropertyNames)
         {
-            var propertyPath = string.IsNullOrEmpty(basePath) ? propName : $"{basePath}.{propName}";
+            var propertyPath = String.IsNullOrEmpty(basePath) ? propName : $"{basePath}.{propName}";
 
             if (!oldProperties.TryGetValue(propName, out var oldProp))
             {

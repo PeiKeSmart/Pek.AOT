@@ -49,7 +49,7 @@ public abstract class Config
         object? oldConfig = null;
         try
         {
-            if (!string.IsNullOrEmpty(_configSnapshot))
+            if (!String.IsNullOrEmpty(_configSnapshot))
             {
                 var configType = GetType();
                 if (ConfigManager.TryGetSerializerOptions(configType, out var options))
@@ -182,7 +182,7 @@ public abstract class Config
         {
             changes.Add(new ConfigPropertyChange
             {
-                PropertyName = string.IsNullOrEmpty(path) ? "Root" : path,
+                PropertyName = String.IsNullOrEmpty(path) ? "Root" : path,
                 OldValue = GetJsonElementValue(oldElement),
                 NewValue = GetJsonElementValue(newElement)
             });
@@ -202,7 +202,7 @@ public abstract class Config
                 {
                     changes.Add(new ConfigPropertyChange
                     {
-                        PropertyName = string.IsNullOrEmpty(path) ? "Root" : path,
+                        PropertyName = String.IsNullOrEmpty(path) ? "Root" : path,
                         OldValue = GetJsonElementValue(oldElement),
                         NewValue = GetJsonElementValue(newElement)
                     });
@@ -225,7 +225,7 @@ public abstract class Config
         {
             if (changes.Count >= 10) break;
             
-            var propPath = string.IsNullOrEmpty(basePath) ? newProp.Key : $"{basePath}.{newProp.Key}";
+            var propPath = String.IsNullOrEmpty(basePath) ? newProp.Key : $"{basePath}.{newProp.Key}";
             
             if (oldProps.TryGetValue(newProp.Key, out var oldValue))
             {
@@ -250,7 +250,7 @@ public abstract class Config
             
             if (!newProps.ContainsKey(oldProp.Key))
             {
-                var propPath = string.IsNullOrEmpty(basePath) ? oldProp.Key : $"{basePath}.{oldProp.Key}";
+                var propPath = String.IsNullOrEmpty(basePath) ? oldProp.Key : $"{basePath}.{oldProp.Key}";
                 changes.Add(new ConfigPropertyChange
                 {
                     PropertyName = propPath,

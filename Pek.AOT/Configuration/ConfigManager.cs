@@ -443,7 +443,7 @@ public static class ConfigManager
             {
                 var content = File.ReadAllText(filePath);
                 
-                if (string.IsNullOrWhiteSpace(content))
+                if (String.IsNullOrWhiteSpace(content))
                 {
                     config = CreateAndPersistDefaultConfig<TConfig>(configType, options);
                     return true;

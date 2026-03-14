@@ -395,7 +395,7 @@ public class SerialTransport : DisposeBase, ITransport
             var count = serial.Read(buffer, 0, buffer.Length);
             if (count <= 0) return;
 
-            ProcessReceive(new Packet(buffer, 0, count));
+            ProcessReceive(new ArrayPacket(buffer, 0, count));
         }
         catch (Exception ex)
         {
@@ -418,7 +418,7 @@ public class SerialTransport : DisposeBase, ITransport
         }
     }
 
-    private void ProcessReceive(Packet packet)
+    private void ProcessReceive(IPacket packet)
     {
         try
         {
@@ -433,7 +433,7 @@ public class SerialTransport : DisposeBase, ITransport
         }
     }
 
-    private void OnReceive(Packet packet)
+    private void OnReceive(IPacket packet)
     {
         if (_source != null)
         {
