@@ -11,6 +11,37 @@ public static class Utility
     /// <summary>类型转换提供者</summary>
     public static DefaultConvert Convert { get; set; } = new();
 
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <returns>完整字符串</returns>
+    public static String ToFullString(this DateTime value) => Convert.ToFullString(value, false);
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串，支持指定最小时间的字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public static String ToFullString(this DateTime value, String? emptyValue = null) => Convert.ToFullString(value, false, emptyValue);
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss.fff完整字符串，支持指定最小时间的字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="useMillisecond">是否使用毫秒</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public static String ToFullString(this DateTime value, Boolean useMillisecond, String? emptyValue = null) => Convert.ToFullString(value, useMillisecond, emptyValue);
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss +08:00完整字符串，支持指定最小时间的字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public static String ToFullString(this DateTimeOffset value, String? emptyValue = null) => Convert.ToFullString(value, false, emptyValue);
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss.fff +08:00完整字符串，支持指定最小时间的字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="useMillisecond">是否使用毫秒</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public static String ToFullString(this DateTimeOffset value, Boolean useMillisecond, String? emptyValue = null) => Convert.ToFullString(value, useMillisecond, emptyValue);
+
     /// <summary>转为整数，转换失败时返回默认值</summary>
     public static Int32 ToInt(this Object? value, Int32 defaultValue = 0) => Convert.ToInt(value, defaultValue);
 
@@ -196,5 +227,133 @@ public class DefaultConvert
                 return defaultValue;
             }
         }
+    }
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="useMillisecond">是否使用毫秒</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public virtual String ToFullString(DateTime value, Boolean useMillisecond, String? emptyValue = null)
+    {
+        if (emptyValue != null && value <= DateTime.MinValue) return emptyValue;
+
+        var chars = useMillisecond ? "yyyy-MM-dd HH:mm:ss.fff".ToCharArray() : "yyyy-MM-dd HH:mm:ss".ToCharArray();
+
+        var index = 0;
+        var year = value.Year;
+        chars[index++] = (Char)('0' + (year / 1000));
+        year %= 1000;
+        chars[index++] = (Char)('0' + (year / 100));
+        year %= 100;
+        chars[index++] = (Char)('0' + (year / 10));
+        year %= 10;
+        chars[index++] = (Char)('0' + year);
+        index++;
+
+        var number = value.Month;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Day;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Hour;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Minute;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Second;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+
+        if (useMillisecond)
+        {
+            index++;
+            number = value.Millisecond;
+            chars[index++] = (Char)('0' + (number / 100));
+            chars[index++] = (Char)('0' + (number % 100 / 10));
+            chars[index++] = (Char)('0' + (number % 10));
+        }
+
+        return new String(chars);
+    }
+
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss +08:00完整字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="useMillisecond">是否使用毫秒</param>
+    /// <param name="emptyValue">空值显示字符串</param>
+    /// <returns>完整字符串</returns>
+    public virtual String ToFullString(DateTimeOffset value, Boolean useMillisecond, String? emptyValue = null)
+    {
+        if (emptyValue != null && value <= DateTimeOffset.MinValue) return emptyValue;
+
+        var chars = useMillisecond ? "yyyy-MM-dd HH:mm:ss.fff +08:00".ToCharArray() : "yyyy-MM-dd HH:mm:ss +08:00".ToCharArray();
+
+        var index = 0;
+        var year = value.Year;
+        chars[index++] = (Char)('0' + (year / 1000));
+        year %= 1000;
+        chars[index++] = (Char)('0' + (year / 100));
+        year %= 100;
+        chars[index++] = (Char)('0' + (year / 10));
+        year %= 10;
+        chars[index++] = (Char)('0' + year);
+        index++;
+
+        var number = value.Month;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Day;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Hour;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Minute;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        index++;
+
+        number = value.Second;
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+
+        if (useMillisecond)
+        {
+            index++;
+            number = value.Millisecond;
+            chars[index++] = (Char)('0' + (number / 100));
+            chars[index++] = (Char)('0' + (number % 100 / 10));
+            chars[index++] = (Char)('0' + (number % 10));
+        }
+
+        index += useMillisecond ? 1 : 0;
+        var offset = value.Offset;
+        chars[index++] = ' ';
+        chars[index++] = offset >= TimeSpan.Zero ? '+' : '-';
+        number = Math.Abs(offset.Hours);
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+        chars[index++] = ':';
+        number = Math.Abs(offset.Minutes);
+        chars[index++] = (Char)('0' + (number / 10));
+        chars[index++] = (Char)('0' + (number % 10));
+
+        return new String(chars);
     }
 }

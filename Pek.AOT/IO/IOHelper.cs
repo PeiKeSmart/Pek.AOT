@@ -46,6 +46,25 @@ public static class IOHelper
         return totalRead;
     }
 
+    /// <summary>从流中精确读取指定字节数到缓冲区</summary>
+    /// <param name="stream">源流</param>
+    /// <param name="buffer">目标缓冲区</param>
+    /// <param name="offset">目标偏移</param>
+    /// <param name="count">期望读取字节数</param>
+    /// <returns>实际读取字节数</returns>
+    public static Int32 ReadExactly(this Stream stream, Byte[] buffer, Int32 offset, Int32 count) => ReadAtLeast(stream, buffer, offset, count, count, true);
+
+    /// <summary>从流中精确读取指定数量字节</summary>
+    /// <param name="stream">源流</param>
+    /// <param name="count">期望读取字节数</param>
+    /// <returns>字节数组</returns>
+    public static Byte[] ReadExactly(this Stream stream, Int64 count)
+    {
+        var buffer = new Byte[count];
+        ReadAtLeast(stream, buffer, 0, buffer.Length, (Int32)count, true);
+        return buffer;
+    }
+
     /// <summary>字节数组转换为字符串</summary>
     public static String ToStr(this Byte[] buf, Encoding? encoding = null, Int32 offset = 0, Int32 count = -1)
     {
