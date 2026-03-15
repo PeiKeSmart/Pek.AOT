@@ -14,6 +14,8 @@ namespace Pek.Extension;
 /// </remarks>
 public static class ProcessHelper
 {
+    private const String LogScope = "Pek.Extension";
+
     #region 进程查找
     /// <summary>获取二级进程名。默认返回一层，如果是 dotnet/java 宿主，则返回其真正目标程序集/入口Jar 名称（不含扩展名）</summary>
     /// <param name="process">进程实例</param>
@@ -387,7 +389,7 @@ public static class ProcessHelper
     /// <returns>退出代码；未等待或超时返回 -1</returns>
     public static Int32 RunNew(this String cmd, String? arguments = null, Int32 msWait = 0, Action<String?>? output = null, Encoding? encoding = null, Action<Process>? onExit = null, String? working = null)
     {
-        if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Run {0} {1} {2}", cmd, arguments, msWait);
+        if (XTrace.Log.Level <= LogLevel.Debug) XXTrace.WriteScope(LogScope, nameof(ProcessHelper), "Run Cmd={0} Args={1} Wait={2}", cmd, arguments, msWait);
 
         // 修正文件路径（保持原逻辑，不主动拼接 working，避免破坏既有行为）
         var fileName = cmd;
@@ -418,8 +420,14 @@ public static class ProcessHelper
             }
             else
             {
-                p.OutputDataReceived += (s, e) => { if (e.Data != null) XTrace.WriteLine(e.Data); };
-                p.ErrorDataReceived += (s, e) => { if (e.Data != null) XTrace.Log.Error(e.Data); };
+                p.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) XXTrace.WriteScope(LogScope, nameof(ProcessHelper), "StdOut {0}", e.Data);
+                };
+                p.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) XTrace.Log.Error(XXTrace.FormatScope(LogScope, nameof(ProcessHelper), "StdErr {0}"), e.Data);
+                };
             }
         }
         if (onExit != null)
@@ -461,7 +469,7 @@ public static class ProcessHelper
     /// <returns>启动的进程对象</returns>
     public static Process ShellExecute(this String fileName, String? arguments = null, String? workingDirectory = null)
     {
-        if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("ShellExecute {0} {1} {2}", fileName, arguments, workingDirectory);
+        if (XTrace.Log.Level <= LogLevel.Debug) XXTrace.WriteScope(LogScope, nameof(ProcessHelper), "ShellExecute File={0} Args={1} Working={2}", fileName, arguments, workingDirectory);
 
         //// 修正文件路径
         //if (!Path.IsPathRooted(fileName) && !workingDirectory.IsNullOrEmpty()) fileName = workingDirectory.CombinePath(fileName);
@@ -497,7 +505,7 @@ public static class ProcessHelper
     {
         try
         {
-            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Execute {0} {1}", cmd, arguments);
+            if (XTrace.Log.Level <= LogLevel.Debug) XXTrace.WriteScope(LogScope, nameof(ProcessHelper), "Execute Cmd={0} Args={1}", cmd, arguments);
 
             var psi = new ProcessStartInfo(cmd, arguments ?? String.Empty)
             {
@@ -529,7 +537,7 @@ public static class ProcessHelper
         }
         catch (Exception ex)
         {
-            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.Log.Error(ex.Message);
+            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.Log.Error(XXTrace.FormatScope(LogScope, nameof(ProcessHelper), "ExecuteFailed {0}"), ex.Message);
             return null;
         }
     }

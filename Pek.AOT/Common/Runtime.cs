@@ -7,13 +7,19 @@ using Pek.Threading;
 
 namespace Pek;
 
-/// <summary>运行时辅助</summary>
+/// <summary>运行时</summary>
+/// <remarks>
+/// 文档 https://newlifex.com/core/runtime
+/// </remarks>
 public static class Runtime
 {
-    private static Boolean? _isConsole;
-    private static Boolean? _isWeb;
-    private static String _clientId = String.Empty;
-    private static Int32 _processId;
+    private const String LogScope = "Pek.Common";
+
+    #region 静态构造
+    private static Boolean? _IsConsole;
+    private static Boolean? _IsWeb;
+    private static String _ClientId = String.Empty;
+    private static Int32 _ProcessId;
     private static Boolean? _createConfigOnMissing;
 
     static Runtime()
@@ -33,32 +39,42 @@ public static class Runtime
         if (!Unity)
             Unity = !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_VERSION")) || !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_PLAYER"));
     }
+    #endregion
 
-    /// <summary>是否控制台环境</summary>
+    #region 控制台
+    /// <summary>是否控制台。用于判断是否可以执行一些控制台操作。</summary>
+    /// <remarks>
+    /// 通过访问 <see cref="Console.ForegroundColor"/> 触发控制台可用性检查；
+    /// 若当前进程存在主窗口句柄（Windows GUI 应用），则视为非控制台；否则视为控制台。
+    /// 任何异常（如无控制台缓冲区）将被视为非控制台环境。
+    /// </remarks>
     public static Boolean IsConsole
     {
         get
         {
-            if (_isConsole != null) return _isConsole.Value;
+            if (_IsConsole != null) return _IsConsole.Value;
 
-            _isConsole = true;
+            _IsConsole = true;
 
             try
             {
-                _ = Console.ForegroundColor;
-                _isConsole = Process.GetCurrentProcess().MainWindowHandle == IntPtr.Zero;
+                _ = Console.ForegroundColor; // 触发控制台可用性检查
+                if (Process.GetCurrentProcess().MainWindowHandle != IntPtr.Zero)
+                    _IsConsole = false;
+                else
+                    _IsConsole = true;
             }
             catch
             {
-                _isConsole = false;
+                _IsConsole = false;
             }
 
-            return _isConsole.Value;
+            return _IsConsole.Value;
         }
-        set => _isConsole = value;
+        set => _IsConsole = value;
     }
 
-    /// <summary>是否容器环境</summary>
+    /// <summary>是否在容器中运行</summary>
     public static Boolean Container
     {
         get
@@ -67,43 +83,47 @@ public static class Runtime
             return String.Equals(value, "true", StringComparison.OrdinalIgnoreCase) || value == "1";
         }
     }
+    #endregion
 
-    /// <summary>是否 Mono 环境</summary>
+    #region 系统特性
+    /// <summary>是否Mono环境</summary>
     public static Boolean Mono { get; }
 
-    /// <summary>是否 Unity 环境</summary>
+    /// <summary>是否Unity环境</summary>
     public static Boolean Unity { get; }
 
-    /// <summary>是否 Web 环境</summary>
+    /// <summary>是否Web环境</summary>
     public static Boolean IsWeb
     {
         get
         {
-            if (_isWeb != null) return _isWeb.Value;
+            if (_IsWeb != null) return _IsWeb.Value;
 
             try
             {
                 var asm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(e => e.GetName().Name == "Microsoft.AspNetCore");
-                _isWeb = asm != null;
+                _IsWeb = asm != null;
             }
             catch
             {
-                _isWeb = false;
+                _IsWeb = false;
             }
 
-            return _isWeb.Value;
+            return _IsWeb.Value;
         }
     }
 
-    /// <summary>是否 Windows</summary>
+    /// <summary>是否Windows环境</summary>
     public static Boolean Windows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    /// <summary>是否 Linux</summary>
+    /// <summary>是否Linux环境</summary>
     public static Boolean Linux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
-    /// <summary>是否 macOS</summary>
+    /// <summary>是否OSX环境</summary>
     public static Boolean OSX => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+    #endregion
 
+    #region 扩展
     /// <summary>系统启动以来的毫秒数</summary>
 #if NETCOREAPP3_1_OR_GREATER
     public static Int64 TickCount64 => Environment.TickCount64;
@@ -136,26 +156,26 @@ public static class Runtime
     public static DateTimeOffset UtcNow => TimerScheduler.GlobalTimeProvider.GetUtcNow();
 
     /// <summary>当前进程标识</summary>
-    public static Int32 ProcessId => _processId > 0 ? _processId : _processId = Environment.ProcessId;
+    public static Int32 ProcessId => _ProcessId > 0 ? _ProcessId : _ProcessId = Environment.ProcessId;
 
     /// <summary>客户端标识</summary>
     public static String ClientId
     {
         get
         {
-            if (!String.IsNullOrWhiteSpace(_clientId)) return _clientId;
+            if (!String.IsNullOrWhiteSpace(_ClientId)) return _ClientId;
 
             try
             {
                 var host = Environment.MachineName;
-                _clientId = $"{host}@{ProcessId}";
+                _ClientId = $"{host}@{ProcessId}";
             }
             catch
             {
-                _clientId = ProcessId.ToString();
+                _ClientId = ProcessId.ToString();
             }
 
-            return _clientId;
+            return _ClientId;
         }
     }
 
@@ -189,7 +209,9 @@ public static class Runtime
 
         return dic;
     }
+    #endregion
 
+    #region 设置
     /// <summary>默认配置。配置文件不存在时，是否生成默认配置文件</summary>
     public static Boolean CreateConfigOnMissing
     {
@@ -205,7 +227,9 @@ public static class Runtime
         }
         set => _createConfigOnMissing = value;
     }
+    #endregion
 
+    #region 内存
     /// <summary>释放内存。GC回收后再释放虚拟内存</summary>
     /// <param name="processId">进程Id。默认0表示当前进程</param>
     /// <param name="gc">是否GC回收</param>
@@ -221,7 +245,7 @@ public static class Runtime
         }
         catch (Exception ex)
         {
-            XTrace.Log.Error("获取进程[{0}]失败：{1}", processId, ex.Message);
+            XTrace.Log.Error(XXTrace.FormatScope(LogScope, nameof(Runtime), "获取进程失败 ProcessId={0} Error={1}"), processId, ex.Message);
             return false;
         }
 
@@ -236,9 +260,9 @@ public static class Runtime
             var workingSetSize = process.WorkingSet64 / 1024;
             var privateMemory = process.PrivateMemorySize64 / 1024;
             if (gc)
-                log.Debug("[{3}/{4}]开始释放内存：GC={0:n0}K，WorkingSet={1:n0}K，PrivateMemory={2:n0}K", gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
+                log.Debug(XXTrace.FormatScope(LogScope, nameof(Runtime), "{3}/{4} 开始释放内存：GC={0:n0}K，WorkingSet={1:n0}K，PrivateMemory={2:n0}K"), gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
             else
-                log.Debug("[{3}/{4}]开始释放内存：WorkingSet={1:n0}K，PrivateMemory={2:n0}K", gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
+                log.Debug(XXTrace.FormatScope(LogScope, nameof(Runtime), "{3}/{4} 开始释放内存：WorkingSet={1:n0}K，PrivateMemory={2:n0}K"), gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
         }
 
         if (gc)
@@ -264,7 +288,7 @@ public static class Runtime
             }
             catch (Exception ex)
             {
-                log.Error("EmptyWorkingSet失败：{0}", ex.Message);
+                log.Error(XXTrace.FormatScope(LogScope, nameof(Runtime), "EmptyWorkingSet失败：{0}"), ex.Message);
                 return false;
             }
         }
@@ -276,9 +300,9 @@ public static class Runtime
             var workingSetSize = process.WorkingSet64 / 1024;
             var privateMemory = process.PrivateMemorySize64 / 1024;
             if (gc)
-                log.Debug("[{3}/{4}]释放内存完成：GC={0:n0}K，WorkingSet={1:n0}K，PrivateMemory={2:n0}K", gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
+                log.Debug(XXTrace.FormatScope(LogScope, nameof(Runtime), "{3}/{4} 释放内存完成：GC={0:n0}K，WorkingSet={1:n0}K，PrivateMemory={2:n0}K"), gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
             else
-                log.Debug("[{3}/{4}]释放内存完成：WorkingSet={1:n0}K，PrivateMemory={2:n0}K", gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
+                log.Debug(XXTrace.FormatScope(LogScope, nameof(Runtime), "{3}/{4} 释放内存完成：WorkingSet={1:n0}K，PrivateMemory={2:n0}K"), gcMemory, workingSetSize, privateMemory, process.ProcessName, process.Id);
         }
 
         return true;
@@ -286,4 +310,5 @@ public static class Runtime
 
     [DllImport("psapi.dll", SetLastError = true)]
     internal static extern Boolean EmptyWorkingSet(IntPtr hProcess);
+    #endregion
 }
