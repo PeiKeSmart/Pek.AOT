@@ -2,26 +2,44 @@
 
 Pek.AOT 是面向 NativeAOT 与 Trimming 场景的基础能力库，当前已包含配置系统、日志、线程调度、对象池等基础模块。
 
+仓库同时包含可独立打包的 Avalonia 日志扩展项目 Pek.Log.Avalonia，用于将 Pek.Log 输出投递到 Avalonia UI。
+
 ## 当前重点
 
 - 配置系统默认输出 XML，显式声明时可切换为 JSON
 - XML 配置链路基于已注册的 JsonSerializerContext，不依赖运行时反射对象图遍历
 - 支持接近 DH.NCore 的配置声明方式：`[Config("...")] + Config<TConfig, TJsonContext>`
 
-## XXTrace 快速示例
+## XTrace 快速示例
 
 ```csharp
 using Pek;
-using Pek.Logging;
+using Pek.Log;
 
 var setting = Setting.Current;
 
 Console.WriteLine($"LogLevel = {setting.LogLevel}");
-XXTrace.UseConsole();
-XXTrace.WriteLine("Pek.AOT ready");
+XTrace.UseConsole();
+XTrace.WriteLine("Pek.AOT ready");
 ```
 
 首次运行时会在应用目录生成 `Config/Core.config` 和 `Log/*.log`。
+
+## Avalonia 日志扩展
+
+可使用 Pek.Log.Avalonia 将日志输出到 Avalonia 绑定集合：
+
+```csharp
+using System.Collections.ObjectModel;
+using Pek.Log;
+using Pek.Log.Avalonia;
+
+var logs = new ObservableCollection<String>();
+var avaloniaLog = new AvaloniaCollectionLog(logs);
+
+XTraceAvaloniaExtensions.UseAvalonia(avaloniaLog);
+XTrace.WriteLine("Avalonia log ready");
+```
 
 ## 配置示例
 

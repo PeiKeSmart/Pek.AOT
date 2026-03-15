@@ -3,6 +3,9 @@
     <Project Path="Samples/TimerXSample/TimerXSample.csproj" />
     <Project Path="Samples/XXTraceSample/XXTraceSample.csproj" />
   </Folder>
+  <Folder Name="/Extensions/">
+    <Project Path="Pek.Log.Avalonia/Pek.Log.Avalonia.csproj" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".github/copilot-instructions.md" />
