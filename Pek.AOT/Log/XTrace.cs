@@ -54,11 +54,21 @@ public static class XTrace
 
     static XTrace()
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception exception)
+            {
+                DefaultTracer.Instance?.NewError(exception.GetType().Name, exception);
+                WriteException(exception);
+            }
+        };
+
         AppDomain.CurrentDomain.ProcessExit += (_, _) => OnProcessExit();
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
             foreach (var item in e.Exception.Flatten().InnerExceptions)
             {
+                DefaultTracer.Instance?.NewError(item.GetType().Name, item);
                 WriteException(item);
             }
 
@@ -177,6 +187,15 @@ public static class XTrace
         AttachTracerLog(tracer, Log);
 
         return tracer;
+    }
+
+    /// <summary>启用控制台输出</summary>
+    public static void UseConsole()
+    {
+        if (Environment.UserInteractive)
+            UseConsole(true, true);
+        else
+            InitLog();
     }
 
     /// <summary>启用控制台输出</summary>

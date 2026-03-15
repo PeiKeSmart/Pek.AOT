@@ -37,9 +37,15 @@ public class TraceStream : Stream
             if (value == _useConsole) return;
 
             if (value)
+            {
+                OnAction -= HandleLogTrace;
                 OnAction += HandleConsoleTrace;
+            }
             else
+            {
                 OnAction -= HandleConsoleTrace;
+                OnAction += HandleLogTrace;
+            }
 
             _useConsole = value;
         }
@@ -58,6 +64,8 @@ public class TraceStream : Stream
         ShowPositionStep = 16;
         Encoding = Encoding.UTF8;
         UseConsole = true;
+
+        if (!UseConsole) OnAction += HandleLogTrace;
     }
 
     /// <summary>写入</summary>
@@ -211,14 +219,8 @@ public class TraceStream : Stream
             Console.ForegroundColor = ConsoleColor.White;
             Console.Write("\t");
 
-            if (TryWriteBuffer(e.Arguments))
-            {
-                Console.WriteLine();
-                return;
-            }
-
-            Console.ForegroundColor = ConsoleColor.Gray;
-            Console.WriteLine(String.Join(", ", e.Arguments.Select(static arg => arg?.ToString() ?? String.Empty)));
+            WriteTraceBody(e, writeToConsole: true);
+            Console.WriteLine();
         }
         finally
         {
@@ -226,23 +228,156 @@ public class TraceStream : Stream
         }
     }
 
-    private Boolean TryWriteBuffer(Object?[] args)
+    private void HandleLogTrace(Object? sender, TraceStreamEventArgs e)
+    {
+        var builder = new StringBuilder();
+        var action = e.Action.Length < 8 ? e.Action + "\t" : e.Action;
+        builder.Append(action);
+        builder.Append('\t');
+        WriteTraceBody(e, builder);
+        XTrace.WriteLine(builder.ToString());
+    }
+
+    private void WriteTraceBody(TraceStreamEventArgs e, Boolean writeToConsole)
+    {
+        if (writeToConsole)
+        {
+            if (TryWriteHex(Console.Out, e.Arguments))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write('\t');
+                TryWriteMeaning(Console.Out, e.Arguments);
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write(String.Join(", ", e.Arguments.Select(static arg => arg?.ToString() ?? String.Empty)));
+            return;
+        }
+
+        throw new NotSupportedException();
+    }
+
+    private void WriteTraceBody(TraceStreamEventArgs e, StringBuilder builder)
+    {
+        if (TryWriteHex(builder, e.Arguments))
+        {
+            builder.Append('\t');
+            TryWriteMeaning(builder, e.Arguments);
+            return;
+        }
+
+        builder.Append(String.Join(", ", e.Arguments.Select(static arg => arg?.ToString() ?? String.Empty)));
+    }
+
+    private Boolean TryWriteHex(TextWriter writer, Object?[] args)
     {
         if (args.Length == 1 && args[0] is Byte byteValue)
         {
-            Console.Write(byteValue.ToString("X2"));
+            writer.Write(byteValue.ToString("X2"));
             return true;
         }
 
-        if (args.Length < 3 || args[0] is not Byte[] buffer || args[1] is not Int32 offset || args[^1] is not Int32 count) return false;
+        if (args.Length == 1 && args[0] != null)
+        {
+            var value = Convert.ToInt32(args[0]);
+            writer.Write(value >= 10 ? $"{value:X2} ({value})" : value.ToString("X2"));
+            return true;
+        }
+
+        if (!TryGetBufferArgs(args, out var buffer, out var offset, out var count)) return false;
+        if (count <= 0) return true;
+
+        if (count == 1)
+        {
+            var value = Convert.ToInt32(buffer[offset]);
+            writer.Write(value >= 10 ? $"{value:X2} ({value})" : value.ToString("X2"));
+        }
+        else
+        {
+            writer.Write(BitConverter.ToString(buffer, offset, count <= 50 ? count : 50));
+            if (count > 50) writer.Write($"...（共{count}）");
+        }
+
+        return true;
+    }
+
+    private Boolean TryWriteHex(StringBuilder builder, Object?[] args)
+    {
+        using var writer = new StringWriter(builder);
+        return TryWriteHex(writer, args);
+    }
+
+    private void TryWriteMeaning(TextWriter writer, Object?[] args)
+    {
+        if (args.Length == 1)
+        {
+            var arg = args[0];
+            if (arg != null)
+            {
+                var code = Type.GetTypeCode(arg.GetType());
+                if (code != TypeCode.Object) writer.Write(arg);
+            }
+
+            return;
+        }
+
+        if (!TryGetBufferArgs(args, out var buffer, out var offset, out var count)) return;
+        if (count == 1)
+        {
+            if (buffer[offset] >= '0') writer.Write($"{Convert.ToChar(buffer[offset])} ({Convert.ToInt32(buffer[offset])})");
+        }
+        else if (count == 2)
+        {
+            writer.Write(BitConverter.ToInt16(Format(buffer), offset));
+        }
+        else if (count == 4)
+        {
+            writer.Write(BitConverter.ToInt32(Format(buffer), offset));
+        }
+        else if (count < 50)
+        {
+            writer.Write(Encoding.GetString(buffer, offset, count));
+        }
+    }
+
+    private void TryWriteMeaning(StringBuilder builder, Object?[] args)
+    {
+        using var writer = new StringWriter(builder);
+        TryWriteMeaning(writer, args);
+    }
+
+    private static Boolean TryGetBufferArgs(Object?[] args, out Byte[] buffer, out Int32 offset, out Int32 count)
+    {
+        buffer = [];
+        offset = 0;
+        count = 0;
+
+        if (args.Length < 3 || args[0] is not Byte[] localBuffer || args[1] is not Int32 localOffset || args[^1] is not Int32 localCount) return false;
+
+        buffer = localBuffer;
+        offset = localOffset;
+        count = localCount;
+
         if (count <= 0) return true;
 
         var actualCount = Math.Min(count, buffer.Length - offset);
         if (actualCount <= 0) return true;
 
-        var span = new ReadOnlySpan<Byte>(buffer, offset, actualCount);
-        Console.Write(BitConverter.ToString(span.ToArray()).Replace('-', ' '));
+        count = actualCount;
+
         return true;
+    }
+
+    private Byte[] Format(Byte[] buffer)
+    {
+        if (buffer.Length == 0) return buffer;
+        if (IsLittleEndian) return buffer;
+
+        var bytes = new Byte[buffer.Length];
+        Buffer.BlockCopy(buffer, 0, bytes, 0, bytes.Length);
+        Array.Reverse(bytes);
+        return bytes;
     }
 }
 
