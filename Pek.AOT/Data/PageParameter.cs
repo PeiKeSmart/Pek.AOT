@@ -6,11 +6,27 @@ using Pek.Extension;
 namespace Pek.Data;
 
 /// <summary>分页参数信息。可携带统计和数据权限扩展查询等信息</summary>
+/// <remarks>
+/// 文档 https://newlifex.com/core/page_parameter
+///
+/// 支持两种排序模式：
+/// 1. Sort 属性：单字段排序，自动解析方向，适合前端传参，会进行 SQL 安全性校验；
+/// 2. OrderBy 属性：复杂排序字句，优先级更高，不进行 SQL 安全性校验。
+///
+/// 支持两种分页模式：
+/// 1. PageIndex 模式：基于页码的分页；
+/// 2. StartRow 模式：基于起始行的分页，设置后 PageIndex 将被忽略。
+/// </remarks>
 public class PageParameter
 {
     private String? _Sort;
 
     /// <summary>排序字段，前台接收，便于做 SQL 安全性校验</summary>
+    /// <remarks>
+    /// 一般用于接收单个排序字段，可以带上 Asc/Desc，这里会自动拆分。
+    /// 极少数情况下，前端需要传递多个字段排序，这时候可以使用 OrderBy。
+    /// 如果设置 Sort，OrderBy 将被清空。
+    /// </remarks>
     [XmlIgnore, IgnoreDataMember]
     public virtual String? Sort
     {
@@ -48,6 +64,7 @@ public class PageParameter
     public virtual Boolean Desc { get; set; }
 
     /// <summary>页面索引。从 1 开始，默认 1</summary>
+    /// <remarks>如果设置了开始行，分页时将不再使用 PageIndex</remarks>
     public virtual Int32 PageIndex { get; set; } = 1;
 
     /// <summary>页面大小。默认 20，若为 0 表示不分页</summary>
@@ -60,9 +77,14 @@ public class PageParameter
     public virtual Int64 PageCount => PageSize <= 0 ? 1 : (TotalCount + PageSize - 1) / PageSize;
 
     /// <summary>自定义排序字句</summary>
+    /// <remarks>
+    /// OrderBy 优先级更高，适用于用户自定义复杂排序字句，不做 SQL 安全性校验。
+    /// 如果设置 Sort，OrderBy 将被清空。
+    /// </remarks>
     public virtual String? OrderBy { get; set; }
 
     /// <summary>开始行</summary>
+    /// <remarks>如果设置了开始行，分页时将不再使用 PageIndex</remarks>
     [XmlIgnore, IgnoreDataMember]
     public virtual Int64 StartRow { get; set; } = -1;
 
@@ -87,7 +109,7 @@ public class PageParameter
 
     /// <summary>从另一个分页参数拷贝到当前分页参数</summary>
     /// <param name="pm">源分页参数</param>
-    /// <returns>当前实例</returns>
+    /// <returns>当前实例，支持链式调用</returns>
     public virtual PageParameter CopyFrom(PageParameter pm)
     {
         if (pm == null) return this;
@@ -107,7 +129,7 @@ public class PageParameter
     }
 
     /// <summary>获取表示分页参数唯一性的键值</summary>
-    /// <returns>唯一键</returns>
+    /// <returns>唯一键，可用于缓存键</returns>
     public virtual String GetKey() => $"{PageIndex}-{PageCount}-{OrderBy}";
 
     /// <summary>验证分页参数的有效性</summary>

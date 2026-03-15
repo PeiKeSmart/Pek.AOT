@@ -1,6 +1,11 @@
 namespace Pek.Data;
 
 /// <summary>环形缓冲区。用于协议组包设计</summary>
+/// <remarks>
+/// 环形缓冲区是一种固定大小的缓冲区，当缓冲区满时新数据会覆盖旧数据。
+/// 本实现支持动态扩容，确保数据不丢失。
+/// 使用 Head 指针标记写入位置，Tail 指针标记读取位置。
+/// </remarks>
 public class RingBuffer
 {
     private Byte[] _data;
@@ -15,6 +20,7 @@ public class RingBuffer
     public Int32 Tail { get; set; }
 
     /// <summary>数据长度</summary>
+    /// <remarks>环形缓冲区中实际存储的数据长度</remarks>
     public Int32 Length { get; private set; }
 
     /// <summary>使用默认容量 1024 初始化</summary>
@@ -26,6 +32,10 @@ public class RingBuffer
 
     /// <summary>扩容，确保容量</summary>
     /// <param name="capacity">目标容量</param>
+    /// <remarks>
+    /// 当需要更大容量时，会分配新的缓冲区并正确复制环形数据。
+    /// 复制后会重置 Head 和 Tail 指针为线性布局。
+    /// </remarks>
     public void EnsureCapacity(Int32 capacity)
     {
         if (capacity <= Capacity) return;
@@ -56,6 +66,10 @@ public class RingBuffer
     /// <param name="data">源数据</param>
     /// <param name="offset">偏移量</param>
     /// <param name="count">个数</param>
+    /// <remarks>
+    /// 当缓冲区空间不足时会自动扩容。
+    /// 写入时会正确处理环形边界情况。
+    /// </remarks>
     public void Write(Byte[] data, Int32 offset = 0, Int32 count = -1)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -106,6 +120,10 @@ public class RingBuffer
     /// <param name="offset">偏移量</param>
     /// <param name="count">期望读取字节数</param>
     /// <returns>实际读取字节数</returns>
+    /// <remarks>
+    /// 读取时会正确处理环形边界情况。
+    /// 实际读取的字节数可能小于期望值，取决于缓冲区中的可用数据量。
+    /// </remarks>
     public Int32 Read(Byte[] data, Int32 offset = 0, Int32 count = -1)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
