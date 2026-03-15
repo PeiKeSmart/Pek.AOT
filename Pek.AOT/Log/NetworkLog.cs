@@ -158,7 +158,6 @@ public class NetworkLog : Logger, IDisposable
             {
                 Content = new StringContent(value, Encoding.UTF8, "text/plain")
             };
-            TraceContext.Attach(request);
             _httpClient.SendAsync(request).GetAwaiter().GetResult();
             return;
         }

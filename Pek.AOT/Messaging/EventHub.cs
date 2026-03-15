@@ -1,14 +1,27 @@
 using System.Collections.Concurrent;
-using Pek;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
+
+using Pek.Data;
 using Pek.Log;
+using Pek.Serialization;
 
 namespace Pek.Messaging;
 
-/// <summary>默认事件中心</summary>
-public class EventHub : DisposeBase, IEventHub, ILogFeature, ITracerFeature
+/// <summary>事件枢纽。按主题把网络消息分发到事件总线或回调</summary>
+/// <typeparam name="TEvent">事件类型</typeparam>
+public class EventHub<TEvent> : IEventHandler<IPacket>, IEventHandler<String>, ILogFeature, ITracerFeature
 {
-    private readonly ConcurrentDictionary<Type, SubscriptionCollection> _typedSubscriptions = new();
-    private readonly ConcurrentDictionary<String, SubscriptionCollection> _namedSubscriptions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<String, IEventBus<TEvent>> _eventBuses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<String, IEventHandler<TEvent>> _dispatchers = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Byte[] _eventPrefix = Encoding.ASCII.GetBytes("event#");
+    private static readonly Char[] _eventPrefix2 = "event#".ToCharArray();
+
+    /// <summary>事件总线工厂</summary>
+    public IEventBusFactory? Factory { get; set; }
+
+    /// <summary>Json主机</summary>
+    public IJsonHost JsonHost { get; set; } = JsonHelper.Default;
 
     /// <summary>日志</summary>
     public ILog Log { get; set; } = Logger.Null;
@@ -16,240 +29,212 @@ public class EventHub : DisposeBase, IEventHub, ILogFeature, ITracerFeature
     /// <summary>跟踪器</summary>
     public ITracer? Tracer { get; set; } = DefaultTracer.Instance;
 
-    /// <summary>处理器抛出异常时是否继续</summary>
-    public Boolean IgnoreHandlerException { get; set; }
-
-    /// <summary>订阅指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="handler">同步处理器</param>
-    public virtual void Subscribe<TEvent>(Action<TEvent, IEventContext> handler)
+    /// <summary>添加事件总线到指定主题</summary>
+    public void Add(String topic, IEventBus<TEvent> bus)
     {
-        if (handler == null) throw new ArgumentNullException(nameof(handler));
+        if (String.IsNullOrWhiteSpace(topic)) throw new ArgumentNullException(nameof(topic));
+        if (bus == null) throw new ArgumentNullException(nameof(bus));
 
-        ThrowIfDisposed();
-        GetTypedCollection(typeof(TEvent)).Add(new Subscription(handler, context =>
+        _eventBuses[topic] = bus;
+    }
+
+    /// <summary>按主题注册事件分发器</summary>
+    public void Add(String topic, IEventHandler<TEvent> dispatcher)
+    {
+        if (String.IsNullOrWhiteSpace(topic)) throw new ArgumentNullException(nameof(topic));
+        if (dispatcher == null) throw new ArgumentNullException(nameof(dispatcher));
+
+        _dispatchers[topic] = dispatcher;
+    }
+
+    /// <summary>获取指定主题的事件总线</summary>
+    public IEventBus<TEvent> GetEventBus(String topic, String clientId = "")
+    {
+        if (_eventBuses.TryGetValue(topic, out var bus)) return bus;
+
+        using var span = Tracer?.NewSpan($"event:{topic}:Create", new { clientId });
+        WriteLog("注册主题：{0}，客户端：{1}", topic, clientId);
+        bus = Factory?.CreateEventBus<TEvent>(topic, clientId) ?? new EventBus<TEvent>();
+
+        return _eventBuses.GetOrAdd(topic, bus);
+    }
+
+    /// <summary>尝试获取分发器</summary>
+    public Boolean TryGetValue(String topic, [MaybeNullWhen(false)] out IEventHandler<TEvent> action) => _dispatchers.TryGetValue(topic, out action);
+
+    /// <summary>尝试获取事件总线</summary>
+    public Boolean TryGetBus<T>(String topic, [MaybeNullWhen(false)] out IEventBus<T> eventBus)
+    {
+        if (_eventBuses.TryGetValue(topic, out var bus) && bus is IEventBus<T> bus2)
         {
-            handler((TEvent)context.Event!, context);
-            return default;
-        }));
-    }
-
-    /// <summary>订阅指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="handler">异步处理器</param>
-    public virtual void Subscribe<TEvent>(Func<TEvent, IEventContext, Task> handler)
-    {
-        if (handler == null) throw new ArgumentNullException(nameof(handler));
-
-        ThrowIfDisposed();
-        GetTypedCollection(typeof(TEvent)).Add(new Subscription(handler, async context =>
-        {
-            await handler((TEvent)context.Event!, context).ConfigureAwait(false);
-        }));
-    }
-
-    /// <summary>订阅命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="handler">同步处理器</param>
-    public virtual void Subscribe(String name, Action<IEventContext> handler)
-    {
-        if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
-        if (handler == null) throw new ArgumentNullException(nameof(handler));
-
-        ThrowIfDisposed();
-        GetNamedCollection(name).Add(new Subscription(handler, context =>
-        {
-            handler(context);
-            return default;
-        }));
-    }
-
-    /// <summary>订阅命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="handler">异步处理器</param>
-    public virtual void Subscribe(String name, Func<IEventContext, Task> handler)
-    {
-        if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
-        if (handler == null) throw new ArgumentNullException(nameof(handler));
-
-        ThrowIfDisposed();
-        GetNamedCollection(name).Add(new Subscription(handler, async context => await handler(context).ConfigureAwait(false)));
-    }
-
-    /// <summary>取消订阅指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="handler">同步处理器</param>
-    /// <returns>是否成功</returns>
-    public virtual Boolean Unsubscribe<TEvent>(Action<TEvent, IEventContext> handler) => handler != null && _typedSubscriptions.TryGetValue(typeof(TEvent), out var collection) && collection.Remove(handler);
-
-    /// <summary>取消订阅指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="handler">异步处理器</param>
-    /// <returns>是否成功</returns>
-    public virtual Boolean Unsubscribe<TEvent>(Func<TEvent, IEventContext, Task> handler) => handler != null && _typedSubscriptions.TryGetValue(typeof(TEvent), out var collection) && collection.Remove(handler);
-
-    /// <summary>取消订阅命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="handler">同步处理器</param>
-    /// <returns>是否成功</returns>
-    public virtual Boolean Unsubscribe(String name, Action<IEventContext> handler) => !String.IsNullOrWhiteSpace(name) && handler != null && _namedSubscriptions.TryGetValue(name, out var collection) && collection.Remove(handler);
-
-    /// <summary>取消订阅命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="handler">异步处理器</param>
-    /// <returns>是否成功</returns>
-    public virtual Boolean Unsubscribe(String name, Func<IEventContext, Task> handler) => !String.IsNullOrWhiteSpace(name) && handler != null && _namedSubscriptions.TryGetValue(name, out var collection) && collection.Remove(handler);
-
-    /// <summary>发布指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="event">事件对象</param>
-    /// <param name="context">事件上下文</param>
-    /// <returns>命中处理器数量</returns>
-    public virtual Int32 Publish<TEvent>(TEvent @event, IEventContext? context = null) => PublishAsync(@event, context).GetAwaiter().GetResult();
-
-    /// <summary>异步发布指定类型事件</summary>
-    /// <typeparam name="TEvent">事件类型</typeparam>
-    /// <param name="event">事件对象</param>
-    /// <param name="context">事件上下文</param>
-    /// <returns>命中处理器数量</returns>
-    public virtual async Task<Int32> PublishAsync<TEvent>(TEvent @event, IEventContext? context = null)
-    {
-        var type = typeof(TEvent);
-        var name = type.FullName ?? type.Name;
-        var handlers = _typedSubscriptions.TryGetValue(type, out var collection) ? collection.Snapshot() : [];
-        return await PublishCoreAsync(name, @event, context, handlers).ConfigureAwait(false);
-    }
-
-    /// <summary>发布命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="event">事件对象</param>
-    /// <param name="context">事件上下文</param>
-    /// <returns>命中处理器数量</returns>
-    public virtual Int32 Publish(String name, Object? @event = null, IEventContext? context = null) => PublishAsync(name, @event, context).GetAwaiter().GetResult();
-
-    /// <summary>异步发布命名事件</summary>
-    /// <param name="name">事件名</param>
-    /// <param name="event">事件对象</param>
-    /// <param name="context">事件上下文</param>
-    /// <returns>命中处理器数量</returns>
-    public virtual async Task<Int32> PublishAsync(String name, Object? @event = null, IEventContext? context = null)
-    {
-        if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
-
-        var handlers = _namedSubscriptions.TryGetValue(name, out var collection) ? collection.Snapshot() : [];
-        return await PublishCoreAsync(name, @event, context, handlers).ConfigureAwait(false);
-    }
-
-    /// <summary>清空所有订阅</summary>
-    public virtual void Clear()
-    {
-        _typedSubscriptions.Clear();
-        _namedSubscriptions.Clear();
-    }
-
-    /// <summary>释放资源</summary>
-    /// <param name="disposing">是否显式释放</param>
-    protected override void Dispose(Boolean disposing)
-    {
-        base.Dispose(disposing);
-
-        if (!disposing) return;
-        Clear();
-    }
-
-    private SubscriptionCollection GetTypedCollection(Type type) => _typedSubscriptions.GetOrAdd(type, static _ => new SubscriptionCollection());
-
-    private SubscriptionCollection GetNamedCollection(String name) => _namedSubscriptions.GetOrAdd(name, static _ => new SubscriptionCollection());
-
-    private async Task<Int32> PublishCoreAsync(String name, Object? @event, IEventContext? context, Subscription[] handlers)
-    {
-        ThrowIfDisposed();
-
-        if (handlers.Length == 0) return 0;
-
-        var ownContext = false;
-        if (context == null)
-        {
-            context = EventContext.Rent();
-            ownContext = true;
+            eventBus = bus2;
+            return true;
         }
 
-        context.Name = String.IsNullOrEmpty(context.Name) ? name : context.Name;
-        if (context.Event == null) context.Event = @event;
-        if (@event is ITraceMessage traceMessage && String.IsNullOrWhiteSpace(traceMessage.TraceId))
-            traceMessage.TraceId = DefaultSpan.Current?.ToString();
-
-        using var span = Tracer?.NewSpan("EventHub.Publish", context.Name);
-        try
+        if (_dispatchers.TryGetValue(topic, out var action))
         {
-            for (var i = 0; i < handlers.Length; i++)
-            {
-                context.CancellationToken.ThrowIfCancellationRequested();
-                await handlers[i].Invoke(context).ConfigureAwait(false);
-                context.Handled = true;
-            }
-
-            this.WriteLog("EventHub Publish Name={0} Handlers={1}", context.Name, handlers.Length);
-            return handlers.Length;
+            eventBus = action as IEventBus<T>;
+            if (eventBus != null) return true;
         }
-        catch (Exception ex)
+
+        eventBus = default;
+        return false;
+    }
+
+    /// <summary>处理接收到的数据包消息</summary>
+    public virtual async Task<Int32> HandleAsync(IPacket data, IEventContext? context = null, CancellationToken cancellationToken = default)
+    {
+        var header = data.GetSpan();
+        if (!header.StartsWith(_eventPrefix)) return 0;
+
+        var p = header.IndexOf((Byte)'#');
+        var header2 = header[(p + 1)..];
+        var p2 = header2.IndexOf((Byte)'#');
+        if (p2 <= 0) return 0;
+
+        var topic = Encoding.UTF8.GetString(header2[..p2]);
+        var header3 = header2[(p2 + 1)..];
+        var p3 = header3.IndexOf((Byte)'#');
+        if (p3 <= 0) return 0;
+
+        var clientId = Encoding.UTF8.GetString(header3[..p3]);
+        var headerCount = p + 1 + p2 + 1 + p3 + 1;
+        using var span = Tracer?.NewSpan($"event:{topic}:Dispatch", new { clientId });
+
+        var msg = data.Slice(headerCount);
+        if (msg.Length == 0) return 0;
+
+        if (context is IExtend ext) ext["Raw"] = data;
+
+        if (msg[0] != '{' && msg.Total < 32)
         {
-            context.Exception = ex;
-            span?.SetError(ex, context.Name);
-            this.WriteLog("EventHub Publish Error Name={0} Error={1}", context.Name, ex.Message);
-            if (!IgnoreHandlerException) throw;
-            return handlers.Length;
+            if (await DispatchActionAsync(topic, clientId, msg.ToStr(), context, cancellationToken).ConfigureAwait(false)) return 1;
         }
-        finally
+
+        if (msg is TEvent @event) return await DispatchAsync(topic, clientId, @event, context, cancellationToken).ConfigureAwait(false);
+
+        var msg2 = msg.ToStr();
+        if (span is DefaultSpan defaultSpan1) defaultSpan1.AppendTag(msg2);
+        if (msg2 is TEvent @event2) return await DispatchAsync(topic, clientId, @event2, context, cancellationToken).ConfigureAwait(false);
+
+        return await OnDispatchAsync(topic, clientId, msg2, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    Task IEventHandler<IPacket>.HandleAsync(IPacket @event, IEventContext? context, CancellationToken cancellationToken) => HandleAsync(@event, context, cancellationToken);
+
+    /// <summary>处理接收到的字符串消息</summary>
+    public virtual async Task<Int32> HandleAsync(String data, IEventContext? context = null, CancellationToken cancellationToken = default)
+    {
+        var header = data.AsSpan();
+        if (!header.StartsWith(_eventPrefix2)) return 0;
+
+        var p = header.IndexOf('#');
+        var header2 = header[(p + 1)..];
+        var p2 = header2.IndexOf('#');
+        if (p2 <= 0) return 0;
+
+        var topic = header2[..p2].ToString();
+        var header3 = header2[(p2 + 1)..];
+        var p3 = header3.IndexOf('#');
+        if (p3 <= 0) return 0;
+
+        var clientId = header3[..p3].ToString();
+        var headerCount = p + 1 + p2 + 1 + p3 + 1;
+        using var span = Tracer?.NewSpan($"event:{topic}:Dispatch", new { clientId });
+
+        var msg = data[headerCount..];
+        if (msg.Length == 0) return 0;
+
+        if (context is IExtend ext) ext["Raw"] = data;
+
+        if (msg[0] != '{' && msg.Length < 32)
         {
-            if (ownContext && context is EventContext eventContext) EventContext.Return(eventContext);
+            if (await DispatchActionAsync(topic, clientId, msg, context, cancellationToken).ConfigureAwait(false)) return 1;
+        }
+
+        if (span is DefaultSpan defaultSpan2) defaultSpan2.AppendTag(msg);
+        if (msg is TEvent @event) return await DispatchAsync(topic, clientId, @event, context, cancellationToken).ConfigureAwait(false);
+
+        return await OnDispatchAsync(topic, clientId, msg, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    Task IEventHandler<String>.HandleAsync(String @event, IEventContext? context, CancellationToken cancellationToken) => HandleAsync(@event, context, cancellationToken);
+
+    /// <summary>处理动作指令</summary>
+    public virtual Task<Boolean> DispatchActionAsync(String topic, String clientId, String action, IEventContext? context = null, CancellationToken cancellationToken = default)
+    {
+        if (String.IsNullOrWhiteSpace(action) || action[0] == '{') return Task.FromResult(false);
+
+        using var span = Tracer?.NewSpan($"event:{topic}:{action}", new { clientId });
+        switch (action)
+        {
+            case "subscribe":
+                if ((context as IExtend)?["Handler"] is not IEventHandler<TEvent> handler)
+                    throw new ArgumentNullException(nameof(context), "订阅动作时，必须在上下文中指定事件处理器");
+
+                var bus = GetEventBus(topic, clientId);
+                WriteLog("订阅主题：{0}，客户端：{1}", topic, clientId);
+                bus.Subscribe(handler, clientId);
+                return Task.FromResult(true);
+            case "unsubscribe":
+                WriteLog("取消订阅主题：{0}，客户端：{1}", topic, clientId);
+                if (!TryGetBus<TEvent>(topic, out var bus2)) return Task.FromResult(false);
+
+                bus2.Unsubscribe(clientId);
+                if (bus2 is EventBus<TEvent> eventBus && eventBus.Handlers.Count == 0)
+                {
+                    _eventBuses.TryRemove(topic, out _);
+                    _dispatchers.TryRemove(topic, out _);
+                    WriteLog("注销主题：{0}，因订阅为空", topic);
+                }
+                return Task.FromResult(true);
+            default:
+                return Task.FromResult(false);
         }
     }
 
-    private sealed class Subscription
+    /// <summary>分发字符串事件</summary>
+    protected virtual Task<Int32> OnDispatchAsync(String topic, String clientId, String msg, IEventContext? context = null, CancellationToken cancellationToken = default)
     {
-        public Subscription(Delegate source, Func<IEventContext, ValueTask> invoke)
-        {
-            Source = source;
-            Invoke = invoke;
-        }
+        var @event = JsonHost.Read<TEvent>(msg)!;
+        if (@event is ITraceMessage traceMessage && DefaultSpan.Current is DefaultSpan span)
+            span.Detach(traceMessage.TraceId);
 
-        public Delegate Source { get; }
-
-        public Func<IEventContext, ValueTask> Invoke { get; }
+        return DispatchAsync(topic, clientId, @event, context, cancellationToken);
     }
 
-    private sealed class SubscriptionCollection
+    /// <summary>分发事件</summary>
+    public virtual async Task<Int32> DispatchAsync(String topic, String clientId, TEvent @event, IEventContext? context = null, CancellationToken cancellationToken = default)
     {
-        private readonly List<Subscription> _items = [];
-        private readonly Object _lock = new();
+        if (String.IsNullOrWhiteSpace(topic)) throw new ArgumentNullException(nameof(topic));
 
-        public void Add(Subscription subscription)
+        if (context is EventContext eventContext)
         {
-            lock (_lock)
-            {
-                _items.Add(subscription);
-            }
+            eventContext.Topic = topic;
+            eventContext.ClientId = clientId;
+        }
+        else if (context is IExtend ext)
+        {
+            ext["Topic"] = topic;
+            ext["ClientId"] = clientId;
         }
 
-        public Boolean Remove(Delegate source)
+        if (_eventBuses.TryGetValue(topic, out var bus))
+            return await bus.PublishAsync(@event, context, cancellationToken).ConfigureAwait(false);
+        if (_dispatchers.TryGetValue(topic, out var action))
         {
-            lock (_lock)
-            {
-                var index = _items.FindIndex(e => e.Source == source);
-                if (index < 0) return false;
-
-                _items.RemoveAt(index);
-                return true;
-            }
+            await action.HandleAsync(@event, context, cancellationToken).ConfigureAwait(false);
+            return 1;
         }
 
-        public Subscription[] Snapshot()
-        {
-            lock (_lock)
-            {
-                return [.. _items];
-            }
-        }
+        return 0;
+    }
+
+    /// <summary>写日志</summary>
+    public void WriteLog(String format, params Object[] args)
+    {
+        var span = DefaultSpan.Current as DefaultSpan;
+        span?.AppendTag(String.Format(format, args));
+        Log?.Info(format, args);
     }
 }

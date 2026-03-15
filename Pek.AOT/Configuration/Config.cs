@@ -21,6 +21,11 @@ public abstract class Config
     protected string? _configSnapshot;
 
     /// <summary>
+    /// 是否新的配置文件
+    /// </summary>
+    public Boolean IsNew => ConfigManager.IsNew(GetType());
+
+    /// <summary>
     /// 创建当前配置的快照（用于变更追踪）
     /// </summary>
     public void CreateSnapshot()
@@ -391,6 +396,16 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
             }
             
             return config;
+        }
+        set
+        {
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
+            ConfigManager.SetConfig(value);
+            if (value._configSnapshot == null)
+            {
+                value.CreateSnapshot();
+            }
         }
     }
     

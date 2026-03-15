@@ -371,6 +371,29 @@ public static class ConfigManager
     }
 
     /// <summary>
+    /// 设置配置实例缓存
+    /// </summary>
+    /// <param name="config">配置实例</param>
+    public static void SetConfig(Config config)
+    {
+        if (config == null) throw new ArgumentNullException(nameof(config));
+
+        _configs[config.GetType()] = config;
+    }
+
+    /// <summary>
+    /// 是否新的配置文件
+    /// </summary>
+    /// <param name="configType">配置类型</param>
+    /// <returns>是否不存在对应配置文件</returns>
+    public static Boolean IsNew(Type configType)
+    {
+        if (configType == null) throw new ArgumentNullException(nameof(configType));
+
+        return !File.Exists(GetConfigFilePath(configType));
+    }
+
+    /// <summary>
     /// 获取配置类型对应的源生成类型信息。
     /// </summary>
     /// <param name="configType">配置类型</param>
