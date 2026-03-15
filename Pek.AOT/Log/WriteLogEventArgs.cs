@@ -2,7 +2,7 @@ using Pek.Collections;
 using Pek;
 using Pek.Threading;
 
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>写日志事件参数</summary>
 public class WriteLogEventArgs : EventArgs

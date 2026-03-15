@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>按等级分文件输出日志</summary>
 public class LevelLog : Logger

@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 using Pek.Configuration;
-using Pek.Logging;
+using Pek.Log;
 
 namespace Pek;
 

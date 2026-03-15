@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Pek.Threading;
-using Pek.Logging;
+using Pek.Log;
 
 namespace Pek.Collections;
 

@@ -6,7 +6,7 @@ using System.Threading.Channels;
 using System.Xml;
 
 using Pek.IO;
-using Pek.Logging;
+using Pek.Log;
 using Pek.Xml;
 
 namespace Pek.Configuration;

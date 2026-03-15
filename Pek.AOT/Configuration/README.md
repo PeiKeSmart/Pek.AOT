@@ -172,7 +172,7 @@ public class SocketSetting : Config<SocketSetting, SocketSettingJsonContext>
 
 ```csharp
 using Pek;
-using Pek.Logging;
+using Pek.Log;
 
 var setting = Setting.Current;
 

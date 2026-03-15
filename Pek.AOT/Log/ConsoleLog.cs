@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>控制台日志</summary>
 public class ConsoleLog : Logger

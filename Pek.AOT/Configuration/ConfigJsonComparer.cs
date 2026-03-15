@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-using Pek.Logging;
+using Pek.Log;
 
 namespace Pek.Configuration;
 

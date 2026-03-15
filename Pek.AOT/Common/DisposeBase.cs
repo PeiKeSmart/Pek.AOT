@@ -2,7 +2,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
-using Pek.Logging;
+using Pek.Log;
 
 namespace Pek;
 

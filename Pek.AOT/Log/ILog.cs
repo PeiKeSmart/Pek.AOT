@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>日志接口</summary>
 public interface ILog

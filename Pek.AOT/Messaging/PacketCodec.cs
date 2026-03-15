@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using Pek.Buffers;
 using Pek.Data;
 using Pek.IO;
-using Pek.Logging;
+using Pek.Log;
 
 namespace Pek.Messaging;
 

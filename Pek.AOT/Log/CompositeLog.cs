@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>复合日志</summary>
 public class CompositeLog : Logger

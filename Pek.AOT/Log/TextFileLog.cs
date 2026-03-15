@@ -8,7 +8,7 @@ using Pek.Collections;
 using Pek;
 using Pek.Threading;
 
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>文本文件日志</summary>
 public class TextFileLog : Logger, IDisposable

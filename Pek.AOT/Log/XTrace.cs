@@ -1,7 +1,7 @@
 using Pek.Threading;
 using Pek;
 
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>XTrace 日志入口</summary>
 public static class XTrace

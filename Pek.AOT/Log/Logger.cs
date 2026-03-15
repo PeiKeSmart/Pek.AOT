@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>日志基类</summary>
 public abstract class Logger : ILog

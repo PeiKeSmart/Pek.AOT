@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>写日志接口。支持写应用功能日志</summary>
 public interface ILogProvider

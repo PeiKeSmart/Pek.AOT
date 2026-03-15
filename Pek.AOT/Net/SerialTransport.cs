@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Win32;
 
 using Pek.Data;
-using Pek.Logging;
+using Pek.Log;
 using Pek.Threading;
 
 namespace Pek.Net;

@@ -1,4 +1,4 @@
-namespace Pek.Logging;
+namespace Pek.Log;
 
 /// <summary>XXTrace 兼容入口</summary>
 public static class XXTrace
