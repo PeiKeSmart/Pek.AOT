@@ -1,6 +1,7 @@
 using Pek.Buffers;
 using Pek.Collections;
 using Pek.Data;
+using Pek;
 
 namespace Pek.Messaging;
 
@@ -118,20 +119,18 @@ public class DefaultMessage : Message
         Sequence = header[1];
 
         var size = 4;
-        var length = header[2] | (header[3] << 8);
-        if (length == 0xFFFF)
+        var len = header[2] | (header[3] << 8);
+        if (len == 0xFFFF)
         {
             size = 8;
             if (count < size) throw new ArgumentOutOfRangeException(nameof(packet), "The length of the packet header is less than 8 bytes");
 
-            var reader = new SpanReader(header) { IsLittleEndian = true };
-            reader.Advance(4);
-            length = reader.ReadInt32();
+            len = header.AsSpan(size - 4, 4).ToArray().ToInt();
         }
 
-        if (size + length > count) throw new ArgumentOutOfRangeException(nameof(packet), $"The packet length {count} is less than {size + length} bytes");
+        if (size + len > count) throw new ArgumentOutOfRangeException(nameof(packet), $"The packet length {count} is less than {size + len} bytes");
 
-        Payload = packet.Slice(size, length, true);
+        Payload = packet.Slice(size, len, true);
         return true;
     }
 

@@ -1,5 +1,4 @@
-using System.Globalization;
-
+using Pek;
 using Pek.Extension;
 
 namespace Pek.Data;
@@ -34,15 +33,8 @@ public class GeoPoint
         var parts = location.Split(',');
         if (parts.Length < 2) return;
 
-        if (Double.TryParse(parts[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var longitude))
-            Longitude = longitude;
-        else if (Double.TryParse(parts[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out longitude))
-            Longitude = longitude;
-
-        if (Double.TryParse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var latitude))
-            Latitude = latitude;
-        else if (Double.TryParse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out latitude))
-            Latitude = latitude;
+        Longitude = parts[0].ToDouble();
+        Latitude = parts[1].ToDouble();
     }
 
     /// <summary>返回文本表示</summary>
