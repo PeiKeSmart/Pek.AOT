@@ -160,6 +160,9 @@ public static class XTrace
                 ? new LevelLog(setting.LogPath, setting.LogFileFormat) { Level = setting.LogLevel }
                 : TextFileLog.Create(setting.LogPath, setting.LogFileFormat);
 
+            if (!String.IsNullOrWhiteSpace(setting.NetworkLog))
+                _log = new CompositeLog(_log, new NetworkLog(setting.NetworkLog) { Level = setting.LogLevel });
+
             _log.Level = setting.LogLevel;
         }
     }
