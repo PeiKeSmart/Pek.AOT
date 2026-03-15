@@ -209,7 +209,7 @@ public partial class AppSettingJsonContext : JsonSerializerContext
 - `Pek.AOT/Configuration/README.md`
 - 根目录 `Readme.MD`
 - `Samples/TimerXSample`
-- `Samples/XXTraceSample`
+- `Samples/XTraceSample`
 
 文档内容必须与当前代码一致。若发现 README 仍引用旧 API（如旧注册方法名），应在本次改动中一并修正。
 

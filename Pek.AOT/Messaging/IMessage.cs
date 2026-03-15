@@ -1,4 +1,5 @@
 using Pek.Data;
+using System.Collections.Concurrent;
 
 namespace Pek.Messaging;
 
@@ -34,6 +35,8 @@ public interface IMessage : IDisposable
 /// <summary>消息基类</summary>
 public class Message : IMessage
 {
+    private static readonly ConcurrentDictionary<Type, Func<Message>> _messageFactories = new();
+
     /// <summary>是否响应</summary>
     public Boolean Reply { get; set; }
 
@@ -75,13 +78,52 @@ public class Message : IMessage
         return message;
     }
 
+    /// <summary>注册消息工厂</summary>
+    /// <typeparam name="TMessage">消息类型</typeparam>
+    public static void Register<TMessage>() where TMessage : Message, new() => Register(() => new TMessage());
+
+    /// <summary>注册消息工厂</summary>
+    /// <typeparam name="TMessage">消息类型</typeparam>
+    /// <param name="factory">消息工厂</param>
+    public static void Register<TMessage>(Func<TMessage> factory) where TMessage : Message
+    {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+
+        _messageFactories[typeof(TMessage)] = () => factory();
+    }
+
+    /// <summary>注销消息工厂</summary>
+    /// <typeparam name="TMessage">消息类型</typeparam>
+    /// <returns>是否成功移除</returns>
+    public static Boolean Unregister<TMessage>() where TMessage : Message => _messageFactories.TryRemove(typeof(TMessage), out _);
+
+    /// <summary>尝试创建指定类型的消息实例</summary>
+    /// <param name="type">消息类型</param>
+    /// <param name="message">消息实例</param>
+    /// <returns>是否成功</returns>
+    protected static Boolean TryCreate(Type type, out Message? message)
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+
+        if (_messageFactories.TryGetValue(type, out var factory))
+        {
+            message = factory();
+            return true;
+        }
+
+        message = null;
+        return false;
+    }
+
     /// <summary>创建当前类型的新实例</summary>
     /// <returns>新的消息实例</returns>
     protected virtual Message CreateInstance()
     {
         if (GetType() == typeof(Message)) return new Message();
 
-        throw new NotSupportedException($"Type [{GetType().FullName}] must override CreateInstance() in AOT mode.");
+        if (TryCreate(GetType(), out var message) && message != null) return message;
+
+        throw new NotSupportedException($"Type [{GetType().FullName}] must override CreateInstance() or call Message.Register<TMessage>() in AOT mode.");
     }
 
     /// <summary>从数据包中读取消息</summary>
@@ -105,4 +147,11 @@ public class Message : IMessage
         OneWay = false;
         Payload = null;
     }
+}
+
+/// <summary>支持自动注册工厂的消息基类</summary>
+/// <typeparam name="TMessage">消息类型</typeparam>
+public abstract class Message<TMessage> : Message where TMessage : Message<TMessage>, new()
+{
+    static Message() => Register<TMessage>();
 }

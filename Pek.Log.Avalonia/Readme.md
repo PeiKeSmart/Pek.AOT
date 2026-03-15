@@ -19,7 +19,7 @@ using Pek.Log.Avalonia;
 var logs = new ObservableCollection<String>();
 var avaloniaLog = new AvaloniaCollectionLog(logs);
 
-XTrace.UseAvalonia(avaloniaLog);
+XTraceAvaloniaExtensions.UseAvalonia(avaloniaLog);
 XTrace.WriteLine("Avalonia log ready");
 ```
 
@@ -28,3 +28,4 @@ XTrace.WriteLine("Avalonia log ready");
 - 默认保留现有 XTrace.Log，并追加 Avalonia 输出
 - 如需仅输出到 Avalonia，可调用 `UseAvalonia(log, false)`
 - UI 层建议直接绑定 `ObservableCollection<String>`
+- 仓库样例见 `Samples/AvaloniaLogSample`

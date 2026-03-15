@@ -1,11 +1,11 @@
 using Pek;
 using Pek.Threading;
 
-using Pek.Logging;
+using Pek.Log;
 
 ThreadPoolX.Init();
-XXTrace.Log = new Pek.Logging.ConsoleLog { Level = Pek.Logging.LogLevel.Debug };
-TimerScheduler.Default.Log = Pek.Logging.Logger.Null;
+XTrace.Log = new ConsoleLog { Level = LogLevel.Debug };
+TimerScheduler.Default.Log = Logger.Null;
 
 Console.WriteLine("TimerX Sample");
 Console.WriteLine($"TickCount64: {Runtime.TickCount64}");

@@ -1,4 +1,4 @@
-﻿using Pek.Logging;
+﻿using Pek.Log;
 
 XTrace.UseConsole();
 

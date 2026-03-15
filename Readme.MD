@@ -41,6 +41,14 @@ XTraceAvaloniaExtensions.UseAvalonia(avaloniaLog);
 XTrace.WriteLine("Avalonia log ready");
 ```
 
+仓库内已提供可直接运行的桌面示例 `Samples/AvaloniaLogSample`，用于演示按钮日志、异常日志和后台定时日志如何同步投递到 Avalonia 列表。
+
+## 示例项目
+
+- `Samples/AvaloniaLogSample`：Avalonia UI 日志展示示例
+- `Samples/TimerXSample`：TimerX 调度与并发行为示例
+- `Samples/XTraceSample`：最小日志入口示例，代码已统一使用 `Pek.Log` / `XTrace`
+
 ## 配置示例
 
 ```csharp
