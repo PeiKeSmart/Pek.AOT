@@ -1,7 +1,8 @@
 <Solution>
   <Folder Name="/Samples/">
+    <Project Path="Samples/AvaloniaLogSample/AvaloniaLogSample.csproj" />
     <Project Path="Samples/TimerXSample/TimerXSample.csproj" />
-    <Project Path="Samples/XXTraceSample/XXTraceSample.csproj" />
+    <Project Path="Samples/XTraceSample/XTraceSample.csproj" />
   </Folder>
   <Folder Name="/Extensions/">
     <Project Path="Pek.Log.Avalonia/Pek.Log.Avalonia.csproj" />
