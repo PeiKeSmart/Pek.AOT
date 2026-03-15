@@ -1,380 +1,997 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
-
+using Pek.Collections;
 using Pek.Extension;
 
 namespace Pek;
 
 /// <summary>工具类</summary>
+/// <remarks>
+/// 文档 https://newlifex.com/core/utility
+/// 
+/// 采用静态架构，允许外部重载工具类的各种实现<seealso cref="DefaultConvert"/>。
+/// 所有类型转换均支持默认值，默认值为该default(T)，在转换失败时返回默认值。
+/// </remarks>
 public static class Utility
 {
+    #region 类型转换
     /// <summary>类型转换提供者</summary>
-    public static DefaultConvert Convert { get; set; } = new();
+    /// <remarks>重载默认提供者<seealso cref="DefaultConvert"/>并赋值给<see cref="Convert"/>可改变所有类型转换的行为</remarks>
+    public static DefaultConvert Convert { get; set; } = new DefaultConvert();
+
+    /// <summary>转为整数，转换失败时返回默认值。支持字符串、全角、字节数组（小端）、时间（Unix秒不转UTC）</summary>
+    /// <remarks>Int16/UInt32/Int64等，可以先转为最常用的Int32后再二次处理</remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static Int32 ToInt(this Object? value, Int32 defaultValue = 0) => Convert.ToInt(value, defaultValue);
+
+    /// <summary>转为长整数，转换失败时返回默认值。支持字符串、全角、字节数组（小端）、时间（Unix毫秒不转UTC）</summary>
+    /// <remarks></remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static Int64 ToLong(this Object? value, Int64 defaultValue = 0) => Convert.ToLong(value, defaultValue);
+
+    /// <summary>转为浮点数，转换失败时返回默认值。支持字符串、全角、字节数组（小端）</summary>
+    /// <remarks>Single可以先转为最常用的Double后再二次处理</remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static Double ToDouble(this Object? value, Double defaultValue = 0) => Convert.ToDouble(value, defaultValue);
+
+    /// <summary>转为高精度浮点数，转换失败时返回默认值。支持字符串、全角、字节数组（小端）</summary>
+    /// <remarks>Single可以先转为最常用的Double后再二次处理</remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static Decimal ToDecimal(this Object? value, Decimal defaultValue = 0) => Convert.ToDecimal(value, defaultValue);
+
+    /// <summary>转为布尔型，转换失败时返回默认值。支持大小写True/False、0和非零</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static Boolean ToBoolean(this Object? value, Boolean defaultValue = false) => Convert.ToBoolean(value, defaultValue);
+
+    /// <summary>转为时间日期，转换失败时返回最小时间。支持字符串、整数（Unix秒不考虑UTC转本地）</summary>
+    /// <remarks>
+    /// 整数转时间日期时，取1970-01-01加上指定秒数，不考虑UTC时间和本地时间。
+    /// 长整数转时间日期时，取1970-01-01加上指定毫秒数，不考虑UTC时间和本地时间。
+    /// 在网络中传输时间日期时，特别是物联网设备到云平台的通信，一般取客户端本地UTC时间，转为长整型传输，服务端再转为本地时间。
+    /// 因为设备和服务端可能不在同一时区，甚至多个设备也没有处于同一个时区。
+    /// </remarks>
+    /// <param name="value">待转换对象</param>
+    /// <returns></returns>
+    public static DateTime ToDateTime(this Object? value) => Convert.ToDateTime(value, DateTime.MinValue);
+
+    /// <summary>转为时间日期，转换失败时返回默认值。支持字符串、整数（Unix秒不考虑UTC转本地）</summary>
+    /// <remarks>
+    /// 整数转时间日期时，取1970-01-01加上指定秒数，不考虑UTC时间和本地时间。
+    /// 长整数转时间日期时，取1970-01-01加上指定毫秒数，不考虑UTC时间和本地时间。
+    /// 在网络中传输时间日期时，特别是物联网设备到云平台的通信，一般取客户端本地UTC时间，转为长整型传输，服务端再转为本地时间。
+    /// 因为设备和服务端可能不在同一时区，甚至多个设备也没有处于同一个时区。
+    /// 
+    /// <see cref="DateTime.MinValue"/>不是常量无法做默认值。
+    /// </remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static DateTime ToDateTime(this Object? value, DateTime defaultValue) => Convert.ToDateTime(value, defaultValue);
+
+    /// <summary>转为时间日期，转换失败时返回最小时间。支持字符串、整数（Unix秒）</summary>
+    /// <param name="value">待转换对象</param>
+    /// <returns></returns>
+    public static DateTimeOffset ToDateTimeOffset(this Object? value) => Convert.ToDateTimeOffset(value, DateTimeOffset.MinValue);
+
+    /// <summary>转为时间日期，转换失败时返回默认值</summary>
+    /// <remarks><see cref="DateTimeOffset.MinValue"/>不是常量无法做默认值</remarks>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public static DateTimeOffset ToDateTimeOffset(this Object? value, DateTimeOffset defaultValue) => Convert.ToDateTimeOffset(value, defaultValue);
+
+    /// <summary>去掉时间日期指定位置后面部分，可指定毫秒ms、秒s、分m、小时h、微秒us、纳秒ns</summary>
+    /// <param name="value">时间日期</param>
+    /// <param name="format">格式字符串，默认s格式化到秒，ms格式化到毫秒</param>
+    /// <returns></returns>
+    public static DateTime Trim(this DateTime value, String format = "s") => Convert.Trim(value, format);
+
+    /// <summary>去掉时间日期指定位置后面部分，可指定毫秒ms、秒s、分m、小时h、纳秒ns</summary>
+    /// <param name="value">时间日期</param>
+    /// <param name="format">格式字符串，默认s格式化到秒，ms格式化到毫秒</param>
+    /// <returns></returns>
+    public static DateTimeOffset Trim(this DateTimeOffset value, String format = "s") => new(Convert.Trim(value.DateTime, format), value.Offset);
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>
+    /// <remarks>最常用的时间日期格式，可以无视各平台以及系统自定义的时间格式</remarks>
     /// <param name="value">待转换对象</param>
-    /// <returns>完整字符串</returns>
+    /// <returns></returns>
     public static String ToFullString(this DateTime value) => Convert.ToFullString(value, false);
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串，支持指定最小时间的字符串</summary>
+    /// <remarks>最常用的时间日期格式，可以无视各平台以及系统自定义的时间格式</remarks>
     /// <param name="value">待转换对象</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时（DateTime.MinValue）显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public static String ToFullString(this DateTime value, String? emptyValue = null) => Convert.ToFullString(value, false, emptyValue);
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss.fff完整字符串，支持指定最小时间的字符串</summary>
+    /// <remarks>最常用的时间日期格式，可以无视各平台以及系统自定义的时间格式</remarks>
     /// <param name="value">待转换对象</param>
     /// <param name="useMillisecond">是否使用毫秒</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时（DateTime.MinValue）显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public static String ToFullString(this DateTime value, Boolean useMillisecond, String? emptyValue = null) => Convert.ToFullString(value, useMillisecond, emptyValue);
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss +08:00完整字符串，支持指定最小时间的字符串</summary>
+    /// <remarks>最常用的时间日期格式，可以无视各平台以及系统自定义的时间格式</remarks>
     /// <param name="value">待转换对象</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时（DateTimeOffset.MinValue）显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public static String ToFullString(this DateTimeOffset value, String? emptyValue = null) => Convert.ToFullString(value, false, emptyValue);
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss.fff +08:00完整字符串，支持指定最小时间的字符串</summary>
+    /// <remarks>最常用的时间日期格式，可以无视各平台以及系统自定义的时间格式</remarks>
     /// <param name="value">待转换对象</param>
     /// <param name="useMillisecond">是否使用毫秒</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时（DateTimeOffset.MinValue）显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public static String ToFullString(this DateTimeOffset value, Boolean useMillisecond, String? emptyValue = null) => Convert.ToFullString(value, useMillisecond, emptyValue);
 
-    /// <summary>转为整数，转换失败时返回默认值</summary>
-    public static Int32 ToInt(this Object? value, Int32 defaultValue = 0) => Convert.ToInt(value, defaultValue);
+    /// <summary>时间日期转为指定格式字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="format">格式化字符串</param>
+    /// <param name="emptyValue">字符串空值时显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
+    public static String ToString(this DateTime value, String format, String emptyValue) => Convert.ToString(value, format, emptyValue);
 
-    /// <summary>转为浮点数，转换失败时返回默认值</summary>
-    public static Double ToDouble(this Object? value, Double defaultValue = 0) => Convert.ToDouble(value, defaultValue);
+    /// <summary>字节单位字符串</summary>
+    /// <param name="value">数值</param>
+    /// <param name="format">格式化字符串</param>
+    /// <returns></returns>
+    public static String ToGMK(this UInt64 value, String? format = null) => Convert.ToGMK(value, format);
 
-    /// <summary>转为布尔型，转换失败时返回默认值</summary>
-    public static Boolean ToBoolean(this Object? value, Boolean defaultValue = false) => Convert.ToBoolean(value, defaultValue);
+    /// <summary>字节单位字符串</summary>
+    /// <param name="value">数值</param>
+    /// <param name="format">格式化字符串</param>
+    /// <returns></returns>
+    public static String ToGMK(this Int64 value, String? format = null) => value < 0 ? "-" + Convert.ToGMK((UInt64)(-value), format) : Convert.ToGMK((UInt64)value, format);
+    #endregion
 
-    /// <summary>转为时间日期，转换失败时返回最小时间</summary>
-    public static DateTime ToDateTime(this Object? value) => Convert.ToDateTime(value, DateTime.MinValue);
-
-    /// <summary>转为时间日期，转换失败时返回默认值</summary>
-    public static DateTime ToDateTime(this Object? value, DateTime defaultValue) => Convert.ToDateTime(value, defaultValue);
-
+    #region 异常处理
     /// <summary>获取内部真实异常</summary>
-    /// <param name="ex">异常</param>
-    /// <returns>真实异常</returns>
+    /// <param name="ex"></param>
+    /// <returns></returns>
     public static Exception GetTrue(this Exception ex) => Convert.GetTrue(ex);
+
+    /// <summary>获取异常消息</summary>
+    /// <param name="ex">异常</param>
+    /// <returns></returns>
+    public static String GetMessage(this Exception ex) => Convert.GetMessage(ex);
+    #endregion
 }
 
-/// <summary>默认转换器</summary>
+/// <summary>默认转换</summary>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
 public class DefaultConvert
 {
     private static readonly DateTime _dt1970 = new(1970, 1, 1);
+    private static readonly DateTimeOffset _dto1970 = new(new DateTime(1970, 1, 1), TimeSpan.Zero);
+    private static readonly Int64 _maxSeconds = (Int64)(DateTime.MaxValue - DateTime.MinValue).TotalSeconds;
+    private static readonly Int64 _maxMilliseconds = (Int64)(DateTime.MaxValue - DateTime.MinValue).TotalMilliseconds;
 
-    /// <summary>转为整数，转换失败时返回默认值</summary>
+    /// <summary>
+    /// 解包表单/查询字符串提交的多值列表，仅返回第一个非空字符串；否则返回原始对象。
+    /// </summary>
+    /// <param name="value">原始对象或字符串列表</param>
+    /// <returns>首个非空字符串或原始对象</returns>
+    private static Object? UnwrapStringList(Object? value)
+    {
+        if (value is IList<String> list)
+        {
+            if (list.Count == 0) return null;
+            return list.FirstOrDefault(e => !e.IsNullOrEmpty());
+        }
+        return value;
+    }
+
+    /// <summary>转为整数，转换失败时返回默认值。支持字符串、全角、字节数组（小端）、时间（Unix秒）</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
     public virtual Int32 ToInt(Object? value, Int32 defaultValue)
     {
-        if (value is Int32 n) return n;
+        if (value is Int32 num) return num;
         if (value == null || value == DBNull.Value) return defaultValue;
 
-        if (value is Byte[] buffer)
-        {
-            if (buffer.Length >= 4) return BitConverter.ToInt32(buffer, 0);
-            if (buffer.Length > 0)
-            {
-                Span<Byte> temp = stackalloc Byte[4];
-                buffer.AsSpan().CopyTo(temp);
-                return BitConverter.ToInt32(temp);
-            }
-            return defaultValue;
-        }
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
 
-        if (value is ReadOnlyMemory<Byte> memory)
-            return ToInt(memory.ToArray(), defaultValue);
-
+        // 特殊处理字符串，也是最常见的
         if (value is String str)
         {
-            if (str.Length == 0) return defaultValue;
-            if (Int32.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out n)) return n;
-            if (Int32.TryParse(str, NumberStyles.Integer, CultureInfo.CurrentCulture, out n)) return n;
-            if (Double.TryParse(str, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var d1)) return (Int32)d1;
-            if (Double.TryParse(str, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var d2)) return (Int32)d2;
+            if (Int32.TryParse(str, out var n)) return n;
 
-            return defaultValue;
+            // 拷贝而来的逗号分隔整数
+            Span<Char> tmp = stackalloc Char[str.Length];
+            var rs = TrimNumber(str.AsSpan(), tmp);
+            if (rs == 0) return defaultValue;
+
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+            return Int32.TryParse(tmp[..rs], NumberStyles.Integer, CultureInfo.InvariantCulture, out n) ? n : defaultValue;
+#else
+            return Int32.TryParse(tmp[..rs].ToString(), out n) ? n : defaultValue;
+#endif
         }
 
-        if (value is Boolean b) return b ? 1 : 0;
+        // 特殊处理时间，转Unix秒
+#if NET6_0_OR_GREATER
+        if (value is DateOnly date) value = date.ToDateTime(TimeOnly.MinValue);
+#endif
         if (value is DateTime dt)
         {
-            var seconds = (dt - _dt1970).TotalSeconds;
-            return seconds >= Int32.MaxValue ? Int32.MaxValue : seconds <= Int32.MinValue ? Int32.MinValue : (Int32)seconds;
+            if (dt == DateTime.MinValue) return 0;
+            if (dt == DateTime.MaxValue) return -1;
+
+            //// 先转UTC时间再相减，以得到绝对时间差
+            //return (Int32)(dt.ToUniversalTime() - _dt1970).TotalSeconds;
+            // 保存时间日期由Int32改为UInt32，原截止2038年的范围扩大到2106年
+            var n = (dt - _dt1970).TotalSeconds;
+            return n >= Int32.MaxValue ? throw new InvalidDataException("Time too long, value exceeds Int32.MaxValue") : (Int32)n;
+        }
+        if (value is DateTimeOffset dto)
+        {
+            if (dto == DateTimeOffset.MinValue) return 0;
+
+            //return (Int32)(dto - _dto1970).TotalSeconds;
+            var n = (dto - _dto1970).TotalSeconds;
+            return n >= Int32.MaxValue ? throw new InvalidDataException("Time too long, value exceeds Int32.MaxValue") : (Int32)n;
+        }
+
+        if (value is Byte[] buf)
+        {
+            if (buf.Length == 0) return defaultValue;
+
+            switch (buf.Length)
+            {
+                case 1: return buf[0];
+                case 2: return BitConverter.ToInt16(buf, 0);
+                case 3: return buf[0] | (buf[1] << 8) | (buf[2] << 16);
+                case 4: return BitConverter.ToInt32(buf, 0);
+            }
         }
 
         try
         {
-            return System.Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToInt32(null);
+
+            //return Convert.ToInt32(value);
         }
-        catch
-        {
-            try
-            {
-                return System.Convert.ToInt32(value, CultureInfo.CurrentCulture);
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        var str2 = value.ToString();
+        return !str2.IsNullOrEmpty() && Int32.TryParse(str2.Trim(), out var n2) ? n2 : defaultValue;
     }
 
-    /// <summary>转为浮点数，转换失败时返回默认值</summary>
+    /// <summary>转为长整数。支持字符串、全角、字节数组（小端）、时间（Unix毫秒）</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public virtual Int64 ToLong(Object? value, Int64 defaultValue)
+    {
+        if (value is Int64 num) return num;
+        if (value == null || value == DBNull.Value) return defaultValue;
+
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
+
+        // 特殊处理字符串，也是最常见的
+        if (value is String str)
+        {
+            if (Int64.TryParse(str, out var n)) return n;
+
+            // 拷贝而来的逗号分隔整数
+            Span<Char> tmp = stackalloc Char[str.Length];
+            var rs = TrimNumber(str.AsSpan(), tmp);
+            if (rs == 0) return defaultValue;
+
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+            return Int64.TryParse(tmp[..rs], NumberStyles.Integer, CultureInfo.InvariantCulture, out n) ? n : defaultValue;
+#else
+            return Int64.TryParse(new String(tmp[..rs].ToArray()), out n) ? n : defaultValue;
+#endif
+        }
+
+        // 特殊处理时间，转Unix毫秒
+#if NET6_0_OR_GREATER
+        if (value is DateOnly date) value = date.ToDateTime(TimeOnly.MinValue);
+#endif
+        if (value is DateTime dt)
+        {
+            if (dt == DateTime.MinValue) return 0;
+
+            //// 先转UTC时间再相减，以得到绝对时间差
+            //return (Int32)(dt.ToUniversalTime() - _dt1970).TotalSeconds;
+            return (Int64)(dt - _dt1970).TotalMilliseconds;
+        }
+        if (value is DateTimeOffset dto)
+        {
+            return dto == DateTimeOffset.MinValue ? 0 : (Int64)(dto - _dto1970).TotalMilliseconds;
+        }
+
+        if (value is Byte[] buf)
+        {
+            if (buf.Length == 0) return defaultValue;
+            switch (buf.Length)
+            {
+                case 1: return buf[0];
+                case 2: return BitConverter.ToInt16(buf, 0);
+                case 3: return buf[0] | (buf[1] << 8) | (buf[2] << 16);
+                case 4: return BitConverter.ToInt32(buf, 0);
+                case 8: return BitConverter.ToInt64(buf, 0);
+            }
+        }
+
+        try
+        {
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToInt64(null);
+
+            //return Convert.ToInt64(value);
+        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        var str2 = value.ToString();
+        return !str2.IsNullOrEmpty() && Int64.TryParse(str2.Trim(), out var n2) ? n2 : defaultValue;
+    }
+
+    /// <summary>转为浮点数</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
     public virtual Double ToDouble(Object? value, Double defaultValue)
     {
-        if (value is Double n) return n;
+        if (value is Double num) return Double.IsNaN(num) ? defaultValue : num;
         if (value == null || value == DBNull.Value) return defaultValue;
 
-        if (value is Byte[] buffer)
-        {
-            if (buffer.Length >= 8) return BitConverter.ToDouble(buffer, 0);
-            if (buffer.Length > 0)
-            {
-                Span<Byte> temp = stackalloc Byte[8];
-                buffer.AsSpan().CopyTo(temp);
-                return BitConverter.ToDouble(temp);
-            }
-            return defaultValue;
-        }
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
 
-        if (value is ReadOnlyMemory<Byte> memory)
-            return ToDouble(memory.ToArray(), defaultValue);
-
+        // 特殊处理字符串，也是最常见的
         if (value is String str)
         {
-            if (str.Length == 0) return defaultValue;
-            if (Double.TryParse(str, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out n)) return n;
-            if (Double.TryParse(str, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out n)) return n;
-            return defaultValue;
+            if (Double.TryParse(str, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var n)) return n;
+
+            Span<Char> tmp = stackalloc Char[str.Length];
+            var rs = TrimNumber(str.AsSpan(), tmp);
+            if (rs == 0) return defaultValue;
+
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+            return Double.TryParse(tmp[..rs], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out n) ? n : defaultValue;
+#else
+            return Double.TryParse(new String(tmp[..rs].ToArray()), out n) ? n : defaultValue;
+#endif
+        }
+
+        // 字节数组（小端）转浮点：长度为 8 直接转换；长度 1/2/4/5/6/7 采用补零到 8 字节再转换。
+        if (value is Byte[] buf)
+        {
+            if (buf.Length == 0) return defaultValue;
+            if (buf.Length >= 8) return BitConverter.ToDouble(buf, 0);
+
+            // 兼容不足 8 字节的场景（例如来自网络/存储的裁剪值），按小端补零
+            var tmp8 = Pool.Shared.Rent(8);
+            try
+            {
+                Array.Clear(tmp8, 0, 8);
+                Buffer.BlockCopy(buf, 0, tmp8, 0, buf.Length);
+                return BitConverter.ToDouble(tmp8, 0);
+            }
+            finally
+            {
+                Pool.Shared.Return(tmp8);
+            }
         }
 
         try
         {
-            return System.Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToDouble(null);
+
+            //return Convert.ToDouble(value);
         }
-        catch
-        {
-            try
-            {
-                return System.Convert.ToDouble(value, CultureInfo.CurrentCulture);
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        var str2 = value.ToString();
+        return !str2.IsNullOrEmpty() && Double.TryParse(str2.Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var n2) ? n2 : defaultValue;
     }
 
-    /// <summary>转为布尔型，转换失败时返回默认值</summary>
+    /// <summary>转为高精度浮点数</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public virtual Decimal ToDecimal(Object? value, Decimal defaultValue)
+    {
+        if (value is Decimal num) return num;
+        if (value == null || value == DBNull.Value) return defaultValue;
+
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
+
+        // 特殊处理字符串，也是最常见的
+        if (value is String str)
+        {
+            if (Decimal.TryParse(str, NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var n)) return n;
+
+            Span<Char> tmp = stackalloc Char[str.Length];
+            var rs = TrimNumber(str.AsSpan(), tmp);
+            if (rs == 0) return defaultValue;
+
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+            return Decimal.TryParse(tmp[..rs], NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out n) ? n : defaultValue;
+#else
+            return Decimal.TryParse(new String(tmp[..rs].ToArray()), out n) ? n : defaultValue;
+#endif
+        }
+
+        if (value is Byte[] buf)
+        {
+            if (buf.Length == 0) return defaultValue;
+            switch (buf.Length)
+            {
+                case 1: return buf[0];
+                case 2: return BitConverter.ToInt16(buf, 0);
+                case 3: return buf[0] | (buf[1] << 8) | (buf[2] << 16);
+                case 4: return BitConverter.ToInt32(buf, 0);
+                case 16:
+                    {
+                        // 按 Decimal 内部 4*Int32 bits 构造（lo, mid, hi, flags）。仅在 flags 合法时采纳，否则回退。
+                        var lo = BitConverter.ToInt32(buf, 0);
+                        var mid = BitConverter.ToInt32(buf, 4);
+                        var hi = BitConverter.ToInt32(buf, 8);
+                        var flags = BitConverter.ToInt32(buf, 12);
+                        var scale = (flags >> 16) & 0xFF;
+                        var reserved = flags & 0x7F00FFFF; // 除去符号位与比例位，其余应为0
+                        if (scale <= 28 && reserved == 0)
+                        {
+                            try { return new Decimal([lo, mid, hi, flags]); } catch { /* fallthrough */ }
+                        }
+                        // 非法 flags，回退为 Double 解析
+                        goto default;
+                    }
+                default:
+                    // 凑够8字节，使用 Double 近似解析
+                    if (buf.Length < 8)
+                    {
+                        var bts = Pool.Shared.Rent(8);
+                        Buffer.BlockCopy(buf, 0, bts, 0, buf.Length);
+                        var dec = BitConverter.ToDouble(bts, 0).ToDecimal();
+                        Pool.Shared.Return(bts);
+                        return dec;
+                    }
+                    return BitConverter.ToDouble(buf, 0).ToDecimal();
+            }
+        }
+
+        if (value is Double d) return Double.IsNaN(d) ? defaultValue : (Decimal)d;
+
+        try
+        {
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToDecimal(null);
+
+            //return Convert.ToDecimal(value);
+        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        var str2 = value.ToString();
+        return !str2.IsNullOrEmpty() && Decimal.TryParse(str2.Trim(), NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var n2) ? n2 : defaultValue;
+    }
+
+    /// <summary>转为布尔型。支持大小写True/False、0和非零</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
     public virtual Boolean ToBoolean(Object? value, Boolean defaultValue)
     {
-        if (value is Boolean b) return b;
+        if (value is Boolean num) return num;
         if (value == null || value == DBNull.Value) return defaultValue;
 
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
+
+        // 特殊处理字符串，也是最常见的
         if (value is String str)
         {
-            if (str.IsNullOrWhiteSpace()) return defaultValue;
-            if (Boolean.TryParse(str, out b)) return b;
-            if (Int32.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) return n != 0;
-            if (str.EqualIgnoreCase("y", "yes", "on", "true")) return true;
-            if (str.EqualIgnoreCase("n", "no", "off", "false")) return false;
-            return defaultValue;
+            str = str.Trim();
+            if (str.IsNullOrEmpty()) return defaultValue;
+
+            if (Boolean.TryParse(str, out var b)) return b;
+
+            if (String.Equals(str, Boolean.TrueString, StringComparison.OrdinalIgnoreCase)) return true;
+            if (String.Equals(str, Boolean.FalseString, StringComparison.OrdinalIgnoreCase)) return false;
+
+            // 常见配置值同义词
+            return str.ToLowerInvariant() switch
+            {
+                "y" or "yes" or "on" or "enable" or "enabled" => true,
+                "n" or "no" or "off" or "disable" or "disabled" => false,
+                _ => Int32.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n != 0 : defaultValue,
+            };
         }
 
         try
         {
-            return System.Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToBoolean(null);
+
+            //return Convert.ToBoolean(value);
         }
-        catch
-        {
-            return defaultValue;
-        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        var str2 = value.ToString();
+        return !str2.IsNullOrEmpty() && Boolean.TryParse(str2.Trim(), out var n2) ? n2 : defaultValue;
     }
 
-    /// <summary>转为时间日期，转换失败时返回默认值</summary>
+    /// <summary>转为时间日期，转换失败时返回最小时间。支持字符串、整数（Unix秒）</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    /// <remarks>
+    /// 整数（Unix秒）转换后不包含时区信息，需要调用.ToLocalTime()来转换为当前时区时间
+    /// </remarks>
     public virtual DateTime ToDateTime(Object? value, DateTime defaultValue)
     {
-        if (value is DateTime dt) return dt;
+        if (value is DateTime num) return num;
         if (value == null || value == DBNull.Value) return defaultValue;
 
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
+
+        // 特殊处理字符串，也是最常见的
         if (value is String str)
         {
-            if (str.IsNullOrWhiteSpace()) return defaultValue;
-            if (DateTime.TryParse(str, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out dt)) return dt;
-            if (DateTime.TryParse(str, CultureInfo.CurrentCulture, DateTimeStyles.RoundtripKind, out dt)) return dt;
-            if (Int64.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
-                return n > 10_000_000_000L ? _dt1970.AddMilliseconds(n) : _dt1970.AddSeconds(n);
+            str = str.Trim();
+            if (str.IsNullOrEmpty()) return defaultValue;
 
-            return defaultValue;
+            // 处理UTC
+            var utc = false;
+            if (str.EndsWithIgnoreCase(" UTC"))
+            {
+                utc = true;
+                str = str[0..^4];
+            }
+            else if (str.EndsWith("Z"))
+            {
+                utc = true;
+                str = str[0..^1];
+            }
+
+            if (!DateTime.TryParse(str, out var dt) &&
+                !(str.Contains('-') && DateTime.TryParseExact(str, "yyyy-M-d", null, DateTimeStyles.None, out dt)) &&
+                !(str.Contains('/') && DateTime.TryParseExact(str, "yyyy/M/d", null, DateTimeStyles.None, out dt)) &&
+                !DateTime.TryParseExact(str, "yyyyMMddHHmmss", null, DateTimeStyles.None, out dt) &&
+                !DateTime.TryParseExact(str, "yyyyMMdd", null, DateTimeStyles.None, out dt) &&
+                !DateTime.TryParse(str, out dt))
+            {
+                dt = defaultValue;
+            }
+
+            // 处理UTC
+            if (utc) dt = new DateTime(dt.Ticks, DateTimeKind.Utc);
+
+            return dt;
         }
 
-        if (value is Int64 longValue) return longValue > 10_000_000_000L ? _dt1970.AddMilliseconds(longValue) : _dt1970.AddSeconds(longValue);
-        if (value is Int32 intValue) return _dt1970.AddSeconds(intValue);
+        // 特殊处理整数，Unix秒，绝对时间差，不考虑UTC时间和本地时间。
+        if (value is Int32 k)
+        {
+            return k >= _maxSeconds || k <= -_maxSeconds ? defaultValue : _dt1970.AddSeconds(k);
+        }
+        if (value is Int64 m)
+        {
+            return m >= _maxMilliseconds || m <= -_maxMilliseconds
+                ? defaultValue
+                : m > 100 * 365 * 24 * 3600L ? _dt1970.AddMilliseconds(m) : _dt1970.AddSeconds(m);
+        }
 
         try
         {
-            return System.Convert.ToDateTime(value, CultureInfo.InvariantCulture);
+            // 转换接口
+            if (value is IConvertible conv) return conv.ToDateTime(null);
+
+            //return Convert.ToDateTime(value);
+        }
+        catch { }
+
+        // 转字符串再转整数，作为兜底方案
+        return ToDateTime(value.ToString(), defaultValue);
+    }
+
+    /// <summary>转为时间日期，转换失败时返回最小时间。支持字符串、整数（Unix秒）</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="defaultValue">默认值。待转换对象无效时使用</param>
+    /// <returns></returns>
+    public virtual DateTimeOffset ToDateTimeOffset(Object? value, DateTimeOffset defaultValue)
+    {
+        if (value is DateTimeOffset num) return num;
+        if (value == null || value == DBNull.Value) return defaultValue;
+
+#if NET6_0_OR_GREATER
+        if (value is DateOnly date) value = date.ToDateTime(TimeOnly.MinValue);
+#endif
+        if (value is DateTime dateTime) return dateTime;
+
+        // 支持表单提交的StringValues
+        value = UnwrapStringList(value);
+        if (value == null) return defaultValue;
+
+        // 特殊处理字符串，也是最常见的
+        if (value is String str)
+        {
+            str = str.Trim();
+            if (str.IsNullOrEmpty()) return defaultValue;
+
+            if (DateTimeOffset.TryParse(str, out var dt)) return dt;
+            return str.Contains('-') && DateTimeOffset.TryParseExact(str, "yyyy-M-d", null, DateTimeStyles.None, out dt) ? dt :
+                   str.Contains('/') && DateTimeOffset.TryParseExact(str, "yyyy/M/d", null, DateTimeStyles.None, out dt) ? dt :
+                   DateTimeOffset.TryParseExact(str, "yyyyMMddHHmmss", null, DateTimeStyles.None, out dt) ? dt :
+                   DateTimeOffset.TryParseExact(str, "yyyyMMdd", null, DateTimeStyles.None, out dt) ? dt : defaultValue;
+        }
+
+        // 特殊处理整数，Unix秒，绝对时间差，不考虑UTC时间和本地时间。
+        if (value is Int32 k)
+        {
+            return k >= _maxSeconds || k <= -_maxSeconds ? defaultValue : _dto1970.AddSeconds(k);
+        }
+        if (value is Int64 m)
+        {
+            return m >= _maxMilliseconds || m <= -_maxMilliseconds
+                ? defaultValue
+                : m > 100 * 365 * 24 * 3600L ? _dto1970.AddMilliseconds(m) : _dto1970.AddSeconds(m);
+        }
+
+        try
+        {
+            return Convert.ToDateTime(value);
         }
         catch
         {
-            try
-            {
-                return System.Convert.ToDateTime(value, CultureInfo.CurrentCulture);
-            }
-            catch
-            {
-                return defaultValue;
-            }
+            return defaultValue;
         }
     }
 
-    /// <summary>获取内部真实异常</summary>
-    /// <param name="ex">异常</param>
-    /// <returns>真实异常</returns>
-    public virtual Exception GetTrue(Exception ex)
+    /// <summary>清理整数字符串，去掉常见分隔符，替换全角数字为半角数字</summary>
+    /// <param name="input"></param>
+    /// <param name="output"></param>
+    /// <returns></returns>
+    private static Int32 TrimNumber(ReadOnlySpan<Char> input, Span<Char> output)
     {
-        if (ex is AggregateException aggregateException && aggregateException.InnerException != null)
-            return GetTrue(aggregateException.InnerException);
-        if (ex is TargetInvocationException targetInvocationException && targetInvocationException.InnerException != null)
-            return GetTrue(targetInvocationException.InnerException);
-        if (ex is TypeInitializationException typeInitializationException && typeInitializationException.InnerException != null)
-            return GetTrue(typeInitializationException.InnerException);
+        var idx = 0;
+        for (var i = 0; i < input.Length; i++)
+        {
+            // 去掉逗号分隔符
+            var ch = input[i];
+            if (ch == 0x3000)
+                ch = (Char)0x20; // 全角空格
+            else if (ch is > (Char)0xFF00 and < (Char)0xFF5F)
+                ch = (Char)(input[i] - 0xFEE0);
+            if (ch == ',' || ch == '_' || ch == ' ') continue;
 
-        return ex;
+            // 支持前缀正号。Redis响应中就会返回带正号的整数
+            if (ch == '+')
+            {
+                if (idx == 0) continue;
+                return 0;
+            }
+
+            // 支持负数
+            if (ch == '-' && idx > 0) return 0;
+
+            // 数字和小数点 以外字符，认为非数字
+            if (ch is '.' or '-' or not < '0' and not > '9')
+                output[idx++] = ch;
+            else
+            {
+                // 支持科学计数法：e/E 后可选正负号，之后至少跟一个数字
+                if (ch is 'e' or 'E' && idx > 0)
+                {
+                    output[idx++] = ch;
+                    if (i + 1 < input.Length && (input[i + 1] is '+' or '-'))
+                    {
+                        output[idx++] = input[++i];
+                    }
+                    continue;
+                }
+                else
+                    return 0;
+            }
+        }
+
+        return idx;
+    }
+
+    /// <summary>去掉时间日期指定位置后面部分，可指定毫秒ms、秒s、分m、小时h、微秒us、纳秒ns</summary>
+    /// <param name="value">时间日期</param>
+    /// <param name="format">格式字符串，默认s格式化到秒，ms格式化到毫秒</param>
+    /// <returns></returns>
+    public virtual DateTime Trim(DateTime value, String format)
+    {
+        // 统一使用 ticks 粒度裁剪，更高效且避免构造函数校验/进位误差
+        var step = format switch
+        {
+            "ms" => TimeSpan.TicksPerMillisecond,
+            "s" => TimeSpan.TicksPerSecond,
+            "m" => TimeSpan.TicksPerMinute,
+            "h" => TimeSpan.TicksPerHour,
+            "us" => 10,                 // 1 微秒 = 10 ticks
+            "ns" => 1,                  // 1 tick = 100ns，已是最小粒度
+            _ => 0,
+        };
+        if (step <= 0) return value;
+        var ticks = value.Ticks / step * step;
+        return new DateTime(ticks, value.Kind);
     }
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>
     /// <param name="value">待转换对象</param>
     /// <param name="useMillisecond">是否使用毫秒</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public virtual String ToFullString(DateTime value, Boolean useMillisecond, String? emptyValue = null)
     {
         if (emptyValue != null && value <= DateTime.MinValue) return emptyValue;
 
-        var chars = useMillisecond ? "yyyy-MM-dd HH:mm:ss.fff".ToCharArray() : "yyyy-MM-dd HH:mm:ss".ToCharArray();
+        //return value.ToString("yyyy-MM-dd HH:mm:ss");
 
-        var index = 0;
-        var year = value.Year;
-        chars[index++] = (Char)('0' + (year / 1000));
-        year %= 1000;
-        chars[index++] = (Char)('0' + (year / 100));
-        year %= 100;
-        chars[index++] = (Char)('0' + (year / 10));
-        year %= 10;
-        chars[index++] = (Char)('0' + year);
-        index++;
+        //var dt = value;
+        //var sb = new StringBuilder();
+        //sb.Append(dt.Year.ToString().PadLeft(4, '0'));
+        //sb.Append("-");
+        //sb.Append(dt.Month.ToString().PadLeft(2, '0'));
+        //sb.Append("-");
+        //sb.Append(dt.Day.ToString().PadLeft(2, '0'));
+        //sb.Append(" ");
 
-        var number = value.Month;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        //sb.Append(dt.Hour.ToString().PadLeft(2, '0'));
+        //sb.Append(":");
+        //sb.Append(dt.Minute.ToString().PadLeft(2, '0'));
+        //sb.Append(":");
+        //sb.Append(dt.Second.ToString().PadLeft(2, '0'));
 
-        number = value.Day;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        //return sb.ToString();
 
-        number = value.Hour;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        var cs = useMillisecond ?
+            "yyyy-MM-dd HH:mm:ss.fff".ToCharArray() :
+            "yyyy-MM-dd HH:mm:ss".ToCharArray();
 
-        number = value.Minute;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        var k = 0;
+        var y = value.Year;
+        cs[k++] = (Char)('0' + (y / 1000));
+        y %= 1000;
+        cs[k++] = (Char)('0' + (y / 100));
+        y %= 100;
+        cs[k++] = (Char)('0' + (y / 10));
+        y %= 10;
+        cs[k++] = (Char)('0' + y);
+        k++;
 
-        number = value.Second;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
+        var m = value.Month;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
+
+        m = value.Day;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
+
+        m = value.Hour;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
+
+        m = value.Minute;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
+
+        m = value.Second;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
 
         if (useMillisecond)
         {
-            index++;
-            number = value.Millisecond;
-            chars[index++] = (Char)('0' + (number / 100));
-            chars[index++] = (Char)('0' + (number % 100 / 10));
-            chars[index++] = (Char)('0' + (number % 10));
+            k++;
+            m = value.Millisecond;
+            cs[k++] = (Char)('0' + (m / 100));
+            cs[k++] = (Char)('0' + (m % 100 / 10));
+            cs[k++] = (Char)('0' + (m % 10));
         }
 
-        return new String(chars);
+        var str = new String(cs);
+
+        // 此格式不受其它工具识别只存不包含时区的格式
+        // 取出后，业务上存的是utc取出来再当utc即可
+        //if (value.Kind == DateTimeKind.Utc) str += " UTC";
+
+        return str;
     }
 
-    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss +08:00完整字符串</summary>
+    /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>
     /// <param name="value">待转换对象</param>
     /// <param name="useMillisecond">是否使用毫秒</param>
-    /// <param name="emptyValue">空值显示字符串</param>
-    /// <returns>完整字符串</returns>
+    /// <param name="emptyValue">字符串空值时显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
     public virtual String ToFullString(DateTimeOffset value, Boolean useMillisecond, String? emptyValue = null)
     {
         if (emptyValue != null && value <= DateTimeOffset.MinValue) return emptyValue;
 
-        var chars = useMillisecond ? "yyyy-MM-dd HH:mm:ss.fff +08:00".ToCharArray() : "yyyy-MM-dd HH:mm:ss +08:00".ToCharArray();
+        //var cs = "yyyy-MM-dd HH:mm:ss +08:00".ToCharArray();
+        var cs = useMillisecond ?
+            "yyyy-MM-dd HH:mm:ss.fff +08:00".ToCharArray() :
+            "yyyy-MM-dd HH:mm:ss +08:00".ToCharArray();
 
-        var index = 0;
-        var year = value.Year;
-        chars[index++] = (Char)('0' + (year / 1000));
-        year %= 1000;
-        chars[index++] = (Char)('0' + (year / 100));
-        year %= 100;
-        chars[index++] = (Char)('0' + (year / 10));
-        year %= 10;
-        chars[index++] = (Char)('0' + year);
-        index++;
+        var k = 0;
+        var y = value.Year;
+        cs[k++] = (Char)('0' + (y / 1000));
+        y %= 1000;
+        cs[k++] = (Char)('0' + (y / 100));
+        y %= 100;
+        cs[k++] = (Char)('0' + (y / 10));
+        y %= 10;
+        cs[k++] = (Char)('0' + y);
+        k++;
 
-        var number = value.Month;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        var m = value.Month;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
 
-        number = value.Day;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        m = value.Day;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
 
-        number = value.Hour;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        m = value.Hour;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
 
-        number = value.Minute;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        index++;
+        m = value.Minute;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
 
-        number = value.Second;
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
+        m = value.Second;
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
 
         if (useMillisecond)
         {
-            index++;
-            number = value.Millisecond;
-            chars[index++] = (Char)('0' + (number / 100));
-            chars[index++] = (Char)('0' + (number % 100 / 10));
-            chars[index++] = (Char)('0' + (number % 10));
+            m = value.Millisecond;
+            cs[k++] = (Char)('0' + (m / 100));
+            cs[k++] = (Char)('0' + (m % 100 / 10));
+            cs[k++] = (Char)('0' + (m % 10));
+            k++;
         }
 
-        index += useMillisecond ? 1 : 0;
+        // 时区
         var offset = value.Offset;
-        chars[index++] = ' ';
-        chars[index++] = offset >= TimeSpan.Zero ? '+' : '-';
-        number = Math.Abs(offset.Hours);
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
-        chars[index++] = ':';
-        number = Math.Abs(offset.Minutes);
-        chars[index++] = (Char)('0' + (number / 10));
-        chars[index++] = (Char)('0' + (number % 10));
+        cs[k++] = offset.TotalSeconds >= 0 ? '+' : '-';
+        m = Math.Abs(offset.Hours);
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
+        k++;
+        m = Math.Abs(offset.Minutes);
+        cs[k++] = (Char)('0' + (m / 10));
+        cs[k++] = (Char)('0' + (m % 10));
 
-        return new String(chars);
+        return new String(cs);
+    }
+
+    /// <summary>时间日期转为指定格式字符串</summary>
+    /// <param name="value">待转换对象</param>
+    /// <param name="format">格式化字符串</param>
+    /// <param name="emptyValue">字符串空值时显示的字符串，null表示原样显示最小时间，String.Empty表示不显示</param>
+    /// <returns></returns>
+    public virtual String ToString(DateTime value, String format, String emptyValue)
+    {
+        if (emptyValue != null && value <= DateTime.MinValue) return emptyValue;
+
+        return format.IsNullOrEmpty() || format == "yyyy-MM-dd HH:mm:ss"
+            ? ToFullString(value, false, emptyValue)
+            : value.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>获取内部真实异常</summary>
+    /// <param name="ex"></param>
+    /// <returns></returns>
+    public virtual Exception GetTrue(Exception ex)
+    {
+        return ex is AggregateException agg && agg.InnerException != null
+            ? GetTrue(agg.InnerException)
+            : ex is TargetInvocationException tie && tie.InnerException != null
+            ? GetTrue(tie.InnerException)
+            : ex is TypeInitializationException te && te.InnerException != null
+            ? GetTrue(te.InnerException)
+            : ex.GetBaseException()
+            ?? ex;
+    }
+
+    /// <summary>获取异常消息</summary>
+    /// <param name="ex">异常</param>
+    /// <returns></returns>
+    public virtual String GetMessage(Exception ex)
+    {
+        // 部分异常ToString可能报错，例如System.Data.SqlClient.SqlException
+        try
+        {
+            var msg = ex + "";
+            if (msg.IsNullOrEmpty()) return ex.Message;
+
+            var ss = msg.Split(Environment.NewLine);
+            var ns = ss.Where(e =>
+            !e.StartsWith("---") &&
+            !e.Contains("System.Runtime.ExceptionServices") &&
+            !e.Contains("System.Runtime.CompilerServices"));
+
+            msg = ns.Join(Environment.NewLine);
+
+            return msg;
+        }
+        catch
+        {
+            return ex.Message;
+        }
+    }
+
+    /// <summary>字节单位字符串</summary>
+    /// <param name="value">数值</param>
+    /// <param name="format">格式化字符串</param>
+    /// <returns></returns>
+    public virtual String ToGMK(UInt64 value, String? format = null)
+    {
+        if (value < 1024) return $"{value:n0}";
+
+        if (format.IsNullOrEmpty()) format = "n2";
+
+        var val = value / 1024d;
+        if (val < 1024) return val.ToString(format) + "K";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "M";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "G";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "T";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "P";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "E";
+
+        val /= 1024;
+        if (val < 1024) return val.ToString(format) + "Z";
+
+        val /= 1024;
+        return val.ToString(format) + "Y";
     }
 }

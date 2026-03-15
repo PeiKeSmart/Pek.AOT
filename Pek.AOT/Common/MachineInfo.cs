@@ -1,12 +1,23 @@
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Net.NetworkInformation;
+using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
-
+using System.Runtime.Versioning;
+using System.Security;
+using Microsoft.Win32;
+using Pek.Collections;
 using Pek.Data;
+using Pek.Extension;
+using Pek.Log;
+using Pek.Model;
 using Pek.Serialization;
+using Pek.Windows;
 
 namespace Pek;
 
 /// <summary>机器信息接口</summary>
+/// <remarks>用于扩展MachineInfo功能，具体应用自定义各字段获取方式</remarks>
 public interface IMachineInfo
 {
     /// <summary>初始化静态数据</summary>
@@ -19,181 +30,1429 @@ public interface IMachineInfo
 }
 
 /// <summary>机器信息</summary>
+/// <remarks>
+/// 文档 https://newlifex.com/core/machine_info
+/// 
+/// 刷新信息成本较高，建议采用单例模式
+/// </remarks>
 public class MachineInfo : IExtend
 {
-    private static readonly Lazy<MachineInfo> _current = new(CreateCurrent);
-    private readonly Dictionary<String, Object?> _items = [];
-
-    static MachineInfo() => JsonHelper.Register(MachineInfoJsonContext.Default.MachineInfo);
-
+    #region 属性
     /// <summary>系统名称</summary>
-    public String OSName { get; set; } = String.Empty;
+    [DisplayName("系统名称")]
+    public String? OSName { get; set; }
 
     /// <summary>系统版本</summary>
-    public String OSVersion { get; set; } = String.Empty;
+    [DisplayName("系统版本")]
+    public String? OSVersion { get; set; }
 
     /// <summary>产品名称</summary>
-    public String Product { get; set; } = String.Empty;
+    [DisplayName("产品名称")]
+    public String? Product { get; set; }
 
     /// <summary>制造商</summary>
-    public String Vendor { get; set; } = String.Empty;
+    [DisplayName("制造商")]
+    public String? Vendor { get; set; }
 
     /// <summary>处理器型号</summary>
-    public String Processor { get; set; } = String.Empty;
+    [DisplayName("处理器型号")]
+    public String? Processor { get; set; }
 
-    /// <summary>内存总量</summary>
+    ///// <summary>处理器序列号。PC处理器序列号绝大部分重复，实际存储处理器的其它信息</summary>
+    //public String CpuID { get; set; }
+
+    /// <summary>硬件唯一标识。取主板编码，部分品牌存在重复</summary>
+    [DisplayName("硬件唯一标识")]
+    public String? UUID { get; set; }
+
+    /// <summary>软件唯一标识。系统标识，操作系统重装后更新，Linux系统的machine_id，Android的android_id，Ghost系统存在重复</summary>
+    [DisplayName("软件唯一标识")]
+    public String? Guid { get; set; }
+
+    /// <summary>计算机序列号。适用于品牌机，跟笔记本标签显示一致</summary>
+    [DisplayName("计算机序列号")]
+    public String? Serial { get; set; }
+
+    /// <summary>主板。序列号或家族信息</summary>
+    [DisplayName("主板")]
+    public String? Board { get; set; }
+
+    /// <summary>磁盘序列号</summary>
+    [DisplayName("磁盘序列号")]
+    public String? DiskID { get; set; }
+
+    /// <summary>内存总量。单位Byte</summary>
+    [DisplayName("内存总量")]
     public UInt64 Memory { get; set; }
 
-    /// <summary>可用内存</summary>
+    /// <summary>可用内存。单位Byte</summary>
+    /// <remarks>
+    /// Linux：优先使用 /proc/meminfo 中的 MemAvailable，表示在不触发大量换页或 OOM 的前提下，
+    /// 内核评估仍可安全分配的内存，适合作为应用自我保护（限流/拒绝新任务）以及监控告警阈值的主要依据。
+    /// Windows：对应 GlobalMemoryStatusEx.ullAvailPhys，表示当前可用的物理内存。
+    /// </remarks>
+    [DisplayName("可用内存")]
     public UInt64 AvailableMemory { get; set; }
 
-    /// <summary>温度</summary>
+    /// <summary>空闲内存。单位Byte</summary>
+    /// <remarks>
+    /// Linux：采用 free 命令的宽松口径计算：MemFree + Buffers + Cached + SReclaimable - Shmem，
+    /// 表示当前看起来空闲或可快速回收的内存，适合用于监控展示和人工分析整体内存使用情况。
+    /// Windows：与 AvailableMemory 保持一致，均使用物理可用内存；进行安全可用性判断时应优先参考 AvailableMemory。
+    /// </remarks>
+    [DisplayName("空闲内存")]
+    public UInt64 FreeMemory { get; set; }
+
+    /// <summary>CPU占用率</summary>
+    [DisplayName("CPU占用率")]
+    public Double CpuRate { get; set; }
+
+    /// <summary>网络上行速度。字节每秒，初始化后首次读取为0</summary>
+    [DisplayName("网络上行速度")]
+    public UInt64 UplinkSpeed { get; set; }
+
+    /// <summary>网络下行速度。字节每秒，初始化后首次读取为0</summary>
+    [DisplayName("网络下行速度")]
+    public UInt64 DownlinkSpeed { get; set; }
+
+    /// <summary>温度。单位度</summary>
+    [DisplayName("温度")]
     public Double Temperature { get; set; }
 
-    /// <summary>当前机器信息</summary>
-    public static MachineInfo Current => _current.Value;
+    /// <summary>电池剩余。小于1的小数，常用百分比表示</summary>
+    [DisplayName("电池剩余")]
+    public Double Battery { get; set; }
 
-    /// <summary>机器信息提供者</summary>
+    private readonly Dictionary<String, Object?> _items = [];
+    IDictionary<String, Object?> IExtend.Items => _items;
+
+    /// <summary>获取 或 设置 扩展属性数据</summary>
+    /// <param name="key">属性键名</param>
+    /// <returns>属性值</returns>
+    public Object? this[String key] { get => _items.TryGetValue(key, out var obj) ? obj : null; set => _items[key] = value; }
+    #endregion
+
+    #region 全局静态
+    /// <summary>当前机器信息。默认null，在RegisterAsync后才能使用</summary>
+    public static MachineInfo? Current { get; set; }
+
+    /// <summary>机器信息提供者。外部实现可修改部分行为</summary>
     public static IMachineInfo? Provider { get; set; }
 
-    /// <summary>扩展数据项字典</summary>
-    public IDictionary<String, Object?> Items => _items;
+    //static MachineInfo() => RegisterAsync().Wait(100);
 
-    /// <summary>获取或设置扩展数据项</summary>
-    /// <param name="key">扩展数据键</param>
-    /// <returns>扩展值</returns>
-    public Object? this[String key]
+    private static Task<MachineInfo>? _task;
+    /// <summary>异步注册一个初始化后的机器信息实例</summary>
+    /// <returns>初始化后的机器信息实例</returns>
+    public static Task<MachineInfo> RegisterAsync()
     {
-        get => _items.TryGetValue(key, out var value) ? value : null;
-        set => _items[key] = value;
-    }
+        if (_task != null) return _task;
 
-    /// <summary>异步注册机器信息</summary>
-    /// <returns>机器信息</returns>
-    public static Task<MachineInfo> RegisterAsync() => Task.FromResult(Current);
-
-    /// <summary>获取当前机器信息</summary>
-    /// <returns>机器信息</returns>
-    public static MachineInfo GetCurrent() => Current;
-
-    /// <summary>获取 Linux 发行版名称</summary>
-    /// <returns>发行版描述</returns>
-    public static String GetLinuxName() => RuntimeInformation.OSDescription;
-
-    private static MachineInfo CreateCurrent()
-    {
-        var total = 0UL;
-        var available = 0UL;
-
-        TryGetMemory(out total, out available);
-
-        var info = new MachineInfo
+        return _task = Task.Factory.StartNew(() =>
         {
-            OSName = RuntimeInformation.OSDescription,
-            OSVersion = Environment.OSVersion.VersionString,
-            Processor = GetProcessorName(),
-            Memory = total,
-            AvailableMemory = available,
-            Product = Environment.MachineName,
-            Vendor = Environment.UserDomainName,
-        };
+            var set = Setting.Current;
+            var dataPath = set.DataPath;
+            if (dataPath.IsNullOrEmpty()) dataPath = "Data";
 
-        Provider?.Init(info);
-        Provider?.Refresh(info);
+            // 文件缓存，加快机器信息获取。在Linux下，可能StarAgent以root权限写入缓存文件，其它应用以普通用户访问
+            var file = Path.GetTempPath().CombinePath("machine_info.json");
+            var file2 = dataPath.CombinePath("machine_info.json").GetBasePath();
+            var json = "";
+            if (Current == null)
+            {
+                var f = file;
+                if (!File.Exists(f)) f = file2;
+                if (File.Exists(f))
+                {
+                    try
+                    {
+                        //XTrace.WriteLine("Load MachineInfo {0}", f);
+                        json = File.ReadAllText(f);
+                        Current = json.ToJsonEntity<MachineInfo>();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteException(ex);
+                    }
+                }
+            }
 
-        return info;
+            var mi = Current ?? new MachineInfo();
+
+            mi.Init();
+            Current = mi;
+
+            // 注册到对象容器
+            ObjectContainer.Current.AddSingleton(mi);
+
+            try
+            {
+                var json2 = mi.ToJson(true);
+                if (json != json2)
+                {
+                    File.WriteAllText(file2.EnsureDirectory(true), json2);
+                    File.WriteAllText(file.EnsureDirectory(true), json2);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteException(ex);
+            }
+
+            return mi;
+        }, TaskCreationOptions.LongRunning);
     }
 
-    private static void TryGetMemory(out UInt64 total, out UInt64 available)
+    /// <summary>获取当前信息，如果未设置则等待异步注册结果</summary>
+    /// <returns>当前机器信息实例</returns>
+    public static MachineInfo GetCurrent() => Current ?? RegisterAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+
+    /// <summary>从对象容器中获取一个已注册机器信息实例</summary>
+    /// <returns>机器信息实例</returns>
+    public static MachineInfo? Resolve() => ObjectContainer.Current.GetService<MachineInfo>();
+    #endregion
+
+    #region 方法
+    /// <summary>初始化静态数据。可能是实例化后执行，也可能是Json反序列化后执行</summary>
+    public void Init()
     {
-        total = 0;
-        available = 0;
+        var osv = Environment.OSVersion;
+        if (OSVersion.IsNullOrEmpty()) OSVersion = osv.Version + "";
+        if (OSName.IsNullOrEmpty()) OSName = (osv + "").TrimStart("Microsoft").TrimEnd(OSVersion).Trim();
+        if (Guid.IsNullOrEmpty()) Guid = "";
 
-        if (Runtime.Windows && TryGetWindowsMemory(out total, out available)) return;
-        if (Runtime.Linux && TryGetLinuxMemory(out total, out available)) return;
-
-        var gcInfo = GC.GetGCMemoryInfo();
-        total = gcInfo.TotalAvailableMemoryBytes > 0 ? (UInt64)gcInfo.TotalAvailableMemoryBytes : 0;
-        var used = GC.GetTotalMemory(false);
-        available = total > (UInt64)used ? total - (UInt64)used : 0;
-    }
-
-    private static Boolean TryGetWindowsMemory(out UInt64 total, out UInt64 available)
-    {
-        total = 0;
-        available = 0;
-
-        var memory = new MEMORYSTATUSEX();
-        memory.Init();
-        if (!GlobalMemoryStatusEx(ref memory)) return false;
-
-        total = memory.ullTotalPhys;
-        available = memory.ullAvailPhys;
-        return total > 0;
-    }
-
-    private static Boolean TryGetLinuxMemory(out UInt64 total, out UInt64 available)
-    {
-        total = 0;
-        available = 0;
-
-        const String fileName = "/proc/meminfo";
-        if (!File.Exists(fileName)) return false;
-
-        foreach (var line in File.ReadLines(fileName))
+        try
         {
-            if (line.StartsWith("MemTotal:", StringComparison.OrdinalIgnoreCase))
-                total = ParseLinuxMemory(line);
-            else if (line.StartsWith("MemAvailable:", StringComparison.OrdinalIgnoreCase))
-                available = ParseLinuxMemory(line);
+#if NET5_0_OR_GREATER
+            if (OperatingSystem.IsWindows())
+                LoadWindowsInfo();
+            else if (OperatingSystem.IsLinux())
+                LoadLinuxInfo();
+            else if (OperatingSystem.IsMacOS())
+                LoadMacInfo();
+#else
+            if (Runtime.Windows)
+                LoadWindowsInfo();
+            else if (Runtime.Linux)
+                LoadLinuxInfo();
+#endif
+
+            Provider?.Init(this);
+        }
+        catch (Exception ex)
+        {
+            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteException(ex);
         }
 
-        return total > 0;
+        // 裁剪不可见字符，顺带去掉两头空白
+        OSName = Clean(OSName);
+        OSVersion = Clean(OSVersion);
+        Product = Clean(Product);
+        Processor = Clean(Processor);
+        UUID = Clean(UUID);
+        Guid = Clean(Guid);
+        Serial = Clean(Serial);
+        Board = Clean(Board);
+        DiskID = Clean(DiskID);
+
+        // 无法读取系统标识时，随机生成一个guid，借助文件缓存确保其不变
+        if (Guid.IsNullOrEmpty()) Guid = "0-" + System.Guid.NewGuid().ToString();
+        if (UUID.IsNullOrEmpty()) UUID = "0-" + System.Guid.NewGuid().ToString();
+
+        try
+        {
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteException(ex);
+        }
     }
 
-    private static UInt64 ParseLinuxMemory(String line)
+    /// <summary>裁剪不可见字符并去除两端空白</summary>
+    private static String? Clean(String? value) => value.TrimInvisible()?.Trim();
+
+#if NET5_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
+    private void LoadWindowsInfo()
     {
-        var value = line[(line.IndexOf(':') + 1)..].Trim();
-        if (value.EndsWith("kB", StringComparison.OrdinalIgnoreCase))
-            value = value[..^2].Trim();
+        var str = "";
 
-        return UInt64.TryParse(value, out var size) ? size * 1024 : 0;
+        // 从注册表读取 MachineGuid
+#if NETFRAMEWORK || NET6_0_OR_GREATER
+        var reg = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+        if (reg != null) str = reg.GetValue("MachineGuid") + "";
+        if (str.IsNullOrEmpty())
+        {
+            reg = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            reg = reg?.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+            if (reg != null) str = reg.GetValue("MachineGuid") + "";
+        }
+
+        if (!str.IsNullOrEmpty()) Guid = str;
+
+        reg = Registry.LocalMachine.OpenSubKey(@"SYSTEM\HardwareConfig");
+        if (reg != null)
+        {
+            str = (reg.GetValue("LastConfig") + "")?.Trim('{', '}').ToUpper();
+
+            // UUID取不到时返回 FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF
+            if (!str.IsNullOrEmpty() && !str.EqualIgnoreCase("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")) UUID = str;
+        }
+
+        reg = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS");
+        reg ??= Registry.LocalMachine.OpenSubKey(@"SYSTEM\HardwareConfig\Current");
+        if (reg != null)
+        {
+            Product = (reg.GetValue("SystemProductName") + "").Replace("System Product Name", null);
+            if (Product.IsNullOrEmpty()) Product = reg.GetValue("BaseBoardProduct") + "";
+
+            Vendor = reg.GetValue("SystemManufacturer") + "";
+            if (Vendor.IsNullOrEmpty()) Vendor = reg.GetValue("ASUSTeK COMPUTER INC.") + "";
+        }
+
+        reg = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+        if (reg != null) Processor = reg.GetValue("ProcessorNameString") + "";
+
+        // 旧版系统（如win2008）没有UUID的注册表项，需要用wmic查询。也可能因为过去的某个BUG，导致GUID跟UUID相等
+        if (UUID.IsNullOrEmpty() || UUID == Guid || Vendor.IsNullOrEmpty())
+        {
+            var csproduct = ReadWmic("csproduct", "Name", "UUID", "Vendor");
+            if (csproduct != null)
+            {
+                if (csproduct.TryGetValue("Name", out str) && !str.IsNullOrEmpty() && Product.IsNullOrEmpty()) Product = str;
+                if (csproduct.TryGetValue("UUID", out str) && !str.IsNullOrEmpty()) UUID = str;
+                if (csproduct.TryGetValue("Vendor", out str) && !str.IsNullOrEmpty()) Vendor = str;
+            }
+        }
+#else
+        str = "reg".Execute(@"query HKLM\SOFTWARE\Microsoft\Cryptography /v MachineGuid", 0, false);
+        if (!str.IsNullOrEmpty() && str.Contains("REG_SZ")) Guid = str.Substring("REG_SZ", null).Trim();
+
+        var csproduct = ReadWmic("csproduct", "Name", "UUID", "Vendor");
+        if (csproduct != null)
+        {
+            if (csproduct.TryGetValue("Name", out str)) Product = str;
+            if (csproduct.TryGetValue("UUID", out str)) UUID = str;
+            if (csproduct.TryGetValue("Vendor", out str)) Vendor = str;
+        }
+#endif
+        // 获取内存大小
+#if NETFRAMEWORK || WINDOWS
+        {
+            var ci = new Microsoft.VisualBasic.Devices.ComputerInfo();
+            Memory = ci.TotalPhysicalMemory;
+        }
+#endif
+
+        // 获取操作系统名称和版本
+#if NETFRAMEWORK
+        try
+        {
+            var ci = new Microsoft.VisualBasic.Devices.ComputerInfo();
+
+            // 系统名取WMI可能出错
+            OSName = ci.OSFullName?.Replace("®", null).TrimStart("Microsoft").Trim();
+            OSVersion = ci.OSVersion;
+        }
+        catch
+        {
+            try
+            {
+                var reg2 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+                if (reg2 != null)
+                {
+                    OSName = reg2.GetValue("ProductName") + "";
+                    OSVersion = reg2.GetValue("ReleaseId") + "";
+                }
+            }
+            catch (Exception ex)
+            {
+                if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteException(ex);
+            }
+        }
+        //#elif NET5_0_OR_GREATER
+        //        OSName = GetInfo("Win32_OperatingSystem", "Caption")?.TrimStart("Microsoft").Trim();
+        //        OSVersion = GetInfo("Win32_OperatingSystem", "Version");
+#else
+        var os = ReadWmic("os", "Caption", "Version");
+        if (os == null || os.Count == 0)
+        {
+            os = ReadPowerShell("Get-WmiObject Win32_OperatingSystem | Select-Object Caption, Version | ConvertTo-Json");
+        }
+        if (os is { Count: > 0 })
+        {
+            if (os.TryGetValue("Caption", out str)) OSName = str.TrimStart("Microsoft").Trim();
+            if (os.TryGetValue("Version", out str)) OSVersion = str;
+        }
+#endif
+
+#if NETFRAMEWORK
+        //Processor = GetInfo("Win32_Processor", "Name");
+        //CpuID = GetInfo("Win32_Processor", "ProcessorId");
+        //var uuid = GetInfo("Win32_ComputerSystemProduct", "UUID");
+        //Product = GetInfo("Win32_ComputerSystemProduct", "Name");
+        DiskID = GetInfo("Win32_DiskDrive where mediatype=\"Fixed hard disk media\"", "SerialNumber");
+
+        var sn = GetInfo("Win32_BIOS", "SerialNumber");
+        if (!sn.IsNullOrEmpty() && !sn.EqualIgnoreCase("System Serial Number")) Serial = sn;
+        Board = GetInfo("Win32_BaseBoard", "SerialNumber");
+#else
+        var disk = ReadWmic("diskdrive where mediatype=\"Fixed hard disk media\"", "serialnumber");
+        if (disk != null)
+        {
+            if (disk.TryGetValue("serialnumber", out str)) DiskID = str?.Trim();
+        }
+
+        var sn = ReadWmic("bios", "serialnumber");
+        if (sn != null)
+        {
+            if (sn.TryGetValue("serialnumber", out str) && !str.EqualIgnoreCase("System Serial Number")) Serial = str?.Trim();
+        }
+
+        var board = ReadWmic("baseboard", "serialnumber");
+        if (board != null)
+        {
+            if (board.TryGetValue("serialnumber", out str)) Board = str?.Trim();
+        }
+
+        //// 不要在刷新里面取CPU负载，因为运行wmic会导致CPU负载很不准确，影响测量
+        //var cpu = ReadWmic("cpu", "Name", "ProcessorId", "LoadPercentage");
+        //if (cpu != null)
+        //{
+        //    if (cpu.TryGetValue("Name", out str)) Processor = str;
+        //    //if (cpu.TryGetValue("ProcessorId", out str)) CpuID = str;
+        //    if (cpu.TryGetValue("LoadPercentage", out str)) CpuRate = (Single)(str.ToDouble() / 100);
+        //}
+#endif
+
+#if !NETFRAMEWORK
+        if (OSName.IsNullOrEmpty())
+            OSName = RuntimeInformation.OSDescription.TrimStart("Microsoft").Trim();
+        if (OSVersion.IsNullOrEmpty())
+            OSVersion = Environment.OSVersion.Version.ToString();
+#endif
     }
 
-    private static String GetProcessorName()
+#if NET5_0_OR_GREATER
+    [SupportedOSPlatform("linux")]
+#endif
+    private void LoadLinuxInfo()
+    {
+        var str = GetLinuxName();
+        if (!str.IsNullOrEmpty()) OSName = str;
+
+        var device = ReadDeviceInfo();
+
+        if (device.TryGetValue("Platform", out str))
+            OSName = str;
+        if (device.TryGetValue("Version", out str))
+            OSVersion = str;
+
+        // 树莓派的Hardware无法区分P0/P4
+        var dic = ReadInfo("/proc/cpuinfo");
+        if (dic != null)
+        {
+            if (dic.TryGetValue("Hardware", out str) ||
+                dic.TryGetValue("cpu model", out str) ||
+                dic.TryGetValue("model name", out str))
+                Processor = str?.TrimStart("vendor ");
+
+            if (device.TryGetValue("Product", out str))
+                Product = str;
+            else if (dic.TryGetValue("Model", out str))
+                Product = str;
+
+            if (dic.TryGetValue("vendor_id", out str))
+                Vendor = str;
+
+            //if (device.TryGetValue("Fingerprint", out str) && !str.IsNullOrEmpty())
+            //    CpuID = str;
+            if (dic.TryGetValue("Serial", out str) && !str.IsNullOrEmpty() && !str.Trim('0').IsNullOrEmpty())
+                UUID = str;
+        }
+
+        var mid = "/etc/machine-id";
+        if (!File.Exists(mid)) mid = "/var/lib/dbus/machine-id";
+        if (TryRead(mid, out var value))
+            Guid = value;
+        else if (device.TryGetValue("android_id", out str) && !str.IsNullOrEmpty() && str != "unknown")
+            Guid = str;
+        //else if (android.TryGetValue("Id", out str))
+        //    Guid = str;
+
+        // DMI信息位于 /sys/class/dmi/id/ 目录，可以直接读取，不需要执行dmidecode命令
+        var uuid = "";
+        var file = "/sys/class/dmi/id/product_uuid";
+        if (!File.Exists(file)) file = "/etc/uuid";
+        if (!File.Exists(file)) file = "/proc/serial_num";  // miui12支持/proc/serial_num
+        if (TryRead(file, out value))
+            uuid = value;
+        else if (device.TryGetValue("Serial", out str) && str != "unknown")
+            uuid = str;
+        if (!uuid.IsNullOrEmpty()) UUID = uuid;
+
+        // 从release文件读取产品
+        var prd = GetProductByRelease();
+        if (!prd.IsNullOrEmpty()) Product = prd;
+
+        if (prd.IsNullOrEmpty() && TryRead("/sys/class/dmi/id/product_name", out var product_name))
+        {
+            Product = product_name;
+
+            // 增加制造商。如 Tencent Cloud，它的产品名只有 CVM。阿里云产品名 Alibaba Cloud ECS
+            if (TryRead("/sys/class/dmi/id/sys_vendor", out var vendor) && !vendor.IsNullOrEmpty())
+            {
+                Vendor = vendor;
+
+                if (!product_name.IsNullOrEmpty() && !product_name.Contains(vendor))
+                {
+                    // 红帽KVM太流行，细化处理
+                    if (product_name == "KVM" && vendor == "Red Hat" &&
+                        TryRead("/sys/class/dmi/id/product_version", out var ver) && !ver.IsNullOrEmpty())
+                    {
+                        var p = ver.IndexOf('(');
+                        if (p > 0) ver = ver[..p].Trim();
+                        Product = ver;
+                    }
+                }
+            }
+        }
+
+        file = "/sys/class/dmi/id/product_serial";
+        if (TryRead(file, out value)) Serial = value;
+
+        // 在DMI信息内，没有太好的BoardID取值
+        file = "/sys/class/dmi/id/product_sku";
+        if (TryRead(file, out value) && !value.IsNullOrEmpty())
+            Board = value;
+        else
+        {
+            file = "/sys/class/dmi/id/product_family";
+            if (TryRead(file, out value)) Board = value;
+        }
+
+        // 在虚拟机中，uuid可能出现一个时间id和一个guid。
+        var disks = GetFiles("/dev/disk/by-uuid", false);
+        if (disks.Count > 0)
+        {
+            // 去掉时间id例如 2025-08-14-18-36-42-00，因为它随着时间在改变
+            disks = disks.Where(e => !e.IsNullOrEmpty() && (e.Length < 10 || e[4] != '-' || e[..10].ToDateTime().Year < 2000)).ToList();
+        }
+
+        if (disks.Count == 0)
+        {
+            // id中需要剔除QEMU，去掉virtio-前缀，例如 virtio-uf6ag3b49w6v4e9ldgcj
+            disks = GetFiles("/dev/disk/by-id", true);
+            disks = disks.Where(e => !e.IsNullOrEmpty() && !e.Contains("QEMU_")).Select(e => e.TrimStart("virtio-")).ToList();
+        }
+
+        if (disks.Count == 0) disks = GetFiles("/dev/disk/by-partuuid", true);
+        if (disks.Count > 0) DiskID = disks.Where(e => !e.IsNullOrEmpty()).Join(",");
+
+        // 从*-release文件读取产品信息，具有更高优先级
+        file = "/etc/os-release";
+        if (TryRead(file, out value))
+        {
+            var dic2 = value.SplitAsDictionary("=", Environment.NewLine, true);
+
+            if (dic2.TryGetValue("Vendor", out str)) Vendor = str;
+            if (dic2.TryGetValue("Product", out str)) Product = str;
+            if (dic2.TryGetValue("Serial", out str)) Serial = str;
+            if (dic2.TryGetValue("Board", out str)) Board = str;
+        }
+    }
+
+#if NET5_0_OR_GREATER
+    [SupportedOSPlatform("macos")]
+#endif
+    private void LoadMacInfo()
+    {
+        var dic = ReadCommand("sw_vers");
+        if (dic != null)
+        {
+            if (dic.TryGetValue("ProductName", out var str)) OSName = str;
+            if (dic.TryGetValue("ProductVersion", out str)) OSVersion = str;
+        }
+
+        dic = ReadCommand("system_profiler", "SPHardwareDataType");
+        if (dic != null)
+        {
+            //if (dic2.TryGetValue("Model Name", out str)) Product = str;
+            if (dic.TryGetValue("Model Identifier", out var str)) Product = str;
+            if (dic.TryGetValue("Processor Name", out str)) Processor = str;
+            if (dic.TryGetValue("Memory", out str)) Memory = (UInt64)str.TrimEnd("GB").Trim().ToLong() * 1024 * 1024 * 1024;
+            if (dic.TryGetValue("Serial Number (system)", out str)) Serial = str;
+            if (dic.TryGetValue("Hardware UUID", out str)) UUID = str;
+        }
+
+        if (Vendor.IsNullOrEmpty()) Vendor = "Apple";
+
+        dic = ReadCommand("diskutil", "info disk1");
+        if (dic != null)
+        {
+            if (dic.TryGetValue("Disk / Partition UUID", out var str)) DiskID = str;
+        }
+    }
+
+    private readonly ICollection<String> _excludes = [];
+
+    /// <summary>获取实时数据，如CPU、内存、温度</summary>
+    public void Refresh()
     {
         if (Runtime.Windows)
+            RefreshWindows();
+        // 特别识别Linux发行版
+        else if (Runtime.Linux)
+            RefreshLinux();
+
+        RefreshSpeed();
+
+        Provider?.Refresh(this);
+    }
+
+    private void RefreshWindows()
+    {
+        MEMORYSTATUSEX ms = default;
+        ms.Init();
+        if (GlobalMemoryStatusEx(ref ms))
         {
-            var value = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
-            if (!String.IsNullOrWhiteSpace(value)) return value;
+            Memory = ms.ullTotalPhys;
+            AvailableMemory = ms.ullAvailPhys;
+            FreeMemory = ms.ullAvailPhys;
         }
 
-        return RuntimeInformation.ProcessArchitecture.ToString();
+        GetSystemTimes(out var idleTime, out var kernelTime, out var userTime);
+
+        var current = new SystemTime
+        {
+            IdleTime = idleTime.ToLong(),
+            TotalTime = kernelTime.ToLong() + userTime.ToLong(),
+        };
+
+        var idle = current.IdleTime - (_systemTime?.IdleTime ?? 0);
+        var total = current.TotalTime - (_systemTime?.TotalTime ?? 0);
+        _systemTime = current;
+
+        CpuRate = total == 0 ? 0 : Math.Round((Double)(total - idle) / total, 4);
+
+        var power = new PowerStatus();
+
+#if NETFRAMEWORK
+        if (!_excludes.Contains(nameof(Temperature)))
+        {
+            // 读取主板温度，不太准。标准方案是ring0通过IOPort读取CPU温度，太难在基础类库实现
+            var str = GetInfo("Win32_TemperatureProbe", "CurrentReading");
+            if (!str.IsNullOrEmpty())
+            {
+                Temperature = str.SplitAsInt().Average();
+            }
+            else
+            {
+                str = GetInfo("MSAcpi_ThermalZoneTemperature", "CurrentTemperature", "root/wmi");
+                if (!str.IsNullOrEmpty())
+                    Temperature = (str.SplitAsInt().Average() - 2732) / 10.0;
+                else
+                {
+                    if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Temperature信息无法读取");
+                    _excludes.Add(nameof(Temperature));
+                    Temperature = 0;
+                }
+            }
+        }
+
+        if (power.BatteryLifePercent > 0)
+            Battery = power.BatteryLifePercent;
+        else if (!_excludes.Contains(nameof(Battery)))
+        {
+            // 电池剩余
+            var str = GetInfo("Win32_Battery", "EstimatedChargeRemaining");
+            if (!str.IsNullOrEmpty())
+                Battery = str.SplitAsInt().Average() / 100.0;
+            else
+            {
+                if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Battery信息无法读取");
+                _excludes.Add(nameof(Battery));
+                Battery = 0;
+            }
+        }
+#else
+        if (!_excludes.Contains(nameof(Temperature)))
+        {
+            var temp = ReadWmic(@"/namespace:\\root\wmi path MSAcpi_ThermalZoneTemperature", "CurrentTemperature");
+            if (temp != null && temp.Count > 0)
+            {
+                if (temp.TryGetValue("CurrentTemperature", out var str) && !str.IsNullOrEmpty())
+                    Temperature = (str.SplitAsInt().Average() - 2732) / 10.0;
+            }
+            else
+            {
+                if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Temperature信息无法读取");
+                _excludes.Add(nameof(Temperature));
+                Temperature = 0;
+            }
+        }
+
+        if (power.BatteryLifePercent > 0)
+            Battery = power.BatteryLifePercent;
+        else if (!_excludes.Contains(nameof(Battery)))
+        {
+            var battery = ReadWmic("path win32_battery", "EstimatedChargeRemaining");
+            if (battery != null && battery.Count > 0)
+            {
+                if (battery.TryGetValue("EstimatedChargeRemaining", out var str) && !str.IsNullOrEmpty())
+                    Battery = str.SplitAsInt().Average() / 100.0;
+            }
+            else
+            {
+                if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("Battery信息无法读取");
+                _excludes.Add(nameof(Battery));
+                Battery = 0;
+            }
+        }
+#endif
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    private struct MEMORYSTATUSEX
+    private void RefreshLinux()
     {
-        public UInt32 dwLength;
-        public UInt32 dwMemoryLoad;
-        public UInt64 ullTotalPhys;
-        public UInt64 ullAvailPhys;
-        public UInt64 ullTotalPageFile;
-        public UInt64 ullAvailPageFile;
-        public UInt64 ullTotalVirtual;
-        public UInt64 ullAvailVirtual;
-        public UInt64 ullAvailExtendedVirtual;
+        var dic = ReadInfo("/proc/meminfo");
+        if (dic != null)
+        {
+            if (dic.TryGetValue("MemTotal", out var str) && !str.IsNullOrEmpty())
+                Memory = (UInt64)str.TrimEnd(" kB").ToInt() * 1024;
 
-        public void Init() => dwLength = (UInt32)Marshal.SizeOf<MEMORYSTATUSEX>();
+            // MemAvailable是系统内核预测的可用内存，过低则认为不能安全分配给新进程，可能过于悲观；
+            // MemFree是完全空闲的内存，未被使用的物理内存页，但内核不敢用；
+            static UInt64 GetMem(IDictionary<String, String?> mem, String key)
+            {
+                return mem.TryGetValue(key, out var v) && !v.IsNullOrEmpty() ? (UInt64)v.TrimEnd(" kB").ToInt() * 1024 : 0;
+            }
+
+            var ma = GetMem(dic, "MemAvailable");
+            var mf = GetMem(dic, "MemFree");
+            var buffers = GetMem(dic, "Buffers");
+            var cached = GetMem(dic, "Cached");
+            var srecl = GetMem(dic, "SReclaimable");
+            var shmem = GetMem(dic, "Shmem");
+
+            AvailableMemory = ma;
+
+            // FreeMemory采用 free 命令的宽松口径：free + buffers + cache + SReclaimable - Shmem
+            var cache = cached + srecl;
+            if (cache > shmem) cache -= shmem;
+
+            FreeMemory = mf + buffers + cache;
+        }
+
+        // A2/A4温度获取，Buildroot，CPU温度和主板温度
+        if (TryRead("/sys/class/thermal/thermal_zone0/temp", out var value) ||
+            TryRead("/sys/class/thermal/thermal_zone1/temp", out value))
+        {
+            Temperature = value.ToDouble();
+            // 有时候温度会超过1000，可能是毫度。机器温度不会低于0度
+            if (Temperature > 1000) Temperature /= 1000;
+        }
+        // respberrypi + fedora
+        else if (TryRead("/sys/class/thermal/thermal_zone0/temp", out value) ||
+             TryRead("/sys/class/hwmon/hwmon0/temp1_input", out value) ||
+             TryRead("/sys/class/hwmon/hwmon0/temp2_input", out value) ||
+             TryRead("/sys/class/hwmon/hwmon0/device/hwmon/hwmon0/temp2_input", out value) ||
+             TryRead("/sys/devices/virtual/thermal/thermal_zone0/temp", out value))
+        {
+            Temperature = value.ToDouble() / 1000;
+        }
+        // A2温度获取，Ubuntu 16.04 LTS， Linux 3.4.39
+        else if (TryRead("/sys/class/hwmon/hwmon0/device/temp_value", out value))
+        {
+            if (!value.IsNullOrEmpty()) Temperature = value.Substring(null, ":").ToDouble();
+        }
+
+        // 电池剩余
+        if (TryRead("/sys/class/power_supply/BAT0/energy_now", out var energy_now) &&
+            TryRead("/sys/class/power_supply/BAT0/energy_full", out var energy_full))
+        {
+            Battery = energy_now.ToDouble() / energy_full.ToDouble();
+        }
+        else if (TryRead("/sys/class/power_supply/battery/capacity", out var capacity))
+        {
+            Battery = capacity.ToDouble() / 100.0;
+        }
+        else if (Runtime.Mono)
+        {
+            var battery = ReadDeviceBattery();
+            if (battery.TryGetValue("ChargeLevel", out var obj)) Battery = obj.ToDouble();
+        }
+
+        var file = "/proc/stat";
+        if (!_excludes.Contains(nameof(CpuRate)) && File.Exists(file))
+        {
+            // CPU指标：user，nice, system, idle, iowait, irq, softirq
+            // cpu  57057 0 14420 1554816 0 443 0 0 0 0
+            try
+            {
+                using var reader = new StreamReader(file);
+                var line = reader.ReadLine();
+                if (!line.IsNullOrEmpty() && line.StartsWith("cpu"))
+                {
+                    var vs = line.TrimStart("cpu").Trim().Split(' ');
+                    var current = new SystemTime
+                    {
+                        IdleTime = vs[3].ToLong(),
+                        TotalTime = vs.Take(7).Select(e => e.ToLong()).Sum().ToLong(),
+                    };
+
+                    var idle = current.IdleTime - (_systemTime?.IdleTime ?? 0);
+                    var total = current.TotalTime - (_systemTime?.TotalTime ?? 0);
+                    _systemTime = current;
+
+                    CpuRate = total == 0 ? 0 : Math.Round((Double)(total - idle) / total, 4);
+                }
+            }
+            catch
+            {
+                _excludes.Add(nameof(CpuRate));
+            }
+        }
     }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern Boolean GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
-}
+    private Int64 _lastTime;
+    private Int64 _lastSent;
+    private Int64 _lastReceived;
+    /// <summary>刷新网络速度</summary>
+    public void RefreshSpeed()
+    {
+        var sent = 0L;
+        var received = 0L;
+        try
+        {
+            // 包含本地环回和隧道网卡
+            // WSL获取网络列表时可能报错
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                try
+                {
+                    var st = ni.GetIPStatistics();
+                    sent += st.BytesSent;
+                    received += st.BytesReceived;
+                }
+                catch { }
+            }
+        }
+        catch { }
 
-/// <summary>MachineInfo 的 AOT 序列化上下文</summary>
-[JsonSerializable(typeof(MachineInfo))]
-public partial class MachineInfoJsonContext : JsonSerializerContext
-{
+        var now = Runtime.TickCount64;
+        if (_lastTime > 0)
+        {
+            var interval = now - _lastTime;
+            if (interval > 0)
+            {
+                var s1 = (sent - _lastSent) * 1000 / interval;
+                var s2 = (received - _lastReceived) * 1000 / interval;
+                if (s1 >= 0) UplinkSpeed = (UInt64)s1;
+                if (s2 >= 0) DownlinkSpeed = (UInt64)s2;
+            }
+        }
+
+        _lastSent = sent;
+        _lastReceived = received;
+        _lastTime = now;
+    }
+    #endregion
+
+    #region 辅助
+    /// <summary>获取Linux发行版名称</summary>
+    /// <returns>Linux发行版名称</returns>
+    public static String? GetLinuxName()
+    {
+        var fr = "/etc/redhat-release";
+        if (TryRead(fr, out var value)) return value;
+
+        var dr = "/etc/debian-release";
+        if (TryRead(dr, out value)) return value;
+
+        var sr = "/etc/os-release";
+        if (TryRead(sr, out value))
+        {
+            var dic = value.SplitAsDictionary("=", "\n", true);
+            if (dic.TryGetValue("PRETTY_NAME", out var pretty) && !pretty.IsNullOrEmpty()) return pretty.Trim();
+            if (dic.TryGetValue("NAME", out var name) && !name.IsNullOrEmpty()) return name.Trim();
+        }
+
+        var uname = "uname".Execute("-sr", 0, false)?.Trim();
+        if (!uname.IsNullOrEmpty())
+        {
+            // 支持Android系统名
+            var ss = uname.Split('-');
+            foreach (var item in ss)
+            {
+                if (!item.IsNullOrEmpty() && item.StartsWithIgnoreCase("Android")) return item;
+            }
+
+            return uname;
+        }
+
+        return null;
+    }
+
+    private static String? GetProductByRelease()
+    {
+        var di = "/etc/".AsDirectory();
+        if (!di.Exists) return null;
+
+        foreach (var fi in di.GetFiles("*-release"))
+        {
+            if (!fi.Name.EqualIgnoreCase("redhat-release", "debian-release", "os-release", "system-release"))
+            {
+                var dic = File.ReadAllText(fi.FullName).SplitAsDictionary("=", "\n", true);
+                if (dic.TryGetValue("BOARD", out var str)) return str;
+                if (dic.TryGetValue("BOARD_NAME", out str)) return str;
+            }
+        }
+
+        return null;
+    }
+
+    private static Boolean TryRead(String fileName, [NotNullWhen(true)] out String? value)
+    {
+        value = null;
+
+        if (!File.Exists(fileName)) return false;
+
+        try
+        {
+            value = File.ReadAllText(fileName)?.Trim();
+            if (value.IsNullOrEmpty()) return false;
+        }
+        catch { return false; }
+
+        return true;
+    }
+
+    /// <summary>读取文件信息，分割为字典</summary>
+    /// <param name="file">文件路径</param>
+    /// <param name="separate">分隔符</param>
+    /// <returns>解析后的字典</returns>
+    public static IDictionary<String, String?>? ReadInfo(String file, Char separate = ':')
+    {
+        if (file.IsNullOrEmpty() || !File.Exists(file)) return null;
+
+        var dic = new NullableDictionary<String, String?>(StringComparer.OrdinalIgnoreCase);
+
+        using var reader = new StreamReader(file);
+        while (!reader.EndOfStream)
+        {
+            // 按行读取
+            var line = reader.ReadLine();
+            if (line != null)
+            {
+                // 分割
+                var p = line.IndexOf(separate);
+                if (p > 0)
+                {
+                    var key = line[..p].Trim();
+                    var value = line[(p + 1)..].Trim();
+                    dic[key] = value.TrimInvisible();
+                }
+            }
+        }
+
+        return dic;
+    }
+
+    private static IDictionary<String, String>? ReadCommand(String cmd, String? arguments = null)
+    {
+        var str = cmd.Execute(arguments, 0, false);
+        if (str.IsNullOrEmpty()) return null;
+
+        return str.SplitAsDictionary(":", "\n", true);
+    }
+
+    /// <summary>通过 PowerShell 命令读取信息</summary>
+    /// <param name="command">PowerShell命令</param>
+    /// <returns>解析后的字典</returns>
+    public static IDictionary<String, String> ReadPowerShell(String command)
+    {
+        var dic = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+        var args = $"-Command \"{command}\"";
+        var str = "powershell.exe".Execute(args, 3_000) ?? String.Empty;
+        if (!String.IsNullOrWhiteSpace(str))
+        {
+            foreach (var item in str.DecodeJson()!)
+            {
+                dic[item.Key] = item.Value?.ToString() ?? String.Empty;
+            }
+        }
+        return dic;
+    }
+
+    /// <summary>通过WMIC命令读取信息</summary>
+    /// <param name="type">WMI类型</param>
+    /// <param name="keys">查询字段</param>
+    /// <returns>解析后的字典</returns>
+    public static IDictionary<String, String> ReadWmic(String type, params String[] keys)
+    {
+        var dic = new Dictionary<String, IList<String>>(StringComparer.OrdinalIgnoreCase);
+        var dic2 = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+        var args = $"{type} get {keys.Join(",")} /format:list";
+        var str = "wmic".Execute(args, 0, false)?.Trim();
+        if (str.IsNullOrEmpty()) return dic2;
+
+        var ss = str.Split("\r\n");
+        foreach (var item in ss)
+        {
+            var ks = item?.Split('=');
+            if (ks != null && ks.Length >= 2)
+            {
+                var k = ks[0].Trim();
+                var v = ks[1].Trim().TrimInvisible();
+                if (!k.IsNullOrEmpty() && !v.IsNullOrEmpty())
+                {
+                    if (!dic.TryGetValue(k, out var list))
+                        dic[k] = list = [];
+
+                    list.Add(v);
+                }
+            }
+        }
+
+        // 排序，避免多个磁盘序列号时，顺序变动
+        foreach (var item in dic)
+        {
+            dic2[item.Key] = item.Value.OrderBy(e => e).Join();
+        }
+
+        return dic2;
+    }
+
+    /// <summary>获取设备信息。用于Xamarin</summary>
+    /// <returns>设备信息字典</returns>
+    public static IDictionary<String, String?> ReadDeviceInfo()
+    {
+        var dic = new Dictionary<String, String?>();
+        if (!Runtime.Mono) return dic;
+
+        {
+            var type = GetAndroidBuildType();
+            if (type != null)
+            {
+                foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
+                {
+                    try
+                    {
+                        dic[item.Name] = item.GetValue(null) + "";
+                    }
+                    catch { }
+                }
+            }
+        }
+        {
+            var type = GetXamarinDeviceInfoType();
+            if (type != null)
+            {
+                foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
+                {
+                    try
+                    {
+                        dic[item.Name] = item.GetValue(null) + "";
+                    }
+                    catch { }
+                }
+            }
+        }
+        {
+            var type = GetAndroidSecureType();
+            if (type != null)
+            {
+                var context = GetStaticMemberValue(GetAndroidApplicationType(), "Context");
+                var resolver = context == null ? null : GetInstanceMemberValue(GetAndroidContextType(), context, "ContentResolver");
+                if (resolver != null)
+                {
+                    var name = "android_id";
+                    dic[name] = InvokeStaticMethod(type, "GetString", resolver, name) as String;
+                }
+            }
+        }
+
+        return dic;
+    }
+
+    /// <summary>获取设备电量。用于 Xamarin</summary>
+    /// <returns>设备电量信息字典</returns>
+    public static IDictionary<String, Object?> ReadDeviceBattery()
+    {
+        var dic = new Dictionary<String, Object?>();
+        if (!Runtime.Mono) return dic;
+
+        var type = GetXamarinBatteryType();
+        if (type == null) return dic;
+
+        foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
+        {
+            try
+            {
+                dic[item.Name] = item.GetValue(null);
+            }
+            catch { }
+        }
+
+        return dic;
+    }
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
+    private static Type? GetAndroidBuildType() => Type.GetType("Android.OS.Build", false);
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
+    private static Type? GetXamarinDeviceInfoType() => Type.GetType("Xamarin.Essentials.DeviceInfo", false);
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
+    private static Type? GetXamarinBatteryType() => Type.GetType("Xamarin.Essentials.Battery", false);
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)]
+    private static Type? GetAndroidApplicationType() => Type.GetType("Android.App.Application", false);
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)]
+    private static Type? GetAndroidContextType() => Type.GetType("Android.Content.Context", false);
+
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)]
+    private static Type? GetAndroidSecureType() => Type.GetType("Android.Provider.Settings+Secure", false);
+
+    private static Object? GetStaticMemberValue([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)] Type? type, String name)
+    {
+        if (type == null || name.IsNullOrEmpty()) return null;
+
+        var flags = BindingFlags.Public | BindingFlags.Static;
+        var property = type.GetProperty(name, flags);
+        if (property != null) return property.GetValue(null);
+
+        var field = type.GetField(name, flags);
+        if (field != null) return field.GetValue(null);
+
+        return null;
+    }
+
+    private static Object? GetInstanceMemberValue([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)] Type? type, Object instance, String name)
+    {
+        if (type == null || instance == null || name.IsNullOrEmpty()) return null;
+
+        var flags = BindingFlags.Public | BindingFlags.Instance;
+        var property = type.GetProperty(name, flags);
+        if (property != null) return property.GetValue(instance);
+
+        var field = type.GetField(name, flags);
+        if (field != null) return field.GetValue(instance);
+
+        return null;
+    }
+
+    private static Object? InvokeStaticMethod([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type? type, String name, params Object?[] parameters)
+    {
+        if (type == null || name.IsNullOrEmpty()) return null;
+
+        var flags = BindingFlags.Public | BindingFlags.Static;
+        foreach (var method in type.GetMethods(flags))
+        {
+            if (method.Name != name) continue;
+
+            var ps = method.GetParameters();
+            if (ps.Length != parameters.Length) continue;
+
+            return method.Invoke(null, parameters);
+        }
+
+        return null;
+    }
+    #endregion
+
+    #region 内存
+    [DllImport("Kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+#if NETFRAMEWORK
+    [SecurityCritical]
+#endif
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    internal struct MEMORYSTATUSEX
+    {
+        internal UInt32 dwLength;
+
+        internal UInt32 dwMemoryLoad;
+
+        internal UInt64 ullTotalPhys;
+
+        internal UInt64 ullAvailPhys;
+
+        internal UInt64 ullTotalPageFile;
+
+        internal UInt64 ullAvailPageFile;
+
+        internal UInt64 ullTotalVirtual;
+
+        internal UInt64 ullAvailVirtual;
+
+        internal UInt64 ullAvailExtendedVirtual;
+
+        internal void Init() => dwLength = checked((UInt32)Marshal.SizeOf<MEMORYSTATUSEX>());
+    }
+    #endregion
+
+    #region 磁盘
+    /// <summary>获取指定目录所在盘可用空间，默认当前目录</summary>
+    /// <param name="path">目录路径</param>
+    /// <returns>返回可用空间，字节，获取失败返回-1</returns>
+    public static Int64 GetFreeSpace(String? path = null)
+    {
+        if (path.IsNullOrEmpty()) path = ".";
+        var root = Path.GetPathRoot(path.GetFullPath());
+        if (root.IsNullOrEmpty()) return 0;
+
+        var driveInfo = new DriveInfo(root);
+        if (driveInfo == null || !driveInfo.IsReady) return -1;
+
+        try
+        {
+            return driveInfo.AvailableFreeSpace;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
+    /// <summary>获取指定目录下文件名，支持去掉后缀的去重，主要用于Linux</summary>
+    /// <param name="path">目录路径</param>
+    /// <param name="trimSuffix">是否去掉后缀进行去重</param>
+    /// <returns>文件名集合</returns>
+    public static ICollection<String> GetFiles(String path, Boolean trimSuffix = false)
+    {
+        var list = new List<String>();
+        if (path.IsNullOrEmpty()) return list;
+
+        var di = path.AsDirectory();
+        if (!di.Exists) return list;
+
+        var list2 = di.GetFiles().Select(e => e.Name).ToList();
+        foreach (var item in list2)
+        {
+            var line = item?.Trim();
+            if (!line.IsNullOrEmpty())
+            {
+                // 前面出现 virtio-uf6fv7fzp6fm1b91fli8 ，后面出现 virtio-uf6fv7fzp6fm1b91fli8-part1
+                if (trimSuffix)
+                {
+                    if (!list2.Any(e => e != line && line.StartsWith(e))) list.Add(line);
+                }
+                else
+                {
+                    list.Add(line);
+                }
+            }
+        }
+
+        return list;
+    }
+    #endregion
+
+    #region 容器检测
+    /// <summary>是否运行在容器中</summary>
+    /// <remarks>
+    /// 检测依据：
+    /// 1. 环境变量 DOTNET_RUNNING_IN_CONTAINER
+    /// 2. 存在 /.dockerenv 文件
+    /// 3. /proc/1/cgroup 包含 docker/kubepods/containerd 等关键字
+    /// </remarks>
+    public static Boolean IsInContainer
+    {
+        get
+        {
+            // 环境变量检测
+            var env = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER");
+            if (env.EqualIgnoreCase("true", "1")) return true;
+
+            if (!Runtime.Linux) return false;
+
+            // Docker 环境文件检测
+            if (File.Exists("/.dockerenv")) return true;
+
+            // cgroup 检测
+            var cgroupFile = "/proc/1/cgroup";
+            if (File.Exists(cgroupFile))
+            {
+                try
+                {
+                    var content = File.ReadAllText(cgroupFile);
+                    if (content.Contains("docker") ||
+                        content.Contains("kubepods") ||
+                        content.Contains("containerd") ||
+                        content.Contains("lxc"))
+                        return true;
+                }
+                catch { }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>获取容器资源限制</summary>
+    /// <returns>元组：(内存限制字节数, CPU核数限制)。返回null表示无限制或获取失败</returns>
+    /// <remarks>
+    /// 读取 cgroup v1/v2 的资源限制配置：
+    /// - 内存限制：/sys/fs/cgroup/memory/memory.limit_in_bytes (v1) 或 /sys/fs/cgroup/memory.max (v2)
+    /// - CPU限制：/sys/fs/cgroup/cpu/cpu.cfs_quota_us 和 cpu.cfs_period_us (v1) 或 /sys/fs/cgroup/cpu.max (v2)
+    /// </remarks>
+    public static (Int64? MemoryLimit, Double? CpuLimit) GetContainerLimits()
+    {
+        Int64? memoryLimit = null;
+        Double? cpuLimit = null;
+
+        if (!Runtime.Linux) return (memoryLimit, cpuLimit);
+
+        // 尝试读取内存限制
+        // cgroup v2
+        var memFile = "/sys/fs/cgroup/memory.max";
+        if (File.Exists(memFile))
+        {
+            if (TryRead(memFile, out var value) && value != "max")
+                memoryLimit = value.ToLong();
+        }
+        else
+        {
+            // cgroup v1
+            memFile = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
+            if (File.Exists(memFile) && TryRead(memFile, out var value))
+            {
+                var limit = value.ToLong();
+                // 如果接近系统最大值（通常是一个很大的数），则认为无限制
+                if (limit > 0 && limit < 9_000_000_000_000_000_000L)
+                    memoryLimit = limit;
+            }
+        }
+
+        // 尝试读取 CPU 限制
+        // cgroup v2: cpu.max 格式为 "quota period" 或 "max period"
+        var cpuFile = "/sys/fs/cgroup/cpu.max";
+        if (File.Exists(cpuFile))
+        {
+            if (TryRead(cpuFile, out var value))
+            {
+                var parts = value.Split(' ');
+                if (parts.Length >= 2 && parts[0] != "max")
+                {
+                    var quota = parts[0].ToLong();
+                    var period = parts[1].ToLong();
+                    if (quota > 0 && period > 0)
+                        cpuLimit = (Double)quota / period;
+                }
+            }
+        }
+        else
+        {
+            // cgroup v1
+            var quotaFile = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
+            var periodFile = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
+            if (File.Exists(quotaFile) && File.Exists(periodFile))
+            {
+                if (TryRead(quotaFile, out var quotaStr) && TryRead(periodFile, out var periodStr))
+                {
+                    var quota = quotaStr.ToLong();
+                    var period = periodStr.ToLong();
+                    // quota=-1 表示无限制
+                    if (quota > 0 && period > 0)
+                        cpuLimit = (Double)quota / period;
+                }
+            }
+        }
+
+        return (memoryLimit, cpuLimit);
+    }
+
+    /// <summary>获取容器内存使用量</summary>
+    /// <returns>当前内存使用量（字节）。获取失败返回null</returns>
+    public static Int64? GetContainerMemoryUsage()
+    {
+        if (!Runtime.Linux) return null;
+
+        // cgroup v2
+        var usageFile = "/sys/fs/cgroup/memory.current";
+        if (File.Exists(usageFile) && TryRead(usageFile, out var value))
+            return value.ToLong();
+
+        // cgroup v1
+        usageFile = "/sys/fs/cgroup/memory/memory.usage_in_bytes";
+        if (File.Exists(usageFile) && TryRead(usageFile, out value))
+            return value.ToLong();
+
+        return null;
+    }
+    #endregion
+
+    #region Windows辅助
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern Boolean GetSystemTimes(out FILETIME idleTime, out FILETIME kernelTime, out FILETIME userTime);
+
+    private struct FILETIME
+    {
+        public UInt32 Low;
+
+        public UInt32 High;
+
+        public FILETIME(Int64 time)
+        {
+            Low = (UInt32)time;
+            High = (UInt32)(time >> 32);
+        }
+
+        public Int64 ToLong() => (Int64)(((UInt64)High << 32) | Low);
+    }
+
+    private class SystemTime
+    {
+        public Int64 IdleTime;
+        public Int64 TotalTime;
+    }
+
+    private SystemTime? _systemTime;
+
+#if NETFRAMEWORK
+    /// <summary>获取WMI信息</summary>
+    /// <param name="path">WMI路径</param>
+    /// <param name="property">属性名</param>
+    /// <param name="nameSpace">命名空间</param>
+    /// <returns>查询结果</returns>
+    public static String GetInfo(String path, String property, String? nameSpace = null)
+    {
+        // Linux Mono不支持WMI
+        if (Runtime.Mono) return "";
+
+        var bbs = new List<String>();
+        try
+        {
+            var wql = $"Select {property} From {path}";
+            var cimobject = new ManagementObjectSearcher(nameSpace, wql);
+            var moc = cimobject.Get();
+            foreach (var mo in moc)
+            {
+                var val = mo?.Properties?[property]?.Value;
+                if (val != null)
+                {
+                    var v = val.ToString().TrimInvisible()?.Trim();
+                    if (v != null) bbs.Add(v);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (XTrace.Log.Level <= LogLevel.Debug) XTrace.WriteLine("WMI.GetInfo({0})失败！{1}", path, ex.Message);
+            return "";
+        }
+
+        bbs.Sort();
+
+        return bbs.Distinct().Join();
+    }
+#endif
+    #endregion
 }
