@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 
 using Pek.Collections;
@@ -9,6 +10,13 @@ namespace Pek.IO;
 /// <summary>IO 辅助扩展</summary>
 public static class IOHelper
 {
+    /// <summary>最大安全数组大小。超过该大小时，读取数据操作将强制失败，默认 1024*1024</summary>
+    /// <remarks>
+    /// 这是一个保护性设置，避免解码错误数据时读取了超大数组导致应用崩溃。
+    /// 需要解码较大二进制数据时，可以适当放宽该阈值。
+    /// </remarks>
+    public static Int32 MaxSafeArraySize { get; set; } = 1024 * 1024;
+
     /// <summary>复制数组</summary>
     public static Byte[] ReadBytes(this Byte[] src, Int32 offset, Int32 count)
     {
@@ -19,6 +27,128 @@ public static class IOHelper
         var data = new Byte[count];
         Buffer.BlockCopy(src, offset, data, 0, data.Length);
         return data;
+    }
+
+    /// <summary>压缩数据流</summary>
+    /// <param name="inStream">输入流</param>
+    /// <param name="outStream">输出流。如果不指定，则内部实例化一个内存流</param>
+    /// <returns>输出流</returns>
+    public static Stream Compress(this Stream inStream, Stream? outStream = null)
+    {
+        if (inStream == null) throw new ArgumentNullException(nameof(inStream));
+
+        var ms = outStream ?? new MemoryStream();
+        using (var stream = new DeflateStream(ms, CompressionLevel.Optimal, true))
+        {
+            inStream.CopyTo(stream);
+            stream.Flush();
+        }
+
+        if (outStream == null) ms.Position = 0;
+        return ms;
+    }
+
+    /// <summary>解压缩数据流</summary>
+    /// <param name="inStream">输入流</param>
+    /// <param name="outStream">输出流。如果不指定，则内部实例化一个内存流</param>
+    /// <returns>输出流</returns>
+    public static Stream Decompress(this Stream inStream, Stream? outStream = null)
+    {
+        if (inStream == null) throw new ArgumentNullException(nameof(inStream));
+
+        var ms = outStream ?? new MemoryStream();
+        using (var stream = new DeflateStream(inStream, CompressionMode.Decompress, true))
+        {
+            stream.CopyTo(ms);
+        }
+
+        if (outStream == null) ms.Position = 0;
+        return ms;
+    }
+
+    /// <summary>压缩字节数组</summary>
+    /// <param name="data">字节数组</param>
+    /// <returns>压缩后的字节数组</returns>
+    public static Byte[] Compress(this Byte[] data)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        var ms = new MemoryStream();
+        Compress(new MemoryStream(data), ms);
+        return ms.ToArray();
+    }
+
+    /// <summary>解压缩字节数组</summary>
+    /// <param name="data">字节数组</param>
+    /// <returns>解压后的字节数组</returns>
+    public static Byte[] Decompress(this Byte[] data)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        var ms = new MemoryStream();
+        Decompress(new MemoryStream(data), ms);
+        return ms.ToArray();
+    }
+
+    /// <summary>使用 GZip 压缩数据流</summary>
+    /// <param name="inStream">输入流</param>
+    /// <param name="outStream">输出流。如果不指定，则内部实例化一个内存流</param>
+    /// <returns>输出流</returns>
+    public static Stream CompressGZip(this Stream inStream, Stream? outStream = null)
+    {
+        if (inStream == null) throw new ArgumentNullException(nameof(inStream));
+
+        var ms = outStream ?? new MemoryStream();
+        using (var stream = new GZipStream(ms, CompressionLevel.Optimal, true))
+        {
+            inStream.CopyTo(stream);
+            stream.Flush();
+        }
+
+        if (outStream == null) ms.Position = 0;
+        return ms;
+    }
+
+    /// <summary>使用 GZip 解压缩数据流</summary>
+    /// <param name="inStream">输入流</param>
+    /// <param name="outStream">输出流。如果不指定，则内部实例化一个内存流</param>
+    /// <returns>输出流</returns>
+    public static Stream DecompressGZip(this Stream inStream, Stream? outStream = null)
+    {
+        if (inStream == null) throw new ArgumentNullException(nameof(inStream));
+
+        var ms = outStream ?? new MemoryStream();
+        using (var stream = new GZipStream(inStream, CompressionMode.Decompress, true))
+        {
+            stream.CopyTo(ms);
+        }
+
+        if (outStream == null) ms.Position = 0;
+        return ms;
+    }
+
+    /// <summary>使用 GZip 压缩字节数组</summary>
+    /// <param name="data">字节数组</param>
+    /// <returns>压缩后的字节数组</returns>
+    public static Byte[] CompressGZip(this Byte[] data)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        var ms = new MemoryStream();
+        CompressGZip(new MemoryStream(data), ms);
+        return ms.ToArray();
+    }
+
+    /// <summary>使用 GZip 解压缩字节数组</summary>
+    /// <param name="data">字节数组</param>
+    /// <returns>解压后的字节数组</returns>
+    public static Byte[] DecompressGZip(this Byte[] data)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        var ms = new MemoryStream();
+        DecompressGZip(new MemoryStream(data), ms);
+        return ms.ToArray();
     }
 
     /// <summary>从流中至少读取指定字节数</summary>
