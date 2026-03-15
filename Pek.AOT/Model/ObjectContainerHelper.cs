@@ -13,7 +13,7 @@ public static class ObjectContainerHelper
     /// <param name="serviceType">服务类型</param>
     /// <param name="implementationType">实现类型</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton(this IObjectContainer container, Type serviceType, Type implementationType)
+    public static IObjectContainer AddSingleton(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
     {
         if (container == null) throw new ArgumentNullException(nameof(container));
         if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
@@ -33,14 +33,14 @@ public static class ObjectContainerHelper
     /// <typeparam name="TImplementation">实现类型</typeparam>
     /// <param name="container">对象容器</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton<TService, TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.AddSingleton(typeof(TService), typeof(TImplementation));
+    public static IObjectContainer AddSingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.AddSingleton(typeof(TService), typeof(TImplementation));
 
     /// <summary>添加单实例，指定实例工厂</summary>
     /// <param name="container">对象容器</param>
     /// <param name="serviceType">服务类型</param>
     /// <param name="factory">实例工厂</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton(this IObjectContainer container, Type serviceType, Func<IServiceProvider, Object> factory)
+    public static IObjectContainer AddSingleton(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Func<IServiceProvider, Object> factory)
     {
         if (container == null) throw new ArgumentNullException(nameof(container));
         if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
@@ -61,14 +61,14 @@ public static class ObjectContainerHelper
     /// <param name="container">对象容器</param>
     /// <param name="factory">实例工厂</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton<TService>(this IObjectContainer container, Func<IServiceProvider, TService> factory) where TService : class => container.AddSingleton(typeof(TService), factory);
+    public static IObjectContainer AddSingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, Func<IServiceProvider, TService> factory) where TService : class => container.AddSingleton(typeof(TService), factory);
 
     /// <summary>添加单实例，指定实例</summary>
     /// <param name="container">对象容器</param>
     /// <param name="serviceType">服务类型</param>
     /// <param name="instance">实例</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton(this IObjectContainer container, Type serviceType, Object? instance)
+    public static IObjectContainer AddSingleton(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Object? instance)
     {
         if (container == null) throw new ArgumentNullException(nameof(container));
         if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
@@ -89,7 +89,7 @@ public static class ObjectContainerHelper
     /// <param name="container">对象容器</param>
     /// <param name="instance">实例</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddSingleton<TService>(this IObjectContainer container, TService? instance = null) where TService : class => container.AddSingleton(typeof(TService), instance);
+    public static IObjectContainer AddSingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, TService? instance = null) where TService : class => container.AddSingleton(typeof(TService), instance);
     #endregion
 
     #region 构建

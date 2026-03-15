@@ -333,7 +333,7 @@ internal class ServiceProvider(IObjectContainer container, IServiceProvider? inn
     /// <summary>获取服务实例</summary>
     /// <param name="serviceType">服务类型</param>
     /// <returns>服务实例</returns>
-    public Object? GetService([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType)
+    public Object? GetService(Type serviceType)
     {
         if (serviceType == typeof(IObjectContainer)) return _container;
         if (serviceType == typeof(ObjectContainer)) return _container;
@@ -349,7 +349,8 @@ internal class ServiceProvider(IObjectContainer container, IServiceProvider? inn
             });
         }
 
-        var service = ioc?.Resolve(serviceType, this);
+        var item = ioc?.Services.LastOrDefault(e => e.ServiceType == serviceType);
+        var service = item != null ? ioc!.Resolve(item, this) : null;
         if (service != null) return service;
 
         if (InnerServiceProviderFactory != null)
