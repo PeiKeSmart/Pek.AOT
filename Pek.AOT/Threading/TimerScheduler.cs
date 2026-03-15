@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Pek.Log;
 
 namespace Pek.Threading;
@@ -73,6 +74,8 @@ public class TimerScheduler : IDisposable
         if (timer == null) throw new ArgumentNullException(nameof(timer));
         if (_disposing) throw new ObjectDisposedException(nameof(TimerScheduler));
 
+        using var span = DefaultTracer.Instance?.NewSpan("timer:Add", new { Name, timer = timer.ToString() });
+
         lock (this)
         {
             if (_timers.Contains(timer)) return;
@@ -91,6 +94,7 @@ public class TimerScheduler : IDisposable
                     IsBackground = true
                 };
                 _thread.Start();
+                WriteLog("启动定时调度器：{0}", Name);
             }
 
             Wake();
@@ -103,6 +107,8 @@ public class TimerScheduler : IDisposable
     public void Remove(TimerX timer, String reason)
     {
         if (timer == null || timer.Id == 0) return;
+
+        using var span = DefaultTracer.Instance?.NewSpan("timer:Remove", new { Name, timer = timer.ToString(), reason });
 
         lock (this)
         {
@@ -140,6 +146,7 @@ public class TimerScheduler : IDisposable
         if (_disposing) return;
 
         _disposing = true;
+        WriteLog("正在销毁定时调度器：{0}", Name);
         Wake();
 
         var thread = _thread;
@@ -163,6 +170,7 @@ public class TimerScheduler : IDisposable
     {
         lock (_cache)
         {
+            WriteGlobalLog("ClearAll Count={0}", _cache.Count);
             foreach (var item in _cache.Values.ToArray())
             {
                 item.Dispose();
@@ -210,7 +218,7 @@ public class TimerScheduler : IDisposable
             }
             catch (Exception ex)
             {
-                XXTrace.WriteException(ex);
+                XTrace.WriteException(ex);
             }
 
             if (_disposing) break;
@@ -248,14 +256,24 @@ public class TimerScheduler : IDisposable
         TimerX.Current = timer;
         WriteLogEventArgs.CurrentThreadName = Name == "Default" ? "T" : Name;
         timer.hasSetNext = false;
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        DefaultSpan.Current = null;
+        using var span = timer.Tracer?.NewSpan(timer.TracerName ?? "timer:Execute", timer.Timers + "");
+        var watch = Stopwatch.StartNew();
         try
         {
+            if (!timer.TryGetTarget(out _))
+            {
+                Remove(timer, "委托已不存在（GC回收委托所在对象）");
+                timer.Dispose();
+                return;
+            }
+
             timer.Invoke();
         }
         catch (Exception ex)
         {
-            XXTrace.WriteException(ex);
+            span?.SetError(ex, null);
+            XTrace.WriteException(ex);
         }
         finally
         {
@@ -269,14 +287,24 @@ public class TimerScheduler : IDisposable
         TimerX.Current = timer;
         WriteLogEventArgs.CurrentThreadName = Name == "Default" ? "T" : Name;
         timer.hasSetNext = false;
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        DefaultSpan.Current = null;
+        using var span = timer.Tracer?.NewSpan(timer.TracerName ?? "timer:ExecuteAsync", timer.Timers + "");
+        var watch = Stopwatch.StartNew();
         try
         {
+            if (!timer.TryGetTarget(out _))
+            {
+                Remove(timer, "委托已不存在（GC回收委托所在对象）");
+                timer.Dispose();
+                return;
+            }
+
             await timer.InvokeAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            XXTrace.WriteException(ex);
+            span?.SetError(ex, null);
+            XTrace.WriteException(ex);
         }
         finally
         {
@@ -317,5 +345,12 @@ public class TimerScheduler : IDisposable
     {
         if (Log == null || !Log.Enable || LogLevel.Info < Log.Level) return;
         Log.Info(XXTrace.FormatScope(LogScope, "TimerScheduler", Name + " ", format), args);
+    }
+
+    private static void WriteGlobalLog(String format, params Object?[] args)
+    {
+        var log = XTrace.Log;
+        if (log == null || !log.Enable || LogLevel.Info < log.Level) return;
+        log.Info(XXTrace.FormatScope(LogScope, nameof(TimerScheduler), format), args);
     }
 }

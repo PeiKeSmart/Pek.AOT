@@ -5,6 +5,7 @@ namespace Pek.Log;
 /// <summary>跟踪流。包装基础流，用于记录 Read/Write 等行为</summary>
 public class TraceStream : Stream
 {
+    private const String LogScope = "Pek.Log";
     private static readonly String[] DefaultTraceMembers = ["Write", "WriteByte", "Read", "ReadByte", "BeginRead", "BeginWrite", "EndRead", "EndWrite", "Seek", "Close", "Flush", "SetLength", "SetPosition"];
     private Int64 _lastPosition = -1;
     private Boolean _useConsole;
@@ -235,7 +236,7 @@ public class TraceStream : Stream
         builder.Append(action);
         builder.Append('\t');
         WriteTraceBody(e, builder);
-        XTrace.WriteLine(builder.ToString());
+        XTrace.WriteScope(LogScope, nameof(TraceStream), builder.ToString());
     }
 
     private void WriteTraceBody(TraceStreamEventArgs e, Boolean writeToConsole)

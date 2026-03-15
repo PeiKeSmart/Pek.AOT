@@ -5,6 +5,7 @@ namespace Pek.Log;
 /// <summary>统计代码的时间消耗</summary>
 public class TimeCost : DisposeBase
 {
+    private const String LogScope = "Pek.Log";
     private Stopwatch? _stopwatch;
 
     /// <summary>名称</summary>
@@ -57,8 +58,8 @@ public class TimeCost : DisposeBase
         if (ms <= Max) return;
 
         if (Max > 0)
-            Log.Warn("{0}执行过长警告 {1:n0}ms > {2:n0}ms", Name, ms, Max);
+            Log.Warn(XXTrace.FormatScope(LogScope, nameof(TimeCost), "{0}执行过长警告 {1:n0}ms > {2:n0}ms"), Name, ms, Max);
         else
-            Log.Warn("{0}执行 {1:n0}ms", Name, ms);
+            Log.Warn(XXTrace.FormatScope(LogScope, nameof(TimeCost), "{0}执行 {1:n0}ms"), Name, ms);
     }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Pek.Log;
 
 namespace Pek.Threading;
@@ -13,6 +14,10 @@ public static class ThreadPoolX
         {
             ThreadPool.SetMinThreads(Math.Max(workerThreads, target), Math.Max(completionPortThreads, target));
         }
+
+#if NET7_0_OR_GREATER
+        AppContext.SetData("System.Threading.ThreadPool.Blocking.MaxDelayMs", 50);
+#endif
     }
 
     /// <summary>初始化线程池</summary>
@@ -20,6 +25,7 @@ public static class ThreadPoolX
 
     /// <summary>投递线程池任务</summary>
     /// <param name="callback">回调方法</param>
+    [DebuggerHidden]
     public static void QueueUserWorkItem(Action callback)
     {
         if (callback == null) return;
@@ -32,7 +38,7 @@ public static class ThreadPoolX
             }
             catch (Exception ex)
             {
-                XXTrace.WriteException(ex);
+                XTrace.WriteException(ex);
             }
         }, null);
     }
@@ -41,6 +47,7 @@ public static class ThreadPoolX
     /// <typeparam name="T">状态类型</typeparam>
     /// <param name="callback">回调方法</param>
     /// <param name="state">状态对象</param>
+    [DebuggerHidden]
     public static void QueueUserWorkItem<T>(Action<T> callback, T state)
     {
         if (callback == null) return;
@@ -53,7 +60,7 @@ public static class ThreadPoolX
             }
             catch (Exception ex)
             {
-                XXTrace.WriteException(ex);
+                XTrace.WriteException(ex);
             }
         }, null);
     }

@@ -141,6 +141,40 @@ public class Cron
         return DateTime.MinValue;
     }
 
+    /// <summary>获取一组表达式中的下一次执行时间</summary>
+    /// <param name="crons">Cron 表达式集合</param>
+    /// <param name="time">基准时间</param>
+    /// <returns>下一次执行时间</returns>
+    public static DateTime GetNext(String[] crons, DateTime time)
+    {
+        var next = DateTime.MaxValue;
+        foreach (var item in crons)
+        {
+            var cron = new Cron(item);
+            var current = cron.GetNext(time);
+            if (current < next) next = current;
+        }
+
+        return next;
+    }
+
+    /// <summary>获取一组表达式中的前一次执行时间</summary>
+    /// <param name="crons">Cron 表达式集合</param>
+    /// <param name="time">基准时间</param>
+    /// <returns>前一次执行时间</returns>
+    public static DateTime GetPrevious(String[] crons, DateTime time)
+    {
+        var previous = DateTime.MinValue;
+        foreach (var item in crons)
+        {
+            var cron = new Cron(item);
+            var current = cron.GetPrevious(time);
+            if (current > previous) previous = current;
+        }
+
+        return previous;
+    }
+
     /// <summary>转为文本</summary>
     /// <returns>表达式文本</returns>
     public override String ToString() => _expression ?? nameof(Cron);

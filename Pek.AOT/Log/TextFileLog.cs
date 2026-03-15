@@ -409,7 +409,7 @@ public class TextFileLog : Logger, IDisposable
         }
 
         var machine = MachineInfo.Current;
-        var os = !String.IsNullOrWhiteSpace(machine.OSName)
+        var os = machine != null && !String.IsNullOrWhiteSpace(machine.OSName)
             ? $"{machine.OSName} {machine.OSVersion}".Trim()
             : Environment.OSVersion.ToString();
 
@@ -444,11 +444,14 @@ public class TextFileLog : Logger, IDisposable
             builder.AppendFormat("#CLR: {0}, {1}\r\n", Environment.Version, target);
             builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", os, Environment.MachineName, Environment.UserName);
             builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
-            if (machine.Memory > 0)
-                builder.AppendFormat("#Memory: {0:n0}M/{1:n0}M\r\n", machine.AvailableMemory / 1024 / 1024, machine.Memory / 1024 / 1024);
-            if (!String.IsNullOrWhiteSpace(machine.Processor)) builder.AppendFormat("#Processor: {0}\r\n", machine.Processor);
-            if (!String.IsNullOrWhiteSpace(machine.Product)) builder.AppendFormat("#Product: {0} / {1}\r\n", machine.Product, machine.Vendor);
-            if (machine.Temperature > 0) builder.AppendFormat("#Temperature: {0}\r\n", machine.Temperature);
+            if (machine != null)
+            {
+                if (machine.Memory > 0)
+                    builder.AppendFormat("#Memory: {0:n0}M/{1:n0}M\r\n", machine.AvailableMemory / 1024 / 1024, machine.Memory / 1024 / 1024);
+                if (!String.IsNullOrWhiteSpace(machine.Processor)) builder.AppendFormat("#Processor: {0}\r\n", machine.Processor);
+                if (!String.IsNullOrWhiteSpace(machine.Product)) builder.AppendFormat("#Product: {0} / {1}\r\n", machine.Product, machine.Vendor);
+                if (machine.Temperature > 0) builder.AppendFormat("#Temperature: {0}\r\n", machine.Temperature);
+            }
             builder.AppendFormat("#GC: IsServerGC={0}, LatencyMode={1}\r\n", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
             ThreadPool.GetMinThreads(out var minWorker, out var minIo);

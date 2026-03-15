@@ -1,3 +1,6 @@
+using System.Reflection;
+using Pek.Log;
+
 namespace Pek.Threading;
 
 /// <summary>不可重入定时器</summary>
@@ -8,42 +11,44 @@ public class TimerX : ITimer, IDisposable
     private static DateTime _now;
     private static DateTime _baseTime;
 
-    private readonly TimerCallback? _callback;
-    private readonly Func<Object?, Task>? _asyncCallback;
-    private readonly String _callbackName;
     private readonly Cron[]? _crons;
     private readonly DateTime _createdAt;
-    private readonly Boolean _isAsyncTask;
     private WeakReference? _state;
-    private DateTime _absolutelyNext;
+    private DateTime _AbsolutelyNext;
     private Int64 _nextTick;
+
+    internal readonly WeakReference Target;
+    internal readonly MethodInfo Method;
+    internal readonly Boolean IsAsyncTask;
 
     private TimerX(TimerCallback callback, Object? state, String? scheduler = null)
     {
         if (callback == null) throw new ArgumentNullException(nameof(callback));
 
-        _callback = callback;
-        _callbackName = callback.Method.Name;
+        Target = new WeakReference(callback.Target);
+        Method = callback.Method;
         State = state;
         Scheduler = String.IsNullOrWhiteSpace(scheduler) ? TimerScheduler.Default : TimerScheduler.Create(scheduler);
         _createdAt = Scheduler.GetNow();
         _nextTick = Runtime.TickCount64;
         _baseTime = _createdAt.AddMilliseconds(-_nextTick);
+        TracerName = $"timer:{Method.Name}";
     }
 
     private TimerX(Func<Object, Task> callback, Object? state, String? scheduler = null)
     {
         if (callback == null) throw new ArgumentNullException(nameof(callback));
 
-        _asyncCallback = stateValue => callback(stateValue!);
-        _callbackName = callback.Method.Name;
-        _isAsyncTask = true;
+        Target = new WeakReference(callback.Target);
+        Method = callback.Method;
+        IsAsyncTask = true;
         Async = true;
         State = state;
         Scheduler = String.IsNullOrWhiteSpace(scheduler) ? TimerScheduler.Default : TimerScheduler.Create(scheduler);
         _createdAt = Scheduler.GetNow();
         _nextTick = Runtime.TickCount64;
         _baseTime = _createdAt.AddMilliseconds(-_nextTick);
+        TracerName = $"timer:{Method.Name}";
     }
 
     /// <summary>实例化定时器</summary>
@@ -88,7 +93,7 @@ public class TimerX : ITimer, IDisposable
         var now = Scheduler.GetNow();
         var next = startTime;
         while (next < now) next = next.AddMilliseconds(period);
-        _absolutelyNext = next;
+        _AbsolutelyNext = next;
         Init((Int64)(next - now).TotalMilliseconds);
     }
 
@@ -108,7 +113,7 @@ public class TimerX : ITimer, IDisposable
         var now = Scheduler.GetNow();
         var next = startTime;
         while (next < now) next = next.AddMilliseconds(period);
-        _absolutelyNext = next;
+        _AbsolutelyNext = next;
         Init((Int64)(next - now).TotalMilliseconds);
     }
 
@@ -124,7 +129,7 @@ public class TimerX : ITimer, IDisposable
         Absolutely = true;
         var now = Scheduler.GetNow();
         var next = _crons.Min(e => e.GetNext(now));
-        _absolutelyNext = next;
+        _AbsolutelyNext = next;
         Init((Int64)(next - now).TotalMilliseconds);
     }
 
@@ -140,7 +145,7 @@ public class TimerX : ITimer, IDisposable
         _crons = ParseCrons(cronExpression);
         var now = Scheduler.GetNow();
         var next = _crons.Min(e => e.GetNext(now));
-        _absolutelyNext = next;
+        _AbsolutelyNext = next;
         Init((Int64)(next - now).TotalMilliseconds);
     }
 
@@ -177,9 +182,6 @@ public class TimerX : ITimer, IDisposable
 
     /// <summary>所属调度器</summary>
     public TimerScheduler Scheduler { get; }
-
-    /// <summary>是否异步任务方法</summary>
-    internal Boolean IsAsyncTask => _isAsyncTask;
 
     /// <summary>状态对象</summary>
     public Object? State
@@ -220,6 +222,20 @@ public class TimerX : ITimer, IDisposable
 
     /// <summary>Cron 集合</summary>
     public Cron[]? Crons => _crons;
+
+    /// <summary>Cron 表达式</summary>
+    [Obsolete("=>Crons")]
+    public Cron? Cron => _crons?.FirstOrDefault();
+
+    /// <summary>判断任务是否执行的委托</summary>
+    [Obsolete("该委托容易造成内存泄漏，故取消", true)]
+    public Func<Boolean>? CanExecute { get; set; }
+
+    /// <summary>链路追踪器</summary>
+    public ITracer? Tracer { get; set; }
+
+    /// <summary>链路追踪名称</summary>
+    public String TracerName { get; set; }
 
     /// <summary>是否已设置下一次时间</summary>
     internal Boolean hasSetNext;
@@ -279,23 +295,33 @@ public class TimerX : ITimer, IDisposable
     public override String ToString()
     {
         var periodText = _crons != null ? String.Join(';', _crons.Select(e => e.ToString())) : $"{Period}ms";
-        return $"[{Id}]{_callbackName} ({periodText})";
+        return $"[{Id}]{Method.DeclaringType?.Name}.{Method.Name} ({periodText})";
+    }
+
+    internal Boolean TryGetTarget(out Object? target)
+    {
+        target = Method.IsStatic ? null : Target.Target;
+        return target != null || Method.IsStatic;
     }
 
     internal void Invoke()
     {
-        var callback = _callback;
-        if (callback == null) throw new InvalidOperationException("Timer callback is not configured.");
+        if (!TryGetTarget(out var target)) throw new InvalidOperationException("Timer target has been collected.");
 
+        var callback = target == null
+            ? (TimerCallback)Method.CreateDelegate(typeof(TimerCallback))
+            : (TimerCallback)Method.CreateDelegate(typeof(TimerCallback), target);
         callback(State);
     }
 
     internal Task InvokeAsync()
     {
-        var callback = _asyncCallback;
-        if (callback == null) throw new InvalidOperationException("Timer async callback is not configured.");
+        if (!TryGetTarget(out var target)) throw new InvalidOperationException("Timer async target has been collected.");
 
-        return callback(State);
+        var callback = target == null
+            ? (Func<Object, Task>)Method.CreateDelegate(typeof(Func<Object, Task>))
+            : (Func<Object, Task>)Method.CreateDelegate(typeof(Func<Object, Task>), target);
+        return callback(State!);
     }
 
     internal Int32 SetAndGetNextTime()
@@ -319,11 +345,11 @@ public class TimerX : ITimer, IDisposable
             }
             else
             {
-                next = _absolutelyNext;
+                next = _AbsolutelyNext;
                 while (next < now) next = next.AddMilliseconds(period);
             }
 
-            _absolutelyNext = next;
+            _AbsolutelyNext = next;
             var diff = (Int32)Math.Round((next - now).TotalMilliseconds);
             SetNextTick(diff);
             return diff > 0 ? diff : period;

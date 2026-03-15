@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Pek.Threading;
 using Pek;
 
@@ -6,8 +7,10 @@ namespace Pek.Log;
 /// <summary>XTrace 日志入口</summary>
 public static class XTrace
 {
+    private const String LogScope = "Pek.Log";
     private static readonly Object _lock = new();
     private static ILog _log = Logger.Null;
+    private static Int32 _initing;
     private static ITracer? _tracer;
     private static Boolean _ownsTracer;
     private static Boolean _useConsole;
@@ -83,6 +86,7 @@ public static class XTrace
     public static void WriteLine(String message)
     {
         if (message == null) return;
+        if (!InitLog()) return;
         Log.Info(message);
     }
 
@@ -92,6 +96,7 @@ public static class XTrace
     public static void WriteLine(String format, params Object?[] args)
     {
         if (format == null) return;
+        if (!InitLog()) return;
         Log.Info(format, args);
     }
 
@@ -154,7 +159,8 @@ public static class XTrace
     public static void WriteException(Exception exception)
     {
         if (exception == null) return;
-        Log.Error("{0}", exception);
+        if (!InitLog()) return;
+        Log.Error(FormatScope(LogScope, nameof(XTrace), "{0}"), exception);
     }
 
     /// <summary>开始一个埋点</summary>
@@ -206,6 +212,15 @@ public static class XTrace
         if (_useConsole) return;
         _useConsole = true;
 
+        Runtime.IsConsole = true;
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                ResizeConsoleWindow();
+        }
+        catch { }
+
         var setting = GetSetting();
         var consoleLog = new ConsoleLog { UseColor = useColor, Level = setting.LogLevel };
         if (useFileLog)
@@ -225,25 +240,37 @@ public static class XTrace
         _useConsole = false;
     }
 
-    private static void InitLog()
+    private static Boolean InitLog()
     {
-        if (_log != Logger.Null) return;
+        if (_log != Logger.Null) return true;
+        if (_initing > 0 && _initing == Thread.CurrentThread.ManagedThreadId) return false;
 
         lock (_lock)
         {
-            if (_log != Logger.Null) return;
+            if (_log != Logger.Null) return true;
 
-            if (!TryGetSetting(out var setting)) return;
+            _initing = Thread.CurrentThread.ManagedThreadId;
 
-            _log = setting.LogFileFormat.Contains("{1}", StringComparison.Ordinal)
-                ? new LevelLog(setting.LogPath, setting.LogFileFormat) { Level = setting.LogLevel }
-                : TextFileLog.Create(setting.LogPath, setting.LogFileFormat);
+            try
+            {
+                if (!TryGetSetting(out var setting)) return false;
 
-            if (!String.IsNullOrWhiteSpace(setting.NetworkLog))
-                _log = new CompositeLog(_log, new NetworkLog(setting.NetworkLog) { Level = setting.LogLevel });
+                _log = setting.LogFileFormat.Contains("{1}", StringComparison.Ordinal)
+                    ? new LevelLog(setting.LogPath, setting.LogFileFormat) { Level = setting.LogLevel }
+                    : TextFileLog.Create(setting.LogPath, setting.LogFileFormat);
 
-            _log.Level = setting.LogLevel;
-            AttachTracerLog(_tracer, _log);
+                if (!String.IsNullOrWhiteSpace(setting.NetworkLog))
+                    _log = new CompositeLog(_log, new NetworkLog(setting.NetworkLog) { Level = setting.LogLevel });
+
+                _log.Level = setting.LogLevel;
+                AttachTracerLog(_tracer, _log);
+
+                return true;
+            }
+            finally
+            {
+                _initing = 0;
+            }
         }
     }
 
@@ -299,6 +326,13 @@ public static class XTrace
 
         disposable.Dispose();
         _ownsTracer = false;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ResizeConsoleWindow()
+    {
+        if (Console.WindowWidth <= 80) Console.WindowWidth = Console.WindowWidth * 3 / 2;
+        if (Console.WindowHeight <= 25) Console.WindowHeight = Console.WindowHeight * 3 / 2;
     }
 
     private static void OnProcessExit()
