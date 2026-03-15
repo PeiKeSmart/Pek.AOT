@@ -168,7 +168,7 @@ public class SocketSetting : Config<SocketSetting, SocketSettingJsonContext>
 }
 ```
 
-### 5. XXTrace 配置示例
+### 5. XTrace 配置示例
 
 ```csharp
 using Pek;
@@ -177,8 +177,8 @@ using Pek.Logging;
 var setting = Setting.Current;
 
 Console.WriteLine(setting.LogLevel);
-XXTrace.UseConsole();
-XXTrace.WriteLine("hello");
+XTrace.UseConsole();
+XTrace.WriteLine("hello");
 ```
 
 默认会生成 `Config/Core.config`，其中关键片段类似：

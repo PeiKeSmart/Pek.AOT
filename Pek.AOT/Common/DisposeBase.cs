@@ -66,7 +66,7 @@ public abstract class DisposeBase : IDisposable2
         }
         catch (Exception ex)
         {
-            XXTrace.WriteException(ex);
+            XTrace.WriteException(ex);
         }
     }
 }

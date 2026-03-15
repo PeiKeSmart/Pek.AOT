@@ -143,7 +143,7 @@ public class WriteLogEventArgs : EventArgs
 
     private void Init()
     {
-        var setting = XXTrace.GetSetting();
+        var setting = XTrace.GetSetting();
         Time = DateTime.Now.AddHours(setting.UtcIntervalHours);
         var thread = Thread.CurrentThread;
         ThreadId = thread.ManagedThreadId;
@@ -171,7 +171,7 @@ public class WriteLogEventArgs : EventArgs
 
     private static String[] GetFields()
     {
-        var format = XXTrace.GetSetting().LogLineFormat;
+        var format = XTrace.GetSetting().LogLineFormat;
         if (String.IsNullOrWhiteSpace(format)) format = "Time|ThreadId|Kind|Name|Message";
 
         if (!String.Equals(format, _cachedFormat, StringComparison.Ordinal))

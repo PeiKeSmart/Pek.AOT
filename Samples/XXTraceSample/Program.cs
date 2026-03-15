@@ -1,7 +1,7 @@
 ﻿using Pek.Logging;
 
-XXTrace.UseConsole();
+XTrace.UseConsole();
 
-XXTrace.WriteLine($"测试执行");
+XTrace.WriteLine($"测试执行");
 
 Console.ReadKey();

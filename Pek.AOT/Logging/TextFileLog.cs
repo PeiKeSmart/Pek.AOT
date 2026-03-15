@@ -51,7 +51,7 @@ public class TextFileLog : Logger, IDisposable
 
     internal TextFileLog(String path, Boolean isFile, String? fileFormat = null)
     {
-        var setting = XXTrace.GetSetting();
+        var setting = XTrace.GetSetting();
         LogPath = path;
         _isFile = isFile;
         FileFormat = String.IsNullOrWhiteSpace(fileFormat) ? setting.LogFileFormat : fileFormat;
@@ -108,7 +108,7 @@ public class TextFileLog : Logger, IDisposable
 
         if (Interlocked.CompareExchange(ref _writing, 1, 0) != 0) return;
 
-        var setting = XXTrace.GetSetting();
+        var setting = XTrace.GetSetting();
         if (setting.LogLevel <= LogLevel.Debug || level >= LogLevel.Error)
         {
             try
@@ -143,7 +143,7 @@ public class TextFileLog : Logger, IDisposable
 
     private void WriteFile()
     {
-        var setting = XXTrace.GetSetting();
+        var setting = XTrace.GetSetting();
         var now = TimerX.Now.AddHours(setting.UtcIntervalHours);
         var logFile = GetLogFile(now);
         if (String.IsNullOrWhiteSpace(logFile)) return;
@@ -205,7 +205,7 @@ public class TextFileLog : Logger, IDisposable
     {
         try
         {
-            var setting = XXTrace.GetSetting();
+            var setting = XTrace.GetSetting();
             if (_pendingPayload != null || !_logs.IsEmpty) WriteFile();
             if (_writer != null && closeTime < TimerX.Now.AddHours(setting.UtcIntervalHours))
             {
@@ -378,7 +378,7 @@ public class TextFileLog : Logger, IDisposable
 
     private static String GetHead()
     {
-        var setting = XXTrace.GetSetting();
+        var setting = XTrace.GetSetting();
         var process = Process.GetCurrentProcess();
         var name = AppDomain.CurrentDomain.FriendlyName;
         if (String.IsNullOrWhiteSpace(name)) name = process.ProcessName;

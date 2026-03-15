@@ -12,7 +12,7 @@ namespace Pek;
 public class Setting : Config<Setting, SettingJsonContext>
 {
     /// <summary>是否启用全局调试</summary>
-    [Description("全局调试。XXTrace.Debug")]
+    [Description("全局调试。XTrace.Debug")]
     public Boolean Debug { get; set; } = true;
 
     /// <summary>日志等级</summary>
