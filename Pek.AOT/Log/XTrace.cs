@@ -8,6 +8,8 @@ public static class XTrace
 {
     private static readonly Object _lock = new();
     private static ILog _log = Logger.Null;
+    private static ITracer? _tracer;
+    private static Boolean _ownsTracer;
     private static Boolean _useConsole;
 
     /// <summary>日志提供者</summary>
@@ -18,7 +20,30 @@ public static class XTrace
             InitLog();
             return _log;
         }
-        set => _log = value ?? Logger.Null;
+        set
+        {
+            _log = value ?? Logger.Null;
+            AttachTracerLog(_tracer, _log);
+        }
+    }
+
+    /// <summary>默认追踪器</summary>
+    public static ITracer? Tracer
+    {
+        get
+        {
+            InitTracer();
+            return _tracer;
+        }
+        set
+        {
+            ReleaseOwnedTracer();
+
+            _tracer = value;
+            _ownsTracer = false;
+            DefaultTracer.Instance = value;
+            AttachTracerLog(value, Log);
+        }
     }
 
     /// <summary>是否启用调试</summary>
@@ -122,6 +147,38 @@ public static class XTrace
         Log.Error("{0}", exception);
     }
 
+    /// <summary>开始一个埋点</summary>
+    /// <param name="name">操作名</param>
+    /// <returns>跟踪片段</returns>
+    public static ISpan? NewSpan(String name) => Tracer?.NewSpan(name);
+
+    /// <summary>开始一个埋点，并附加标签</summary>
+    /// <param name="name">操作名</param>
+    /// <param name="tag">标签</param>
+    /// <returns>跟踪片段</returns>
+    public static ISpan? NewSpan(String name, Object? tag) => Tracer?.NewSpan(name, tag);
+
+    /// <summary>启用追踪器</summary>
+    /// <param name="tracer">追踪器，为空时创建默认追踪器</param>
+    /// <returns>追踪器实例</returns>
+    public static ITracer UseTracer(ITracer? tracer = null)
+    {
+        if (tracer == null)
+        {
+            InitTracer();
+            return _tracer ?? throw new InvalidOperationException("Unable to initialize tracer.");
+        }
+
+        ReleaseOwnedTracer();
+
+        _tracer = tracer;
+        _ownsTracer = false;
+        DefaultTracer.Instance = tracer;
+        AttachTracerLog(tracer, Log);
+
+        return tracer;
+    }
+
     /// <summary>启用控制台输出</summary>
     /// <param name="useColor">是否使用颜色</param>
     /// <param name="useFileLog">是否同时使用文件日志</param>
@@ -142,6 +199,9 @@ public static class XTrace
     public static void Shutdown()
     {
         OnProcessExit();
+        ReleaseOwnedTracer();
+        DefaultTracer.Instance = null;
+        _tracer = null;
         _log = Logger.Null;
         _useConsole = false;
     }
@@ -164,6 +224,30 @@ public static class XTrace
                 _log = new CompositeLog(_log, new NetworkLog(setting.NetworkLog) { Level = setting.LogLevel });
 
             _log.Level = setting.LogLevel;
+            AttachTracerLog(_tracer, _log);
+        }
+    }
+
+    private static void InitTracer()
+    {
+        if (_tracer != null) return;
+
+        lock (_lock)
+        {
+            if (_tracer != null) return;
+
+            var tracer = DefaultTracer.Instance;
+            if (tracer == null)
+            {
+                tracer = new DefaultTracer();
+                _ownsTracer = true;
+            }
+            else
+                _ownsTracer = false;
+
+            _tracer = tracer;
+            DefaultTracer.Instance = tracer;
+            AttachTracerLog(tracer, Log);
         }
     }
 
@@ -183,6 +267,19 @@ public static class XTrace
             setting = new Setting();
             return false;
         }
+    }
+
+    private static void AttachTracerLog(ITracer? tracer, ILog log)
+    {
+        if (tracer is ILogFeature feature) feature.Log = log;
+    }
+
+    private static void ReleaseOwnedTracer()
+    {
+        if (!_ownsTracer || _tracer is not IDisposable disposable) return;
+
+        disposable.Dispose();
+        _ownsTracer = false;
     }
 
     private static void OnProcessExit()

@@ -6,6 +6,9 @@ public static class XXTrace
     /// <summary>日志提供者</summary>
     public static ILog Log { get => XTrace.Log; set => XTrace.Log = value; }
 
+    /// <summary>默认追踪器</summary>
+    public static ITracer? Tracer { get => XTrace.Tracer; set => XTrace.Tracer = value; }
+
     /// <summary>是否启用调试</summary>
     public static Boolean Debug => XTrace.Debug;
 
@@ -65,6 +68,22 @@ public static class XXTrace
     /// <param name="useColor">是否使用颜色</param>
     /// <param name="useFileLog">是否同时使用文件日志</param>
     public static void UseConsole(Boolean useColor = true, Boolean useFileLog = true) => XTrace.UseConsole(useColor, useFileLog);
+
+    /// <summary>启用追踪器</summary>
+    /// <param name="tracer">追踪器，为空时创建默认追踪器</param>
+    /// <returns>追踪器实例</returns>
+    public static ITracer UseTracer(ITracer? tracer = null) => XTrace.UseTracer(tracer);
+
+    /// <summary>开始一个埋点</summary>
+    /// <param name="name">操作名</param>
+    /// <returns>跟踪片段</returns>
+    public static ISpan? NewSpan(String name) => XTrace.NewSpan(name);
+
+    /// <summary>开始一个埋点，并附加标签</summary>
+    /// <param name="name">操作名</param>
+    /// <param name="tag">标签</param>
+    /// <returns>跟踪片段</returns>
+    public static ISpan? NewSpan(String name, Object? tag) => XTrace.NewSpan(name, tag);
 
     /// <summary>关闭并释放当前日志提供者</summary>
     public static void Shutdown() => XTrace.Shutdown();

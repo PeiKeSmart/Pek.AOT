@@ -12,7 +12,7 @@ using Pek.Threading;
 namespace Pek.Net;
 
 /// <summary>串口传输</summary>
-public class SerialTransport : DisposeBase, ITransport
+public class SerialTransport : DisposeBase, ITransport, ITracerFeature
 {
     private const String LogScope = "Pek.Net";
 
@@ -74,6 +74,9 @@ public class SerialTransport : DisposeBase, ITransport
 
     /// <summary>日志对象</summary>
     public ILog Log { get; set; } = Logger.Null;
+
+    /// <summary>链路追踪</summary>
+    public ITracer? Tracer { get; set; } = XTrace.Tracer;
 
     /// <summary>描述信息</summary>
     public String Description
@@ -184,12 +187,21 @@ public class SerialTransport : DisposeBase, ITransport
         if (data == null) throw new ArgumentNullException(nameof(data));
         if (!Open() || Serial == null) return false;
 
+        using var span = Tracer?.NewSpan("SerialTransport.Send", PortName);
         WriteLog("Send Port={0} Data={1}", PortName, data.ToHex());
 
         var buffer = data.ToArray();
-        lock (Serial)
+        try
         {
-            Serial.Write(buffer, 0, buffer.Length);
+            lock (Serial)
+            {
+                Serial.Write(buffer, 0, buffer.Length);
+            }
+        }
+        catch (Exception ex)
+        {
+            span?.SetError(ex, PortName);
+            throw;
         }
 
         return true;
@@ -207,11 +219,21 @@ public class SerialTransport : DisposeBase, ITransport
 
         if (data != null)
         {
+            using var span = Tracer?.NewSpan("SerialTransport.SendAsync", PortName);
             WriteLog("SendAsync Port={0} Data={1}", PortName, data.ToHex());
             var buffer = data.ToArray();
-            lock (Serial)
+            try
             {
-                Serial.Write(buffer, 0, buffer.Length);
+                lock (Serial)
+                {
+                    Serial.Write(buffer, 0, buffer.Length);
+                }
+            }
+            catch (Exception ex)
+            {
+                span?.SetError(ex, PortName);
+                _source = null;
+                throw;
             }
         }
 

@@ -154,7 +154,12 @@ public class NetworkLog : Logger, IDisposable
 
         if (_httpClient != null)
         {
-            _httpClient.PostAsync(String.Empty, new StringContent(value, Encoding.UTF8, "text/plain")).GetAwaiter().GetResult();
+            using var request = new HttpRequestMessage(HttpMethod.Post, String.Empty)
+            {
+                Content = new StringContent(value, Encoding.UTF8, "text/plain")
+            };
+            TraceContext.Attach(request);
+            _httpClient.SendAsync(request).GetAwaiter().GetResult();
             return;
         }
 

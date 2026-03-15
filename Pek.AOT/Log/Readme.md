@@ -5,6 +5,8 @@
 - 命名空间已对齐为 Pek.Log。
 - XTrace 为主入口，XXTrace 作为兼容入口保留。
 - 已补齐基础埋点类型：ITracer、ISpan、ISpanBuilder、ITracerResolver、ITracerFeature。
+- XTrace 已补齐默认 Tracer 入口，支持 `Tracer`、`UseTracer()`、`NewSpan()` 统一接入埋点。
+- ILogFeature 现已统一包含 Tracer 能力，EventHub 会自动续接消息或上下文中已有的 TraceId。
 - 已补齐低依赖日志能力：ActionLog、CodeTimer、PerfCounter、TimeCost、LogEventListener、TraceStream、NetworkLog。
 - TextControlLog 依赖 WinForms，当前仓库为跨平台多目标库，尚未引入对应平台依赖，因此暂未迁入。
 

@@ -35,6 +35,9 @@ public class PacketCodec : IDisposable
     /// <summary>最大缓存待处理数据，默认1M</summary>
     public Int32 MaxCache { get; set; } = 1024 * 1024;
 
+    /// <summary>链路追踪</summary>
+    public ITracer? Tracer { get; set; }
+
     /// <summary>释放资源</summary>
     public void Dispose()
     {
@@ -101,6 +104,8 @@ public class PacketCodec : IDisposable
             CheckCache();
             stream = Stream;
 
+            using var span = Tracer?.NewSpan("net:PacketCodec:MergeCache", $"Position={stream.Position} Length={stream.Length} NewData=[{packet.Length}]{packet.ToHex(500)}");
+
             if (packet != null && packet.Total > 0)
             {
                 var position = stream.Position;
@@ -146,6 +151,9 @@ public class PacketCodec : IDisposable
                 var count = stream.Read(buffer, 0, length);
                 stream.Seek(-count, SeekOrigin.Current);
                 var hex = buffer.ToHex(0, count);
+
+                using var span = Tracer?.NewSpan("net:PacketCodec:DropCache", $"[{retain}]{hex}");
+                span?.SetError(new Exception($"数据包编码器放弃数据 retain={retain} MaxCache={MaxCache}"), null);
 
                 if (XXTrace.Debug)
                     XXTrace.WriteLine("数据包编码器放弃数据 {0:n0}，Last={1}，MaxCache={2:n0}，Preview={3}", retain, Last, MaxCache, hex);

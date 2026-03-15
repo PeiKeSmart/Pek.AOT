@@ -5,7 +5,7 @@ using Pek.Log;
 namespace Pek.Messaging;
 
 /// <summary>默认事件中心</summary>
-public class EventHub : DisposeBase, IEventHub, ILogFeature
+public class EventHub : DisposeBase, IEventHub, ILogFeature, ITracerFeature
 {
     private readonly ConcurrentDictionary<Type, SubscriptionCollection> _typedSubscriptions = new();
     private readonly ConcurrentDictionary<String, SubscriptionCollection> _namedSubscriptions = new(StringComparer.OrdinalIgnoreCase);
@@ -176,6 +176,8 @@ public class EventHub : DisposeBase, IEventHub, ILogFeature
 
         context.Name = String.IsNullOrEmpty(context.Name) ? name : context.Name;
         if (context.Event == null) context.Event = @event;
+        if (@event is ITraceMessage traceMessage && String.IsNullOrWhiteSpace(traceMessage.TraceId))
+            traceMessage.TraceId = DefaultSpan.Current?.ToString();
 
         using var span = Tracer?.NewSpan("EventHub.Publish", context.Name);
         try
