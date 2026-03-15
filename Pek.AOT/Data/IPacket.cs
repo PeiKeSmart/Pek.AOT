@@ -1,10 +1,9 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-
 using Pek.Buffers;
 using Pek.Collections;
 using Pek.Extension;
@@ -63,10 +62,6 @@ public interface IPacket
 }
 
 /// <summary>拥有管理权的数据包。使用完以后需要释放</summary>
-/// <remarks>
-/// <para>表示当前实例负责底层缓冲区的生命周期管理。</para>
-/// <para>典型来源包括：从对象池租借的缓冲区、显式转移所有权的切片结果。</para>
-/// </remarks>
 public interface IOwnerPacket : IPacket, IDisposable;
 
 /// <summary>数据包辅助扩展方法</summary>
@@ -77,7 +72,7 @@ public interface IOwnerPacket : IPacket, IDisposable;
 /// <item>性能优先：单包快速路径，多包链式处理</item>
 /// <item>内存友好：复用缓冲区，减少分配</item>
 /// <item>安全防护：环检测，边界校验</item>
-/// <item>兼容扩展：支持 null 调用，便于链式编程</item>
+/// <item>兼容扩展：支持 null 调用，便于链式编程</item>  
 /// </list>
 /// </remarks>
 public static class PacketHelper
@@ -119,11 +114,13 @@ public static class PacketHelper
     public static IPacket Append(this IPacket pk, IPacket next)
     {
         if (next == null) return pk;
-        if (ReferenceEquals(pk, next)) return pk;
+        if (ReferenceEquals(pk, next)) return pk; // 防止自连接
 
+        // 遍历到链尾
         var current = pk;
         while (current.Next != null)
         {
+            // 环检测：避免形成循环链表
             if (ReferenceEquals(current.Next, pk)) break;
             current = current.Next;
         }
@@ -156,14 +153,17 @@ public static class PacketHelper
     /// </remarks>
     public static String ToStr(this IPacket pk, Encoding? encoding = null, Int32 offset = 0, Int32 count = -1)
     {
+        // 兼容 null 扩展调用
         if (pk == null) return null!;
 
+        // 参数规范化
         if (offset < 0) offset = 0;
         if (count == 0) return String.Empty;
 
         var total = pk.Total;
         if (total == 0 || offset >= total) return String.Empty;
 
+        // 单包快速路径（热点优化）
         if (pk.Next == null)
         {
             var length = pk.Length;
@@ -173,6 +173,7 @@ public static class PacketHelper
             return pk.GetSpan().Slice(offset, actualCount).ToStr(encoding);
         }
 
+        // 多包链处理
         var finalCount = count < 0 || count > total - offset ? total - offset : count;
         if (finalCount <= 0) return String.Empty;
 
@@ -184,24 +185,32 @@ public static class PacketHelper
     {
         var skip = offset;
         var remain = count;
+        // 预分配容量：UTF-8 平均每字节约 1 个字符，避免 StringBuilder 扩容
         var sb = Pool.StringBuilder.Get();
         sb.EnsureCapacity(count);
+
         for (var current = pk; current != null && remain > 0; current = current.Next)
         {
             var span = current.GetSpan();
+
+            // 跳过当前段
             if (skip >= span.Length)
             {
                 skip -= span.Length;
                 continue;
             }
 
+            // 进入有效数据区
             if (skip > 0)
             {
                 span = span[skip..];
                 skip = 0;
             }
 
-            if (span.Length > remain) span = span[..remain];
+            // 限制读取长度
+            if (span.Length > remain)
+                span = span[..remain];
+
             sb.Append(span.ToStr(encoding));
             remain -= span.Length;
         }
@@ -215,6 +224,12 @@ public static class PacketHelper
     /// <param name="separator">分隔符，null/空表示不分隔</param>
     /// <param name="groupSize">分组大小，0 表示每字节分隔，负数等同于 0</param>
     /// <returns>十六进制字符串表示</returns>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>基于 Total 判空，避免首段为空时误判</item>
+    /// <item>多包处理：保持全局字节计数，确保分隔符在跨段时连续正确</item>
+    /// </list>
+    /// </remarks>
     public static String ToHex(this IPacket pk, Int32 maxLength = 32, String? separator = null, Int32 groupSize = 0)
     {
         if (pk == null) return null!;
@@ -223,9 +238,11 @@ public static class PacketHelper
         if (total == 0 || maxLength == 0) return String.Empty;
         if (groupSize < 0) groupSize = 0;
 
+        // 单包快速路径
         if (pk.Next == null)
             return pk.GetSpan().ToHex(separator, groupSize, maxLength);
 
+        // 多包链处理
         return ProcessMultiPacketHex(pk, maxLength, separator, groupSize);
     }
 
@@ -239,26 +256,38 @@ public static class PacketHelper
         for (var current = pk; current != null; current = current.Next)
         {
             var span = current.GetSpan();
+
             for (var i = 0; i < span.Length && (maxLength < 0 || writtenBytes < maxLength); i++)
             {
+                // 添加分隔符（非首字节且分隔符非空）
                 if (writtenBytes > 0 && !separator.IsNullOrEmpty())
                 {
-                    if (groupSize <= 0 || writtenBytes % groupSize == 0) sb.Append(separator);
+                    if (groupSize <= 0 || writtenBytes % groupSize == 0)
+                        sb.Append(separator);
                 }
 
+                // 转换字节为十六进制
                 var b = span[i];
                 sb.Append(HexDigits[b >> 4]);
                 sb.Append(HexDigits[b & 0x0F]);
                 writtenBytes++;
             }
 
+            // 提前结束检查
             if (maxLength >= 0 && writtenBytes >= maxLength) break;
         }
 
         return sb.Return(true);
     }
 
-    /// <summary>将数据包内容以文本形式写入 TextWriter</summary>
+    /// <summary>将数据包内容以文本形式流式写入 TextWriter，避免构建完整中间字符串</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="writer">目标文本写入器</param>
+    /// <param name="encoding">字符编码，null 表示 UTF8</param>
+    /// <remarks>
+    /// <para>适用于大数据包的文本输出场景（如日志、调试），避免 ToStr 产生的大量临时 String 分配。</para>
+    /// <para>按段逐个解码写入，内存开销仅为单段大小而非总数据量。</para>
+    /// </remarks>
     public static void WriteTo(this IPacket pk, TextWriter writer, Encoding? encoding = null)
     {
         if (pk == null || writer == null) return;
@@ -266,6 +295,7 @@ public static class PacketHelper
         encoding ??= Encoding.UTF8;
 
 #if NETCOREAPP || NETSTANDARD2_1
+        // 栈缓冲区在循环外分配一次，避免每次迭代累积栈空间
         const Int32 MaxStackAllocChars = 1024;
         Span<Char> stackChars = stackalloc Char[MaxStackAllocChars];
 #endif
@@ -284,6 +314,7 @@ public static class PacketHelper
             }
             else
             {
+                // 大段使用池化缓冲区
                 var chars = ArrayPool<Char>.Shared.Rent(charCount);
                 try
                 {
@@ -296,6 +327,7 @@ public static class PacketHelper
                 }
             }
 #else
+            // .NET Framework 回退路径
             if (current.TryGetArray(out var segment))
                 writer.Write(encoding.GetChars(segment.Array!, segment.Offset, segment.Count));
             else
@@ -303,8 +335,14 @@ public static class PacketHelper
 #endif
         }
     }
+    #endregion
 
+    #region 流操作
     /// <summary>将数据包内容复制到流</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="stream">目标流</param>
+    /// <remarks>在 .NET Framework 中可能存在二次拷贝</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> 为 null</exception>
     public static void CopyTo(this IPacket pk, Stream stream)
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -314,11 +352,15 @@ public static class PacketHelper
             if (current.TryGetArray(out var segment))
                 stream.Write(segment.Array!, segment.Offset, segment.Count);
             else
-                stream.Write(current.GetSpan());
+                stream.Write(current.GetMemory());
         }
     }
 
     /// <summary>异步将数据包内容复制到流</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="stream">目标流</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> 为 null</exception>
     public static async Task CopyToAsync(this IPacket pk, Stream stream, CancellationToken cancellationToken = default)
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -333,13 +375,19 @@ public static class PacketHelper
     }
 
     /// <summary>获取包含数据包内容的内存流</summary>
+    /// <param name="pk">源数据包</param>
+    /// <returns>可读写的内存流，位置已重置为 0</returns>
     public static Stream GetStream(this IPacket pk) => GetStream(pk, true);
 
     /// <summary>获取包含数据包内容的内存流</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="writable">是否可写</param>
+    /// <returns>可读写的内存流，位置已重置为 0</returns>
     public static Stream GetStream(this IPacket pk, Boolean writable)
     {
         if (pk.Next == null)
         {
+            // 独立包且可获取数组段时直接返回内存流
             if (pk.TryGetArray(out var segment))
                 return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable);
         }
@@ -349,13 +397,19 @@ public static class PacketHelper
         ms.Position = 0;
         return ms;
     }
+    #endregion
 
+    #region 数据段操作
     /// <summary>转换为数组段，多包时进行聚合复制</summary>
+    /// <param name="pk">源数据包</param>
+    /// <returns>数组段，单包时直接返回，多包时新建聚合数组</returns>
     public static ArraySegment<Byte> ToSegment(this IPacket pk)
     {
+        // 单包且可获取数组段时直接返回
         if (pk.Next == null && pk.TryGetArray(out var segment))
             return segment;
 
+        // 多包直接分配目标数组 + Span 拷贝，避免 MemoryStream 开销
         var buf = new Byte[pk.Total];
         var pos = 0;
         for (var current = pk; current != null; current = current.Next)
@@ -364,14 +418,17 @@ public static class PacketHelper
             span.CopyTo(buf.AsSpan(pos));
             pos += span.Length;
         }
-
         return new ArraySegment<Byte>(buf, 0, pos);
     }
 
-    /// <summary>转换为数组段集合</summary>
+    /// <summary>转换为数组段集合，每个元素对应链上一个包片段</summary>
+    /// <param name="pk">源数据包</param>
+    /// <returns>数组段列表，保持原始分段结构</returns>
+    /// <remarks>不进行展开聚合，保持链式结构的分段信息</remarks>
     public static IList<ArraySegment<Byte>> ToSegments(this IPacket pk)
     {
-        var segments = new List<ArraySegment<Byte>>(4);
+        var segments = new List<ArraySegment<Byte>>(4); // 预分配 4 个元素优化扩容
+
         for (var current = pk; current != null; current = current.Next)
         {
             if (current.TryGetArray(out var segment))
@@ -384,11 +441,15 @@ public static class PacketHelper
     }
 
     /// <summary>转换为字节数组，始终返回新数组副本</summary>
+    /// <param name="pk">源数据包</param>
+    /// <returns>包含所有数据的新字节数组</returns>
     public static Byte[] ToArray(this IPacket pk)
     {
+        // 单包直接转数组
         if (pk.Next == null)
             return pk.GetSpan().ToArray();
 
+        // 多包直接分配目标数组 + Span 拷贝，避免 MemoryStream 开销
         var buf = new Byte[pk.Total];
         var pos = 0;
         for (var current = pk; current != null; current = current.Next)
@@ -397,11 +458,17 @@ public static class PacketHelper
             span.CopyTo(buf.AsSpan(pos));
             pos += span.Length;
         }
-
         return buf;
     }
+    #endregion
 
-    /// <summary>读取指定数据区</summary>
+    #region 数据读取
+    /// <summary>读取指定范围的字节数据</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="offset">相对起始偏移量</param>
+    /// <param name="count">读取字节数，-1 表示到末尾</param>
+    /// <returns>读取的字节数组，可能直接返回底层数组以优化性能</returns>
+    /// <remarks>性能优化：读取全部数据且满足条件时，直接返回底层数组避免复制</remarks>
     public static Byte[] ReadBytes(this IPacket pk, Int32 offset = 0, Int32 count = -1)
     {
         if (pk.Next == null)
@@ -410,6 +477,7 @@ public static class PacketHelper
 
             if (pk.TryGetArray(out var segment))
             {
+                // 性能优化：读取全部且数组段完整时直接返回
                 if (offset == 0 && count == pk.Length &&
                     segment.Offset == 0 && segment.Count == segment.Array!.Length)
                     return segment.Array;
@@ -420,6 +488,7 @@ public static class PacketHelper
             return pk.GetSpan().Slice(offset, count).ToArray();
         }
 
+        // 多包链：直接跨段拷贝目标范围，避免先 ToArray 再截取的双重分配
         var total = pk.Total;
         if (count < 0) count = total - offset;
         if (offset + count > total) count = total - offset;
@@ -432,28 +501,33 @@ public static class PacketHelper
         for (var current = pk; current != null && remaining > 0; current = current.Next)
         {
             var span = current.GetSpan();
+
+            // 跳过当前段
             if (skip >= span.Length)
             {
                 skip -= span.Length;
                 continue;
             }
 
+            // 进入有效数据区
             if (skip > 0)
             {
                 span = span[skip..];
                 skip = 0;
             }
 
+            // 拷贝所需字节数
             var toCopy = Math.Min(span.Length, remaining);
             span[..toCopy].CopyTo(buf.AsSpan(pos));
             pos += toCopy;
             remaining -= toCopy;
         }
-
         return buf;
     }
 
-    /// <summary>深度克隆数据包</summary>
+    /// <summary>深度克隆数据包，完全复制数据内容</summary>
+    /// <param name="pk">源数据包</param>
+    /// <returns>独立的数据包副本，内存来自池，实际类型为 <see cref="IOwnerPacket"/>，调用方负责 Dispose</returns>
     public static IPacket Clone(this IPacket pk)
     {
         var total = pk.Total;
@@ -466,11 +540,15 @@ public static class PacketHelper
             span.CopyTo(dest[pos..]);
             pos += span.Length;
         }
-
         return owner;
     }
+    #endregion
 
-    /// <summary>尝试获取 Span</summary>
+    #region 内存访问
+    /// <summary>尝试获取内存片段，仅对单包有效</summary>
+    /// <param name="pk">源数据包</param>
+    /// <param name="span">输出的内存片段</param>
+    /// <returns>是否成功获取（仅当无后续链节点时）</returns>
     public static Boolean TryGetSpan(this IPacket pk, out Span<Byte> span)
     {
         if (pk.Next == null)
@@ -482,8 +560,18 @@ public static class PacketHelper
         span = default;
         return false;
     }
+    #endregion
 
-    /// <summary>尝试扩展头部空间</summary>
+    #region 头部扩展
+    /// <summary>尝试扩展头部空间，用于填充协议头等场景</summary>
+    /// <param name="pk">原数据包</param>
+    /// <param name="size">需要扩展的头部字节数</param>
+    /// <param name="newPacket">扩展后的新数据包</param>
+    /// <returns>是否成功扩展</returns>
+    /// <remarks>
+    /// <para>已过时，请使用 <see cref="ExpandHeader"/> 方法。</para>
+    /// <para>该方法仅在原包有足够前置空间时成功，否则返回 false。</para>
+    /// </remarks>
     [Obsolete("请改用 ExpandHeader，并确保根据返回结果继续使用新实例。")]
     public static Boolean TryExpandHeader(this IPacket pk, Int32 size, [NotNullWhen(true)] out IPacket? newPacket)
     {
@@ -502,7 +590,17 @@ public static class PacketHelper
         return false;
     }
 
-    /// <summary>扩展头部空间</summary>
+    /// <summary>扩展头部空间，优先复用现有缓冲区</summary>
+    /// <param name="pk">原数据包，可为 null</param>
+    /// <param name="size">需要扩展的头部字节数</param>
+    /// <returns>扩展后的数据包，可能复用原缓冲区或创建新缓冲区</returns>
+    /// <remarks>
+    /// <para><b>扩展策略</b>：</para>
+    /// <list type="number">
+    /// <item>ArrayPacket/OwnerPacket 有足够前置空间时，直接扩展</item>
+    /// <item>否则创建新的 OwnerPacket，原包作为后继链节点</item>
+    /// </list>
+    /// </remarks>
     public static IPacket ExpandHeader(this IPacket? pk, Int32 size)
     {
         return pk switch
@@ -517,54 +615,87 @@ public static class PacketHelper
     #endregion
 }
 
-/// <summary>拥有管理权的数据包</summary>
+/// <summary>所有权内存包。基于 ArrayPool 的高性能内存管理，支持链式结构与所有权转移</summary>
 /// <remarks>
-/// <para>数据通常来自对象池租借的缓冲区，实例销毁时会自动归还。</para>
-/// <para>切片默认转移所有权，新实例接管释放职责，旧实例失去管理权。</para>
-/// <para>适合网络收发、协议解码等高频临时缓冲区场景。</para>
+/// <para><b>核心特性</b>：</para>
+/// <list type="bullet">
+/// <item>内存池复用：使用 <see cref="ArrayPool{T}.Shared"/> 减少 GC 压力</item>
+/// <item>所有权转移：切片操作可选择转移内存管理责任（仅一次）</item>
+/// <item>链式结构：支持多段数据包连接，透明处理跨段访问</item>
+/// <item>零拷贝切片：共享底层缓冲区，避免不必要的内存分配</item>
+/// </list>
+/// <para><b>生命周期管理</b>：必须调用 <see cref="Dispose"/> 归还池化内存，或通过所有权转移由新实例负责释放。</para>
+/// <para><b>设计决策</b>：</para>
+/// <list type="bullet">
+/// <item><b>必须为 class</b>：所有权语义依赖引用同一性。struct 赋值产生值拷贝会导致 double-free（Slice 转移所有权时修改的是副本而非原始实例），
+/// 且 IDisposable + struct 在装箱场景下无法正确释放资源。</item>
+/// <item><b>sealed 密封</b>：无派生需求，JIT 可对 GetSpan/GetMemory 等热路径方法去虚拟化并内联，显著提升协议解析性能。</item>
+/// <item><b>不继承 MemoryManager&lt;T&gt;</b>：仅需 IPacket + IDisposable，MemoryManager 的 Pin/Unpin/IMemoryOwner.Memory 均未使用，
+/// 移除后消除死代码和多余 vtable 开销。</item>
+/// </list>
 /// </remarks>
 public sealed class OwnerPacket : IPacket, IOwnerPacket
 {
-    #region 属性
+    #region 字段与属性
     private Byte[]? _buffer;
     private Int32 _offset;
     private Int32 _length;
     private Boolean _hasOwner;
 
     /// <summary>缓冲区数组</summary>
-    public Byte[] Buffer => _buffer ?? throw new ObjectDisposedException(nameof(OwnerPacket));
+    /// <exception cref="ObjectDisposedException">实例已释放</exception>
+    public Byte[] Buffer
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _buffer ?? throw new ObjectDisposedException(nameof(OwnerPacket));
+    }
 
-    /// <summary>偏移</summary>
-    public Int32 Offset => _offset;
+    /// <summary>数据在缓冲区中的起始偏移量</summary>
+    public Int32 Offset
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _offset;
+    }
 
-    /// <summary>长度</summary>
-    public Int32 Length => _length;
+    /// <summary>当前数据包的有效数据长度</summary>
+    public Int32 Length
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _length;
+    }
 
-    /// <summary>下一个链式包</summary>
+    /// <summary>下一个链式数据包节点</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public IPacket? Next { get; set; }
 
-    /// <summary>总长度</summary>
-    public Int32 Total => _length + (Next?.Total ?? 0);
-    #endregion
+    /// <summary>包含链式结构的总数据长度</summary>
+    public Int32 Total
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _length + (Next?.Total ?? 0);
+    }
 
-    #region 索引
-    /// <summary>获取或设置指定位置的字节</summary>
+    /// <summary>获取或设置指定位置的字节值，支持跨链式包访问</summary>
+    /// <param name="index">从当前包起始的相对索引位置</param>
+    /// <returns>指定位置的字节值</returns>
+    /// <exception cref="IndexOutOfRangeException">索引超出有效范围</exception>
+    /// <exception cref="ObjectDisposedException">实例已释放</exception>
     public Byte this[Int32 index]
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => index switch
         {
-            < 0 => throw new IndexOutOfRangeException(nameof(index)),
+            < 0 => throw new IndexOutOfRangeException($"Index cannot be negative: {index}"),
             var i when i < _length => Buffer[_offset + i],
             var i when Next != null => Next[i - _length],
-            _ => throw new IndexOutOfRangeException(nameof(index))
+            _ => throw new IndexOutOfRangeException($"Index {index} exceeds total length {Total}")
         };
         set
         {
             switch (index)
             {
                 case < 0:
-                    throw new IndexOutOfRangeException(nameof(index));
+                    throw new IndexOutOfRangeException($"Index cannot be negative: {index}");
                 case var i when i < _length:
                     Buffer[_offset + i] = value;
                     break;
@@ -572,19 +703,20 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
                     Next[i - _length] = value;
                     break;
                 default:
-                    throw new IndexOutOfRangeException(nameof(index));
+                    throw new IndexOutOfRangeException($"Index {index} exceeds total length {Total}");
             }
         }
     }
     #endregion
 
-    #region 构造
-    /// <summary>创建指定长度的内存包，从共享池租借缓冲区</summary>
+    #region 构造函数
+    /// <summary>创建指定长度的内存包，从共享内存池借用缓冲区</summary>
     /// <param name="length">所需缓冲区长度</param>
-    /// <exception cref="ArgumentOutOfRangeException">长度小于 0</exception>
+    /// <exception cref="ArgumentOutOfRangeException">长度为负数</exception>
+    /// <remarks>实际分配的缓冲区可能大于请求长度，以适配内存池的分片策略</remarks>
     public OwnerPacket(Int32 length)
     {
-        if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
+        if (length < 0) throw new ArgumentOutOfRangeException(nameof(length), "Length must be non-negative.");
 
         _buffer = ArrayPool<Byte>.Shared.Rent(length);
         _offset = 0;
@@ -593,10 +725,10 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
     }
 
     /// <summary>创建内存包，使用现有缓冲区</summary>
-    /// <param name="buffer">缓冲区</param>
-    /// <param name="offset">起始偏移</param>
-    /// <param name="length">有效长度</param>
-    /// <param name="hasOwner">是否拥有该缓冲区的释放权</param>
+    /// <param name="buffer">数据缓冲区</param>
+    /// <param name="offset">数据起始偏移量</param>
+    /// <param name="length">有效数据长度</param>
+    /// <param name="hasOwner">是否拥有缓冲区管理权限</param>
     /// <exception cref="ArgumentNullException">缓冲区为 null</exception>
     /// <exception cref="ArgumentOutOfRangeException">偏移量或长度超出缓冲区范围</exception>
     public OwnerPacket(Byte[] buffer, Int32 offset, Int32 length, Boolean hasOwner)
@@ -605,7 +737,8 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
         if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset), "Offset must be non-negative.");
         if (length < 0) throw new ArgumentOutOfRangeException(nameof(length), "Length must be non-negative.");
         if (offset + length > buffer.Length)
-            throw new ArgumentOutOfRangeException(nameof(length), "Offset and length must be within buffer bounds.");
+            throw new ArgumentOutOfRangeException(nameof(length),
+                "Offset and length must be within buffer bounds.");
 
         _buffer = buffer;
         _offset = offset;
@@ -627,40 +760,45 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
         if (owner == null) throw new ArgumentNullException(nameof(owner));
         if (expandSize < 0)
             throw new ArgumentOutOfRangeException(nameof(expandSize), "Expand size must be non-negative.");
+
         if (owner._offset < expandSize)
-            throw new ArgumentOutOfRangeException(nameof(expandSize), $"Expand size {expandSize} exceeds available front space {owner._offset}");
+            throw new ArgumentOutOfRangeException(nameof(expandSize),
+                $"Expand size {expandSize} exceeds available front space {owner._offset}");
 
         _buffer = owner._buffer;
         _offset = owner._offset - expandSize;
         _length = owner._length + expandSize;
         Next = owner.Next;
+
+        // 转移所有权：新实例接管，原实例失权
         _hasOwner = owner._hasOwner;
         owner._hasOwner = false;
     }
 
-    /// <summary>从数据流创建内存包，优先窃取 MemoryStream 内部缓冲区，否则从池借用并拷贝数据</summary>
+    /// <summary>从数据流创建内存包，优先窃取MemoryStream内部缓冲区，否则从池借用并拷贝数据</summary>
     /// <remarks>
-    /// 窃取成功时不拥有缓冲区，Dispose 不归还；窃取失败时从池借用，Dispose 自动归还。
-    /// 若指定预留空间，数据从 offset = reserve 位置开始存放。
+    /// 窃取成功时不拥有缓冲区，Dispose不归还；窃取失败时从池借用，Dispose自动归还。
+    /// 若指定预留空间，数据从 offset = reserve 位置开始存放，有效长度为 reserve + data_size。
     /// 构造完成后数据流位置不变。
     /// </remarks>
     /// <param name="stream">数据流</param>
-    /// <param name="reserve">前置预留字节数，默认 0</param>
+    /// <param name="reserve">前置预留字节数，默认0</param>
     public OwnerPacket(Stream stream, Int32 reserve = 0)
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
         if (reserve < 0) throw new ArgumentOutOfRangeException(nameof(reserve), "Reserve must be non-negative.");
 
-        if (stream is MemoryStream memoryStream)
+        if (stream is MemoryStream ms)
         {
 #if !NET45
-            if (memoryStream.TryGetBuffer(out var segment))
+            // 尝试窃取内部存储区，需要.Net 4.6支持
+            if (ms.TryGetBuffer(out var seg))
             {
-                if (segment.Array == null) throw new InvalidDataException();
+                if (seg.Array == null) throw new InvalidDataException();
 
-                _buffer = segment.Array;
-                _offset = segment.Offset + (Int32)memoryStream.Position;
-                _length = segment.Count - (Int32)memoryStream.Position;
+                _buffer = seg.Array;
+                _offset = seg.Offset + (Int32)ms.Position;
+                _length = seg.Count - (Int32)ms.Position;
                 _hasOwner = false;
                 return;
             }
@@ -688,8 +826,12 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
 
         _hasOwner = false;
         var buffer = _buffer;
-        _buffer = null;
-        if (buffer != null) ArrayPool<Byte>.Shared.Return(buffer);
+        _buffer = null; // 防止重复使用已释放的缓冲区
+
+        if (buffer != null)
+            ArrayPool<Byte>.Shared.Return(buffer);
+
+        // 安全释放链式后续节点
         Next.TryDispose();
         Next = null;
     }
@@ -750,12 +892,16 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
         if (Next == null)
         {
             if (size > Buffer.Length)
-                throw new ArgumentOutOfRangeException(nameof(size), $"Size {size} exceeds buffer capacity {Buffer.Length}");
+                throw new ArgumentOutOfRangeException(nameof(size),
+                    $"Size {size} exceeds buffer capacity {Buffer.Length}");
+
             _length = size;
         }
         else
         {
-            if (size >= _length) throw new NotSupportedException("Cannot increase size when Next segment exists");
+            if (size >= _length)
+                throw new NotSupportedException("Cannot increase size when Next segment exists");
+
             _length = size;
         }
 
@@ -769,7 +915,7 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
     /// <param name="count">切片长度，-1 表示到末尾</param>
     /// <returns>新的数据包实例</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IPacket Slice(Int32 offset, Int32 count = -1) => Slice(offset, count, true);
+    public IPacket Slice(Int32 offset, Int32 count = -1) => Slice(offset, count, transferOwner: true);
 
     /// <summary>切片生成新数据包，可选择是否转移所有权</summary>
     /// <param name="offset">相对当前包的起始偏移</param>
@@ -786,31 +932,54 @@ public sealed class OwnerPacket : IPacket, IOwnerPacket
     public IPacket Slice(Int32 offset, Int32 count, Boolean transferOwner)
     {
         if (_buffer == null) throw new ObjectDisposedException(nameof(OwnerPacket));
+
         if (offset < 0)
             throw new ArgumentOutOfRangeException(nameof(offset), "Offset cannot be negative.");
+
         if (count > Total - offset)
-            throw new ArgumentOutOfRangeException(nameof(count), $"Count {count} with offset {offset} exceeds total length {Total}");
+            throw new ArgumentOutOfRangeException(nameof(count),
+                $"Count {count} with offset {offset} exceeds total length {Total}");
 
         var startPosition = _offset + offset;
         var remainInCurrent = _length - offset;
         var hasOwnership = _hasOwner && transferOwner;
 
+        // 单段数据包处理
         if (Next == null)
         {
+            // 转移管理权
             if (transferOwner) _hasOwner = false;
+
             var actualCount = count < 0 || count > remainInCurrent ? remainInCurrent : count;
             return new OwnerPacket(_buffer, startPosition, actualCount, hasOwnership);
         }
 
-        if (remainInCurrent <= 0) return Next!.Slice(offset - _length, count, transferOwner);
+        // 多段链式包处理
+        if (remainInCurrent <= 0)
+        {
+            // 完全跳过当前段，递归处理后续段
+            return Next.Slice(offset - _length, count, transferOwner);
+        }
 
+        // 转移管理权
         if (transferOwner) _hasOwner = false;
-        if (count < 0) return new OwnerPacket(_buffer, startPosition, remainInCurrent, hasOwnership) { Next = Next };
-        if (count <= remainInCurrent) return new OwnerPacket(_buffer, startPosition, count, hasOwnership);
 
+        if (count < 0)
+        {
+            // 当前段部分 + 所有后续段
+            return new OwnerPacket(_buffer, startPosition, remainInCurrent, hasOwnership) { Next = Next };
+        }
+
+        if (count <= remainInCurrent)
+        {
+            // 仅在当前段内
+            return new OwnerPacket(_buffer, startPosition, count, hasOwnership);
+        }
+
+        // 跨段处理：当前段 + 后续段切片
         return new OwnerPacket(_buffer, startPosition, remainInCurrent, hasOwnership)
         {
-            Next = Next!.Slice(0, count - remainInCurrent, transferOwner)
+            Next = Next.Slice(0, count - remainInCurrent, transferOwner)
         };
     }
     #endregion
@@ -828,15 +997,54 @@ public struct MemoryPacket : IPacket
 {
     #region 属性
     private readonly Memory<Byte> _memory;
-    private readonly Int32 _length;
-    private readonly Byte[]? _cachedArray;
-    private readonly Int32 _cachedOffset;
-
     /// <summary>内存</summary>
     public readonly Memory<Byte> Memory => _memory;
 
+    private readonly Int32 _length;
     /// <summary>数据长度</summary>
     public readonly Int32 Length => _length;
+
+    // 缓存底层数组引用，Indexer 直接数组访问避免 Memory.Span 间接开销（1.66ns → ~0.24ns）
+    private readonly Byte[]? _cachedArray;
+    private readonly Int32 _cachedOffset;
+
+    /// <summary>获取/设置 指定位置的字节</summary>
+    /// <param name="index"></param>
+    /// <returns></returns>
+    public Byte this[Int32 index]
+    {
+        get
+        {
+            var p = index - _length;
+            if (p >= 0)
+            {
+                if (Next == null) throw new IndexOutOfRangeException(nameof(index));
+
+                return Next[p];
+            }
+
+            var arr = _cachedArray;
+            return arr != null ? arr[_cachedOffset + index] : _memory.Span[index];
+        }
+        set
+        {
+            var p = index - _length;
+            if (p >= 0)
+            {
+                if (Next == null) throw new IndexOutOfRangeException(nameof(index));
+
+                Next[p] = value;
+            }
+            else
+            {
+                var arr = _cachedArray;
+                if (arr != null)
+                    arr[_cachedOffset + index] = value;
+                else
+                    _memory.Span[index] = value;
+            }
+        }
+    }
 
     /// <summary>下一个链式包</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
@@ -844,42 +1052,6 @@ public struct MemoryPacket : IPacket
 
     /// <summary>总长度</summary>
     public readonly Int32 Total => Length + (Next?.Total ?? 0);
-    #endregion
-
-    #region 索引
-    /// <summary>获取或设置指定位置的字节</summary>
-    public Byte this[Int32 index]
-    {
-        get
-        {
-            var position = index - _length;
-            if (position >= 0)
-            {
-                if (Next == null) throw new IndexOutOfRangeException(nameof(index));
-                return Next[position];
-            }
-
-            var array = _cachedArray;
-            return array != null ? array[_cachedOffset + index] : _memory.Span[index];
-        }
-        set
-        {
-            var position = index - _length;
-            if (position >= 0)
-            {
-                if (Next == null) throw new IndexOutOfRangeException(nameof(index));
-                Next[position] = value;
-            }
-            else
-            {
-                var array = _cachedArray;
-                if (array != null)
-                    array[_cachedOffset + index] = value;
-                else
-                    _memory.Span[index] = value;
-            }
-        }
-    }
     #endregion
 
     /// <summary>实例化内存包，指定内存和长度</summary>
@@ -893,12 +1065,12 @@ public struct MemoryPacket : IPacket
 
         _memory = memory;
         _length = length;
-        Next = null;
+
         // 缓存底层数组引用，加速 Indexer 直接数组访问
-        if (MemoryMarshal.TryGetArray((ReadOnlyMemory<Byte>)memory, out var segment))
+        if (MemoryMarshal.TryGetArray((ReadOnlyMemory<Byte>)memory, out var seg))
         {
-            _cachedArray = segment.Array;
-            _cachedOffset = segment.Offset;
+            _cachedArray = seg.Array;
+            _cachedOffset = seg.Offset;
         }
         else
         {
@@ -908,14 +1080,24 @@ public struct MemoryPacket : IPacket
     }
 
     /// <summary>获取分片包。在管理权生命周期内短暂使用</summary>
+    /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Span<Byte> GetSpan() => _memory.Span[.._length];
 
     /// <summary>获取内存包。在管理权生命周期内短暂使用</summary>
+    /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Memory<Byte> GetMemory() => _memory[.._length];
 
+    /// <summary>切片得到新数据包，共用内存块</summary>
+    /// <param name="offset">偏移</param>
+    /// <param name="count">个数。默认-1表示到末尾</param>
     IPacket IPacket.Slice(Int32 offset, Int32 count) => Slice(offset, count);
+
+    /// <summary>切片得到新数据包，共用内存块</summary>
+    /// <param name="offset">偏移</param>
+    /// <param name="count">个数。默认-1表示到末尾</param>
+    /// <param name="transferOwner">转移所有权。不支持</param>
     IPacket IPacket.Slice(Int32 offset, Int32 count, Boolean transferOwner) => Slice(offset, count);
 
     /// <summary>切片得到新数据包，共用内存块，无内存分配</summary>
@@ -924,22 +1106,26 @@ public struct MemoryPacket : IPacket
     /// <param name="transferOwner">转移所有权。不支持</param>
     public MemoryPacket Slice(Int32 offset, Int32 count = -1, Boolean transferOwner = false)
     {
+        // 带有Next时，不支持Slice
         if (Next != null) throw new NotSupportedException("Slice with Next");
 
         var remain = _length - offset;
         if (count < 0 || count > remain) count = remain;
         if (offset == 0 && count == _length) return this;
 
-        return offset == 0 ? new MemoryPacket(_memory, count) : new MemoryPacket(_memory[offset..], count);
+        return offset == 0
+            ? new MemoryPacket(_memory, count)
+            : new MemoryPacket(_memory[offset..], count);
     }
 
     /// <summary>尝试获取缓冲区（仅本段，不含 Next）</summary>
     /// <param name="segment"></param>
     /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly Boolean TryGetArray(out ArraySegment<Byte> segment) => MemoryMarshal.TryGetArray((ReadOnlyMemory<Byte>)GetMemory(), out segment);
+    public readonly Boolean TryGetArray(out ArraySegment<Byte> segment) => MemoryMarshal.TryGetArray(GetMemory(), out segment);
 
     /// <summary>已重载</summary>
+    /// <returns></returns>
     public override readonly String ToString() => $"MemoryPacket[{_memory.Length}](0, {_length})<{Total}>";
 }
 
@@ -1123,14 +1309,18 @@ public record struct ArrayPacket : IPacket
         }
 
         // 如果当前段用完，则取下一段。强转ArrayPacket，如果不是则抛出异常
-        if (remain <= 0) return (ArrayPacket)next.Slice(offset - _length, count, transferOwner);
+        if (remain <= 0)
+            return (ArrayPacket)next.Slice(offset - _length, count, transferOwner);
 
         // 当前包用一截，剩下的全部
-        if (count < 0) return new ArrayPacket(_buffer, start, remain) { Next = next };
+        if (count < 0)
+            return new ArrayPacket(_buffer, start, remain) { Next = next };
 
         // 当前包可以读完
-        if (count <= remain) return new ArrayPacket(_buffer, start, count);
+        if (count <= remain)
+            return new ArrayPacket(_buffer, start, count);
 
+        // 当前包用一截，剩下的再截取
         return new ArrayPacket(_buffer, start, remain) { Next = next.Slice(0, count - remain, transferOwner) };
     }
 
@@ -1172,30 +1362,29 @@ public record struct ArrayPacket : IPacket
 /// <list type="bullet">
 /// <item>索引器为只读，禁止修改数据</item>
 /// <item>不支持 Next 链式结构（始终为 null）</item>
-/// <item>GetSpan 返回共享底层数组的视图，调用者不得写入</item>
+/// <item>GetSpan 返回只读视图（通过 GetMemory().Span 获取）</item>
 /// </list>
-/// <para>适用场景：配置数据、协议模板、缓存数据等需要防止意外修改的场合。</para>
+/// <para>适用场景：配置数据、协议模板、缓存数据等需要防止意外修改的场合</para>
 /// </remarks>
 public readonly record struct ReadOnlyPacket : IPacket
 {
     #region 属性
     private readonly Byte[] _buffer;
-    private readonly Int32 _offset;
-    private readonly Int32 _length;
-
     /// <summary>缓冲区</summary>
     public Byte[] Buffer => _buffer;
 
+    private readonly Int32 _offset;
     /// <summary>数据偏移</summary>
     public Int32 Offset => _offset;
 
+    private readonly Int32 _length;
     /// <summary>数据长度</summary>
     public Int32 Length => _length;
 
-    [EditorBrowsable(EditorBrowsableState.Never)]
+    /// <summary>下一个链式包。只读包不支持链式结构，始终返回 null</summary>
     IPacket? IPacket.Next { get => null; set { } }
 
-    /// <summary>总长度</summary>
+    /// <summary>总长度。只读包不支持链式，等于 Length</summary>
     public Int32 Total => _length;
 
     /// <summary>空数据包</summary>
@@ -1255,7 +1444,17 @@ public readonly record struct ReadOnlyPacket : IPacket
     /// <returns>只读内存块</returns>
     public Memory<Byte> GetMemory() => new(_buffer, _offset, _length);
 
+    /// <summary>切片得到新的只读数据包</summary>
+    /// <param name="offset">相对偏移</param>
+    /// <param name="count">数据长度，-1 表示到末尾</param>
+    /// <returns>新的只读数据包</returns>
     IPacket IPacket.Slice(Int32 offset, Int32 count) => Slice(offset, count);
+
+    /// <summary>切片得到新的只读数据包</summary>
+    /// <param name="offset">相对偏移</param>
+    /// <param name="count">数据长度</param>
+    /// <param name="transferOwner">是否转移所有权（只读包忽略此参数）</param>
+    /// <returns>新的只读数据包</returns>
     IPacket IPacket.Slice(Int32 offset, Int32 count, Boolean transferOwner) => Slice(offset, count);
 
     /// <summary>切片得到新的只读数据包，无内存分配</summary>
@@ -1302,6 +1501,6 @@ public readonly record struct ReadOnlyPacket : IPacket
     public static implicit operator ReadOnlyPacket(ArraySegment<Byte> segment) => new(segment);
 
     /// <summary>已重载</summary>
-    public override String ToString() => $"ReadOnlyPacket[{_buffer.Length}]({_offset}, {_length})<{Total}>";
+    public override String ToString() => $"ReadOnlyPacket[{_buffer.Length}]({_offset}, {_length})";
     #endregion
 }
