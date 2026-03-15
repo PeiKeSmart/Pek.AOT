@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.Reflection;
 
 using Pek.Extension;
 
@@ -56,6 +57,11 @@ public static class Utility
 
     /// <summary>转为时间日期，转换失败时返回默认值</summary>
     public static DateTime ToDateTime(this Object? value, DateTime defaultValue) => Convert.ToDateTime(value, defaultValue);
+
+    /// <summary>获取内部真实异常</summary>
+    /// <param name="ex">异常</param>
+    /// <returns>真实异常</returns>
+    public static Exception GetTrue(this Exception ex) => Convert.GetTrue(ex);
 }
 
 /// <summary>默认转换器</summary>
@@ -227,6 +233,21 @@ public class DefaultConvert
                 return defaultValue;
             }
         }
+    }
+
+    /// <summary>获取内部真实异常</summary>
+    /// <param name="ex">异常</param>
+    /// <returns>真实异常</returns>
+    public virtual Exception GetTrue(Exception ex)
+    {
+        if (ex is AggregateException aggregateException && aggregateException.InnerException != null)
+            return GetTrue(aggregateException.InnerException);
+        if (ex is TargetInvocationException targetInvocationException && targetInvocationException.InnerException != null)
+            return GetTrue(targetInvocationException.InnerException);
+        if (ex is TypeInitializationException typeInitializationException && typeInitializationException.InnerException != null)
+            return GetTrue(typeInitializationException.InnerException);
+
+        return ex;
     }
 
     /// <summary>时间日期转为yyyy-MM-dd HH:mm:ss完整字符串</summary>

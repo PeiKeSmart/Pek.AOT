@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 
 using Pek.Buffers;
+using Pek.Compression;
 using Pek.Extension;
 using Pek.IO;
 using Pek.Security;
@@ -245,7 +246,7 @@ public static class PathHelper
             return;
         }
 
-        throw new NotSupportedException("Only zip/tar/tar.gz/tgz archives are supported in Pek.AOT.");
+        new SevenZip().Extract(file.FullName, destDir, overwrite);
     }
 
     /// <summary>压缩文件</summary>
@@ -290,7 +291,7 @@ public static class PathHelper
             return;
         }
 
-        throw new NotSupportedException("Only zip/tar/tar.gz/tgz archives are supported in Pek.AOT.");
+        new SevenZip().Compress(file.FullName, destFile);
     }
 
     /// <summary>路径作为目录信息</summary>
@@ -433,7 +434,7 @@ public static class PathHelper
             return;
         }
 
-        throw new NotSupportedException("Only zip/tar/tar.gz/tgz archives are supported in Pek.AOT.");
+        new SevenZip().Compress(directory.FullName, destFile);
     }
 
     /// <summary>验证文件哈希是否匹配预期值</summary>
