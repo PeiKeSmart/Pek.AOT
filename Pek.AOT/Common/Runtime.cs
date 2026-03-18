@@ -17,7 +17,6 @@ public static class Runtime
 
     #region 静态构造
     private static Boolean? _IsConsole;
-    private static Boolean? _IsWeb;
     private static String _ClientId = String.Empty;
     private static Int32 _ProcessId;
     private static Boolean? _createConfigOnMissing;
@@ -75,14 +74,8 @@ public static class Runtime
     }
 
     /// <summary>是否在容器中运行</summary>
-    public static Boolean Container
-    {
-        get
-        {
-            var value = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER");
-            return String.Equals(value, "true", StringComparison.OrdinalIgnoreCase) || value == "1";
-        }
-    }
+    /// <remarks>依据环境变量 DOTNET_RUNNING_IN_CONTAINER，兼容 "true"/"1"（不区分大小写）。</remarks>
+    public static Boolean Container => Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER").ToBoolean();
     #endregion
 
     #region 系统特性
@@ -92,7 +85,10 @@ public static class Runtime
     /// <summary>是否Unity环境</summary>
     public static Boolean Unity { get; }
 
+#if !NETFRAMEWORK
+    private static Boolean? _IsWeb;
     /// <summary>是否Web环境</summary>
+    /// <remarks>通过检测已加载的程序集是否包含 ASP.NET Core 相关组件来判断。</remarks>
     public static Boolean IsWeb
     {
         get
@@ -121,6 +117,19 @@ public static class Runtime
 
     /// <summary>是否OSX环境</summary>
     public static Boolean OSX => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+#else
+    /// <summary>是否Web环境</summary>
+    public static Boolean IsWeb => !String.IsNullOrEmpty(System.Web.HttpRuntime.AppDomainAppId);
+
+    /// <summary>是否Windows环境</summary>
+    public static Boolean Windows { get; } = Environment.OSVersion.Platform <= PlatformID.WinCE;
+
+    /// <summary>是否Linux环境</summary>
+    public static Boolean Linux { get; } = Environment.OSVersion.Platform == PlatformID.Unix;
+
+    /// <summary>是否OSX环境</summary>
+    public static Boolean OSX { get; } = Environment.OSVersion.Platform == PlatformID.MacOSX;
+#endif
     #endregion
 
     #region 扩展
