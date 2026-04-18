@@ -1,7 +1,7 @@
 using System.Collections;
-using System.Security.Cryptography;
-using System.Text;
 
+using Pek.Extension;
+using Pek.Security;
 using Pek.IO;
 
 namespace Pek.Collections;
@@ -53,9 +53,9 @@ public class BloomFilter
     /// <param name="key">键</param>
     public void Set(String key)
     {
-        var hash = Hash(key);
-        var hash1 = BitConverter.ToUInt64(hash, 0);
-        var hash2 = BitConverter.ToUInt64(hash, 8);
+        var buffer = key.GetBytes().Murmur128();
+        var hash1 = BitConverter.ToUInt64(buffer, 0);
+        var hash2 = BitConverter.ToUInt64(buffer, 8);
 
         var current = hash1;
         for (var i = 0; i < _K; i++)
@@ -70,9 +70,9 @@ public class BloomFilter
     /// <returns>是否可能存在</returns>
     public Boolean Get(String key)
     {
-        var hash = Hash(key);
-        var hash1 = BitConverter.ToUInt64(hash, 0);
-        var hash2 = BitConverter.ToUInt64(hash, 8);
+        var buffer = key.GetBytes().Murmur128();
+        var hash1 = BitConverter.ToUInt64(buffer, 0);
+        var hash2 = BitConverter.ToUInt64(buffer, 8);
 
         var current = hash1;
         for (var i = 0; i < _K; i++)
@@ -97,16 +97,4 @@ public class BloomFilter
     /// <summary>导出内部 Base64 字符串</summary>
     /// <returns>Base64 字符串</returns>
     public String GetString() => GetBytes().ToBase64();
-
-    private static Byte[] Hash(String key)
-    {
-        if (key == null) throw new ArgumentNullException(nameof(key));
-
-#if NET8_0_OR_GREATER
-        return MD5.HashData(Encoding.UTF8.GetBytes(key));
-#else
-        using var md5 = MD5.Create();
-        return md5.ComputeHash(Encoding.UTF8.GetBytes(key));
-#endif
-    }
 }

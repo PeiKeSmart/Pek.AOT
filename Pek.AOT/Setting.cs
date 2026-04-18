@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.IO;
 using System.Text.Json.Serialization;
 
 using Pek.Configuration;
+using Pek.Extension;
 using Pek.Log;
 
 namespace Pek;
@@ -70,6 +72,45 @@ public class Setting : Config<Setting, SettingJsonContext>
     /// <summary>服务地址</summary>
     [Description("服务地址。用于内部构造其它Url或向注册中心登记，多地址逗号隔开")]
     public String ServiceAddress { get; set; } = String.Empty;
+
+    /// <summary>加载完成后</summary>
+    protected override void OnLoaded()
+    {
+        // 多应用项目，运行目录可能位于 netX 目标框架子目录，向上回退一级作为逻辑根
+        var root = "../";
+        var directory = ".".AsDirectory();
+        if (directory.Name.StartsWithIgnoreCase("netcoreapp", "net2", "net4", "net5", "net6", "net7", "net8", "net9", "net10") && directory.Parent != null)
+        {
+            root = "../../";
+            directory = directory.Parent;
+        }
+
+        var appName = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName) ?? String.Empty;
+        if (appName.EndsWithIgnoreCase("Web", "Api", "Server", "Service", "Job"))
+        {
+            // 日志目录分开，其它目录共用
+            if (LogPath.IsNullOrEmpty()) LogPath = $"{root}{directory.Name}Log";
+            if (DataPath.IsNullOrEmpty()) DataPath = $"{root}Data";
+            if (BackupPath.IsNullOrEmpty()) BackupPath = $"{root}Backup";
+            if (PluginPath.IsNullOrEmpty()) PluginPath = $"{root}Plugins";
+        }
+        else
+        {
+            if (LogPath.IsNullOrEmpty()) LogPath = "Log";
+            if (DataPath.IsNullOrEmpty()) DataPath = "Data";
+            if (BackupPath.IsNullOrEmpty()) BackupPath = "Backup";
+            if (PluginPath.IsNullOrEmpty()) PluginPath = "Plugins";
+        }
+
+        if (LogFileFormat.IsNullOrEmpty()) LogFileFormat = "{0:yyyy_MM_dd}.log";
+        if (PluginServer.IsNullOrWhiteSpace()) PluginServer = "http://x.newlifex.com/";
+
+        base.OnLoaded();
+    }
+
+    /// <summary>获取插件目录</summary>
+    /// <returns>插件目录绝对路径</returns>
+    public String GetPluginPath() => PluginPath.GetBasePath();
 }
 
 /// <summary>Setting 的 AOT 序列化上下文</summary>

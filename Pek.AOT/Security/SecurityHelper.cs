@@ -74,6 +74,11 @@ public static class SecurityHelper
     /// <returns>校验值</returns>
     public static UInt32 Crc(this Byte[] data) => new Crc32().Update(data).Value;
 
+    /// <summary>Crc16散列</summary>
+    /// <param name="data">数据</param>
+    /// <returns>校验值</returns>
+    public static UInt16 Crc16(this Byte[] data) => new Crc16().Update(data).Value;
+
     /// <summary>SHA1散列</summary>
     /// <param name="data">数据</param>
     /// <param name="key">可选密钥。指定时使用 HMACSHA1</param>
@@ -132,6 +137,17 @@ public static class SecurityHelper
 #else
         return key == null ? System.Security.Cryptography.SHA512.Create().ComputeHash(data) : new HMACSHA512(key).ComputeHash(data);
 #endif
+    }
+
+    /// <summary>Murmur128哈希</summary>
+    /// <param name="data">数据</param>
+    /// <param name="seed">种子</param>
+    /// <returns>哈希值</returns>
+    public static Byte[] Murmur128(this Byte[] data, UInt32 seed = 0)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        return new Murmur128(seed).ComputeHash(data);
     }
 
     /// <summary>对称加密算法扩展</summary>
@@ -270,6 +286,12 @@ public static class SecurityHelper
         Buffer.BlockCopy(remain, 0, output, count, remain.Length);
         return output;
     }
+
+    /// <summary>RC4对称加密算法</summary>
+    /// <param name="data">数据</param>
+    /// <param name="pass">密码</param>
+    /// <returns>加密结果</returns>
+    public static Byte[] RC4(this Byte[] data, Byte[] pass) => Pek.Security.RC4.Encrypt(data, pass);
 
     private static void PrepareAlgorithm(SymmetricAlgorithm algorithm, Byte[]? pass, CipherMode mode, PaddingMode padding)
     {
