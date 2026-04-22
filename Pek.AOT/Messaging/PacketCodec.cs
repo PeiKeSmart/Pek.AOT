@@ -56,9 +56,9 @@ public class PacketCodec : IDisposable
     }
 
     /// <summary>分析数据流并得到一帧或多帧数据</summary>
-    /// <param name="packet">待分析数据包</param>
+    /// <param name="pk">待分析数据包</param>
     /// <returns>解析出的完整数据包列表</returns>
-    public virtual IList<IPacket> Parse(IPacket packet)
+    public virtual IList<IPacket> Parse(IPacket pk)
     {
         var stream = Stream;
         var noData = stream == null || stream.Position < 0 || stream.Position >= stream.Length;
@@ -72,31 +72,31 @@ public class PacketCodec : IDisposable
         var list = new List<IPacket>();
         if (noData)
         {
-            if (packet == null || packet.Total == 0) return list;
+            if (pk == null || pk.Total == 0) return list;
 
             var index = 0;
-            while (index < packet.Total)
+            while (index < pk.Total)
             {
                 var length = 0;
-                if (func2 != null && packet.Next == null)
+                if (func2 != null && pk.Next == null)
                 {
-                    var span = packet.GetSpan().Slice(index);
+                    var span = pk.GetSpan().Slice(index);
                     length = func2(span);
                     if (length <= 0 || length > span.Length) break;
                 }
                 else
                 {
-                    var slice = packet.Slice(index, -1, false);
+                    var slice = pk.Slice(index, -1, false);
                     length = func!(slice);
                     if (length <= 0 || length > slice.Total) break;
                 }
 
-                list.Add(packet.Slice(index, length, false));
+                list.Add(pk.Slice(index, length, false));
                 index += length;
             }
 
-            if (index == packet.Total) return list;
-            packet = packet.Slice(index, -1, false);
+            if (index == pk.Total) return list;
+            pk = pk.Slice(index, -1, false);
         }
 
         lock (this)
@@ -104,13 +104,13 @@ public class PacketCodec : IDisposable
             CheckCache();
             stream = Stream;
 
-            using var span = Tracer?.NewSpan("net:PacketCodec:MergeCache", $"Position={stream.Position} Length={stream.Length} NewData=[{packet.Length}]{packet.ToHex(500)}");
+            using var span = Tracer?.NewSpan("net:PacketCodec:MergeCache", $"Position={stream.Position} Length={stream.Length} NewData=[{pk.Length}]{pk.ToHex(500)}");
 
-            if (packet != null && packet.Total > 0)
+            if (pk != null && pk.Total > 0)
             {
                 var position = stream.Position;
                 stream.Position = stream.Length;
-                packet.CopyTo(stream);
+                pk.CopyTo(stream);
                 stream.Position = position;
             }
 
