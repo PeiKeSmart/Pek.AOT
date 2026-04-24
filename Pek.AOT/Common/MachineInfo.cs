@@ -35,7 +35,7 @@ public interface IMachineInfo
 /// 
 /// 刷新信息成本较高，建议采用单例模式
 /// </remarks>
-public class MachineInfo : IExtend
+public partial class MachineInfo : IExtend
 {
     #region 属性
     /// <summary>系统名称</summary>
@@ -1034,47 +1034,7 @@ public class MachineInfo : IExtend
         var dic = new Dictionary<String, String?>();
         if (!Runtime.Mono) return dic;
 
-        {
-            var type = GetAndroidBuildType();
-            if (type != null)
-            {
-                foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
-                {
-                    try
-                    {
-                        dic[item.Name] = item.GetValue(null) + "";
-                    }
-                    catch { }
-                }
-            }
-        }
-        {
-            var type = GetXamarinDeviceInfoType();
-            if (type != null)
-            {
-                foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
-                {
-                    try
-                    {
-                        dic[item.Name] = item.GetValue(null) + "";
-                    }
-                    catch { }
-                }
-            }
-        }
-        {
-            var type = GetAndroidSecureType();
-            if (type != null)
-            {
-                var context = GetStaticMemberValue(GetAndroidApplicationType(), "Context");
-                var resolver = context == null ? null : GetInstanceMemberValue(GetAndroidContextType(), context, "ContentResolver");
-                if (resolver != null)
-                {
-                    var name = "android_id";
-                    dic[name] = InvokeStaticMethod(type, "GetString", resolver, name) as String;
-                }
-            }
-        }
+        FillDeviceInfo(dic);
 
         return dic;
     }
@@ -1086,84 +1046,14 @@ public class MachineInfo : IExtend
         var dic = new Dictionary<String, Object?>();
         if (!Runtime.Mono) return dic;
 
-        var type = GetXamarinBatteryType();
-        if (type == null) return dic;
-
-        foreach (var item in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
-        {
-            try
-            {
-                dic[item.Name] = item.GetValue(null);
-            }
-            catch { }
-        }
+        FillDeviceBattery(dic);
 
         return dic;
     }
 
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
-    private static Type? GetAndroidBuildType() => Type.GetType("Android.OS.Build", false);
+    static partial void FillDeviceInfo(IDictionary<String, String?> dic);
 
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
-    private static Type? GetXamarinDeviceInfoType() => Type.GetType("Xamarin.Essentials.DeviceInfo", false);
-
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
-    private static Type? GetXamarinBatteryType() => Type.GetType("Xamarin.Essentials.Battery", false);
-
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)]
-    private static Type? GetAndroidApplicationType() => Type.GetType("Android.App.Application", false);
-
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)]
-    private static Type? GetAndroidContextType() => Type.GetType("Android.Content.Context", false);
-
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)]
-    private static Type? GetAndroidSecureType() => Type.GetType("Android.Provider.Settings+Secure", false);
-
-    private static Object? GetStaticMemberValue([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)] Type? type, String name)
-    {
-        if (type == null || name.IsNullOrEmpty()) return null;
-
-        var flags = BindingFlags.Public | BindingFlags.Static;
-        var property = type.GetProperty(name, flags);
-        if (property != null) return property.GetValue(null);
-
-        var field = type.GetField(name, flags);
-        if (field != null) return field.GetValue(null);
-
-        return null;
-    }
-
-    private static Object? GetInstanceMemberValue([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)] Type? type, Object instance, String name)
-    {
-        if (type == null || instance == null || name.IsNullOrEmpty()) return null;
-
-        var flags = BindingFlags.Public | BindingFlags.Instance;
-        var property = type.GetProperty(name, flags);
-        if (property != null) return property.GetValue(instance);
-
-        var field = type.GetField(name, flags);
-        if (field != null) return field.GetValue(instance);
-
-        return null;
-    }
-
-    private static Object? InvokeStaticMethod([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type? type, String name, params Object?[] parameters)
-    {
-        if (type == null || name.IsNullOrEmpty()) return null;
-
-        var flags = BindingFlags.Public | BindingFlags.Static;
-        foreach (var method in type.GetMethods(flags))
-        {
-            if (method.Name != name) continue;
-
-            var ps = method.GetParameters();
-            if (ps.Length != parameters.Length) continue;
-
-            return method.Invoke(null, parameters);
-        }
-
-        return null;
-    }
+    static partial void FillDeviceBattery(IDictionary<String, Object?> dic);
     #endregion
 
     #region 内存

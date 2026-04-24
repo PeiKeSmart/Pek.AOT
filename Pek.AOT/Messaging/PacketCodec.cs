@@ -104,7 +104,7 @@ public class PacketCodec : IDisposable
             CheckCache();
             stream = Stream;
 
-            using var span = Tracer?.NewSpan("net:PacketCodec:MergeCache", $"Position={stream.Position} Length={stream.Length} NewData=[{pk.Length}]{pk.ToHex(500)}");
+            using var span = Tracer?.NewSpan("net:PacketCodec:MergeCache", $"Position={stream.Position} Length={stream.Length} NewData=[{pk.Length}]{pk.ToHex(500)}", pk.Length);
 
             if (pk != null && pk.Total > 0)
             {
@@ -152,7 +152,7 @@ public class PacketCodec : IDisposable
                 stream.Seek(-count, SeekOrigin.Current);
                 var hex = buffer.ToHex(0, count);
 
-                using var span = Tracer?.NewSpan("net:PacketCodec:DropCache", $"[{retain}]{hex}");
+                using var span = Tracer?.NewSpan("net:PacketCodec:DropCache", $"[{retain}]{hex}", retain);
                 span?.SetError(new Exception($"数据包编码器放弃数据 retain={retain} MaxCache={MaxCache}"), null);
 
                 if (XXTrace.Debug)

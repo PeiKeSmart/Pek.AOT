@@ -91,7 +91,8 @@ public class DefaultMessage : Message
         var count = packet.Total;
         if (count < 4) throw new ArgumentOutOfRangeException(nameof(packet), "The length of the packet header is less than 4 bytes");
 
-        var header = count >= 8 ? packet.ReadBytes(0, 8) : packet.ReadBytes(0, 4);
+        var size = 4;
+        var header = packet.GetSpan()[..size];
 
         Reply = false;
         Error = false;
@@ -117,15 +118,13 @@ public class DefaultMessage : Message
         }
 
         Sequence = header[1];
-
-        var size = 4;
         var len = header[2] | (header[3] << 8);
         if (len == 0xFFFF)
         {
             size = 8;
             if (count < size) throw new ArgumentOutOfRangeException(nameof(packet), "The length of the packet header is less than 8 bytes");
 
-            len = header.AsSpan(size - 4, 4).ToArray().ToInt();
+            len = packet.GetSpan().Slice(size - 4, 4).ToArray().ToInt();
         }
 
         if (size + len > count) throw new ArgumentOutOfRangeException(nameof(packet), $"The packet length {count} is less than {size + len} bytes");
@@ -206,7 +205,7 @@ public class DefaultMessage : Message
     public static Int32 GetLength(IPacket packet)
     {
         if (packet == null) throw new ArgumentNullException(nameof(packet));
-        return GetLength(packet.Total >= 8 ? packet.ReadBytes(0, 8) : packet.ReadBytes(0, Math.Min(packet.Total, 4)));
+        return GetLength(packet.GetSpan());
     }
 
     /// <summary>获取完整消息长度</summary>

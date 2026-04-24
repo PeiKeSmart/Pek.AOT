@@ -23,20 +23,41 @@ public static class Runtime
 
     static Runtime()
     {
+        Mono = DetectMono();
+        Unity = DetectUnity();
+    }
+
+    private static Boolean DetectMono()
+    {
+#if ANDROID
+        return true;
+#else
         try
         {
-            Mono = Type.GetType("Mono.Runtime") != null;
+            var description = RuntimeInformation.FrameworkDescription;
+            return !String.IsNullOrEmpty(description) && description.Contains("Mono", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+#endif
+    }
+
+    private static Boolean DetectUnity()
+    {
+        try
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var name = assembly.GetName().Name;
+                if (!String.IsNullOrEmpty(name) && name.StartsWith("UnityEngine", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
         }
         catch { }
 
-        try
-        {
-            Unity = Type.GetType("UnityEngine.Application, UnityEngine") != null;
-        }
-        catch { }
-
-        if (!Unity)
-            Unity = !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_VERSION")) || !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_PLAYER"));
+        return !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_VERSION")) || !String.IsNullOrWhiteSpace(GetEnvironmentVariable("UNITY_PLAYER"));
     }
     #endregion
 
