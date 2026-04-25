@@ -37,13 +37,18 @@ public static class HttpHelper
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
         if (assembly != null)
         {
-            var name = assembly.GetName();
+            var assemblyName = assembly.GetName();
             var os = Environment.OSVersion?.ToString();
             if (!os.IsNullOrEmpty() && os.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase)) os = os[10..];
+
+            var name = assemblyName.Name;
+            var hasNonAscii = !name.IsNullOrEmpty() && Encoding.UTF8.GetByteCount(name) != name.Length;
+            if (hasNonAscii && !name.IsNullOrEmpty()) name = Uri.EscapeDataString(name);
+
             if (!os.IsNullOrEmpty() && Encoding.UTF8.GetByteCount(os) == os.Length)
-                DefaultUserAgent = $"{name.Name}/{name.Version} ({os})";
+                DefaultUserAgent = $"{name}/{assemblyName.Version} ({os})";
             else
-                DefaultUserAgent = $"{name.Name}/{name.Version}";
+                DefaultUserAgent = $"{name}/{assemblyName.Version}";
         }
     }
 

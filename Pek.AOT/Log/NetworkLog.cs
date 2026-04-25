@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 
+using Pek.Http;
+
 namespace Pek.Log;
 
 /// <summary>网络日志</summary>
@@ -105,6 +107,7 @@ public class NetworkLog : Logger, IDisposable
                 _httpClient = new HttpClient { BaseAddress = uri };
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-AppId", AppId);
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-ClientId", ClientId);
+                _httpClient.SetUserAgent();
                 break;
             case "tcp":
                 _tcpClient = new TcpClient();
