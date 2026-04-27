@@ -20,10 +20,10 @@ public class TcpSession : SessionBase, ISocketSession
     /// <summary>实际使用的远程地址</summary>
     public IPAddress? RemoteAddress { get; private set; }
 
-    internal ISocketServer? _server;
+    internal ISocketServer? _Server;
 
     /// <summary>Socket 服务器</summary>
-    ISocketServer ISocketSession.Server => _server!;
+    ISocketServer ISocketSession.Server => _Server!;
 
     /// <summary>是否启用 NoDelay</summary>
     public Boolean NoDelay { get; set; }
@@ -37,7 +37,7 @@ public class TcpSession : SessionBase, ISocketSession
     /// <summary>X509 证书</summary>
     public X509Certificate? Certificate { get; set; }
 
-    private SslStream? _stream;
+    private SslStream? _Stream;
     #endregion
 
     #region 构造
@@ -66,7 +66,7 @@ public class TcpSession : SessionBase, ISocketSession
     internal TcpSession(ISocketServer server, Socket client) : this(client)
     {
         Active = true;
-        _server = server;
+        _Server = server;
         Name = server.Name;
     }
     #endregion
@@ -99,7 +99,7 @@ public class TcpSession : SessionBase, ISocketSession
 
             WriteLog("服务端SSL认证，SslProtocol={0}，Issuer: {1}", protocol, cert.Issuer);
             sslStream.AuthenticateAsServer(cert, false, protocol, false);
-            _stream = sslStream;
+            _Stream = sslStream;
         }
 
         ReceiveAsync();
@@ -110,7 +110,7 @@ public class TcpSession : SessionBase, ISocketSession
     /// <returns>是否成功</returns>
     protected override async Task<Boolean> OnOpenAsync(CancellationToken cancellationToken)
     {
-        if (_server != null) return false;
+        if (_Server != null) return false;
 
         var span = DefaultSpan.Current;
         var timeout = Timeout;
@@ -182,7 +182,7 @@ public class TcpSession : SessionBase, ISocketSession
                     },
                     timeoutSource.Token).ConfigureAwait(false);
 
-                _stream = sslStream;
+                _Stream = sslStream;
             }
         }
         catch (Exception ex)
@@ -219,10 +219,10 @@ public class TcpSession : SessionBase, ISocketSession
             Active = false;
             try
             {
-                var stream = _stream;
+                var stream = _Stream;
                 if (stream != null)
                 {
-                    _stream = null;
+                    _Stream = null;
                     try
                     {
                         stream.Close();
@@ -234,7 +234,7 @@ public class TcpSession : SessionBase, ISocketSession
                 socket.Shutdown();
                 socket.Close();
 
-                if (_server != null) Dispose();
+                if (_Server != null) Dispose();
             }
             catch (Exception ex)
             {
@@ -251,7 +251,7 @@ public class TcpSession : SessionBase, ISocketSession
     #endregion
 
     #region 发送
-    private Int32 _bufferSize;
+    private Int32 _bsize;
     private SpinLock _spinLock = new();
 
     /// <summary>发送数据包</summary>
@@ -270,12 +270,12 @@ public class TcpSession : SessionBase, ISocketSession
         var gotLock = false;
         try
         {
-            if (_bufferSize == 0) _bufferSize = socket.SendBufferSize;
-            if (_bufferSize < count) socket.SendBufferSize = _bufferSize = count;
+            if (_bsize == 0) _bsize = socket.SendBufferSize;
+            if (_bsize < count) socket.SendBufferSize = _bsize = count;
 
             _spinLock.Enter(ref gotLock);
 
-            if (_stream == null)
+            if (_Stream == null)
             {
                 if (count == 0)
                     result = socket.Send(Pool.Empty);
@@ -289,9 +289,9 @@ public class TcpSession : SessionBase, ISocketSession
             else
             {
                 if (count == 0)
-                    _stream.Write([]);
+                    _Stream.Write([]);
                 else
-                    packet.CopyTo(_stream);
+                    packet.CopyTo(_Stream);
             }
         }
         catch (Exception ex)
@@ -331,12 +331,12 @@ public class TcpSession : SessionBase, ISocketSession
         var gotLock = false;
         try
         {
-            if (_bufferSize == 0) _bufferSize = socket.SendBufferSize;
-            if (_bufferSize < count) socket.SendBufferSize = _bufferSize = count;
+            if (_bsize == 0) _bsize = socket.SendBufferSize;
+            if (_bsize < count) socket.SendBufferSize = _bsize = count;
 
             _spinLock.Enter(ref gotLock);
 
-            if (_stream == null)
+            if (_Stream == null)
             {
                 if (count == 0)
                     result = socket.Send(Pool.Empty);
@@ -346,9 +346,9 @@ public class TcpSession : SessionBase, ISocketSession
             else
             {
                 if (count == 0)
-                    _stream.Write([]);
+                    _Stream.Write([]);
                 else
-                    _stream.Write(data.Array!, data.Offset, data.Count);
+                    _Stream.Write(data.Array!, data.Offset, data.Count);
             }
         }
         catch (Exception ex)
@@ -387,21 +387,21 @@ public class TcpSession : SessionBase, ISocketSession
         var gotLock = false;
         try
         {
-            if (_bufferSize == 0) _bufferSize = socket.SendBufferSize;
-            if (_bufferSize < count) socket.SendBufferSize = _bufferSize = count;
+            if (_bsize == 0) _bsize = socket.SendBufferSize;
+            if (_bsize < count) socket.SendBufferSize = _bsize = count;
 
             _spinLock.Enter(ref gotLock);
 
-            if (_stream == null)
+            if (_Stream == null)
             {
                 result = count == 0 ? socket.Send(Pool.Empty) : socket.Send(data);
             }
             else
             {
                 if (count == 0)
-                    _stream.Write([]);
+                    _Stream.Write([]);
                 else
-                    _stream.Write(data);
+                    _Stream.Write(data);
             }
         }
         catch (Exception ex)
@@ -433,7 +433,7 @@ public class TcpSession : SessionBase, ISocketSession
     {
         if (!Open() || Client == null) return null;
 
-        var stream = _stream;
+        var stream = _Stream;
         if (stream != null)
         {
             using var span = Tracer?.NewSpan($"net:{Name}:ReceiveAsync", BufferSize + String.Empty);
@@ -459,7 +459,7 @@ public class TcpSession : SessionBase, ISocketSession
         var socket = Client;
         if (socket == null || !Active || Disposed) throw new ObjectDisposedException(GetType().Name);
 
-        var stream = _stream;
+        var stream = _Stream;
         if (stream != null)
         {
             stream.BeginRead(socketEventArgs.Buffer!, socketEventArgs.Offset, socketEventArgs.Count, OnEndRead, socketEventArgs);
@@ -474,7 +474,7 @@ public class TcpSession : SessionBase, ISocketSession
         Int32 bytes;
         try
         {
-            bytes = _stream!.EndRead(asyncResult);
+            bytes = _Stream!.EndRead(asyncResult);
         }
         catch (Exception ex)
         {
@@ -534,8 +534,8 @@ public class TcpSession : SessionBase, ISocketSession
         get
         {
             var prefix = base.LogPrefix;
-            if (prefix == null && _server != null)
-                prefix = base.LogPrefix = $"{_server.Name}[{ID}].";
+            if (prefix == null && _Server != null)
+                prefix = base.LogPrefix = $"{_Server.Name}[{ID}].";
 
             return prefix;
         }
@@ -550,7 +550,7 @@ public class TcpSession : SessionBase, ISocketSession
         var remote = Remote.EndPoint;
         if (remote == null || remote.IsAny()) return local.ToString();
 
-        return _server == null ? $"{local}=>{remote}" : $"{local}<={remote}";
+        return _Server == null ? $"{local}=>{remote}" : $"{local}<={remote}";
     }
     #endregion
 }

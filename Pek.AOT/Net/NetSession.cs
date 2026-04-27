@@ -2,6 +2,7 @@ using System.Text;
 
 using Pek;
 using Pek.Data;
+using Pek.IO;
 using Pek.Log;
 using Pek.Model;
 
@@ -228,7 +229,7 @@ public class NetSession : DisposeBase, INetSession, IServiceProvider, IExtend
     {
         var host = ((INetSession)this).Host;
         var length = count > 0 ? count : data.Length - offset;
-        using var span = host.Tracer?.NewSpan($"net:{host.Name}:Send", null, length);
+        using var span = host.Tracer?.NewSpan($"net:{host.Name}:Send", data.ToHex(offset, length > 64 ? 64 : length), length);
 
         Session.Send(data, offset, count);
 
@@ -285,7 +286,7 @@ public class NetSession : DisposeBase, INetSession, IServiceProvider, IExtend
     /// <param name="message">消息</param>
     /// <param name="eventArgs">接收事件参数</param>
     /// <returns>发送字节数</returns>
-    public virtual Int32 SendReply(Object message, ReceivedEventArgs eventArgs) => (Session as SessionBase)?.SendMessage(message, eventArgs.Context) ?? -1;
+    public virtual Int32 SendReply(Object message, ReceivedEventArgs eventArgs) => ((Session as SessionBase)!).SendMessage(message, eventArgs.Context);
 
     /// <summary>异步发送消息并等待响应</summary>
     /// <param name="message">消息</param>
@@ -302,23 +303,23 @@ public class NetSession : DisposeBase, INetSession, IServiceProvider, IExtend
     /// <summary>日志提供者</summary>
     public ILog? Log { get; set; }
 
-    private String? _logPrefix;
+    private String? _LogPrefix;
 
     /// <summary>日志前缀</summary>
     public virtual String LogPrefix
     {
         get
         {
-            if (_logPrefix == null)
+            if (_LogPrefix == null)
             {
                 var host = ((INetSession)this).Host;
                 var name = host?.Name ?? String.Empty;
-                _logPrefix = $"{name}[{ID}] ";
+                _LogPrefix = $"{name}[{ID}] ";
             }
 
-            return _logPrefix;
+            return _LogPrefix;
         }
-        set => _logPrefix = value;
+        set => _LogPrefix = value;
     }
 
     /// <summary>写日志</summary>
