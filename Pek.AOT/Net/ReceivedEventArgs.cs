@@ -2,6 +2,7 @@ using System.Net;
 
 using Pek.Collections;
 using Pek.Data;
+using Pek.Model;
 
 namespace Pek.Net;
 
@@ -9,6 +10,10 @@ namespace Pek.Net;
 public class ReceivedEventArgs : EventArgs, IData
 {
     private static readonly Pool<ReceivedEventArgs> _pool = new();
+
+    /// <summary>编码处理器上下文</summary>
+    /// <remarks>类似 HttpContext，用于在一次接收处理中携带请求/响应信息。</remarks>
+    public IHandlerContext? Context { get; set; }
 
     /// <summary>本地地址</summary>
     public IPAddress? Local { get; set; }
@@ -46,6 +51,7 @@ public class ReceivedEventArgs : EventArgs, IData
     /// <summary>重置状态</summary>
     public void Reset()
     {
+        Context = null;
         Local = null;
         Packet = null;
         Remote = null;
