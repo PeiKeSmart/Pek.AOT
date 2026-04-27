@@ -93,8 +93,10 @@ public class NetworkLog : Logger, IDisposable
     {
         if (_inited) return;
 
-        AppId ??= Assembly.GetEntryAssembly()?.GetName().Name ?? AppDomain.CurrentDomain.FriendlyName;
-        ClientId ??= Runtime.ClientId;
+        if (String.IsNullOrWhiteSpace(AppId))
+            AppId = Assembly.GetEntryAssembly()?.GetName().Name ?? AppDomain.CurrentDomain.FriendlyName;
+        if (String.IsNullOrWhiteSpace(ClientId))
+            ClientId = Runtime.ClientId;
 
         if (String.IsNullOrWhiteSpace(Server)) return;
         if (!Uri.TryCreate(Server, UriKind.Absolute, out var uri)) return;
@@ -104,7 +106,8 @@ public class NetworkLog : Logger, IDisposable
         {
             case "http":
             case "https":
-                _httpClient = new HttpClient { BaseAddress = uri };
+                var handler = HttpHelper.CreateHandler(false, false);
+                _httpClient = new HttpClient(handler) { BaseAddress = uri };
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-AppId", AppId);
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-ClientId", ClientId);
                 _httpClient.SetUserAgent();
@@ -124,7 +127,7 @@ public class NetworkLog : Logger, IDisposable
 
         if (_httpClient == null && _tcpClient == null && _udpClient == null) return;
 
-        Send(CreateHead());
+        Send(GetHead());
         _inited = true;
     }
 
@@ -161,7 +164,7 @@ public class NetworkLog : Logger, IDisposable
             {
                 Content = new StringContent(value, Encoding.UTF8, "text/plain")
             };
-            _httpClient.SendAsync(request).GetAwaiter().GetResult();
+            _httpClient.SendAsync(request).Wait(30_000);
             return;
         }
 
@@ -189,22 +192,5 @@ public class NetworkLog : Logger, IDisposable
             stream.Write(data, 0, data.Length);
             stream.Flush();
         }
-    }
-
-    private static String CreateHead()
-    {
-        var process = Environment.ProcessId;
-        var name = AppDomain.CurrentDomain.FriendlyName;
-        var builder = new StringBuilder();
-        builder.AppendFormat("#Software: {0}\r\n", name);
-        builder.AppendFormat("#ProcessID: {0}{1}\r\n", process, Environment.Is64BitProcess ? " x64" : String.Empty);
-        builder.AppendFormat("#BaseDirectory: {0}\r\n", AppDomain.CurrentDomain.BaseDirectory);
-        builder.AppendFormat("#CurrentDirectory: {0}\r\n", Environment.CurrentDirectory);
-        builder.AppendFormat("#ApplicationType: {0}\r\n", Runtime.IsWeb ? "Web" : Runtime.IsConsole ? "Console" : "Service");
-        builder.AppendFormat("#CLR: {0}\r\n", Environment.Version);
-        builder.AppendFormat("#OS: {0}, {1}/{2}\r\n", Environment.OSVersion, Environment.MachineName, Environment.UserName);
-        builder.AppendFormat("#CPU: {0}\r\n", Environment.ProcessorCount);
-        builder.AppendFormat("#Date: {0:yyyy-MM-dd}\r\n", DateTime.Now.AddHours(XTrace.GetSetting().UtcIntervalHours));
-        return builder.ToString();
     }
 }
