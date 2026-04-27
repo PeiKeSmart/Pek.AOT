@@ -1,9 +1,6 @@
 using System.ComponentModel;
 using System.IO.Ports;
-using System.Runtime.Versioning;
 using System.Text;
-
-using Microsoft.Win32;
 
 using Pek.Data;
 using Pek.Log;
@@ -12,7 +9,7 @@ using Pek.Threading;
 namespace Pek.Net;
 
 /// <summary>串口传输</summary>
-public class SerialTransport : DisposeBase, ITransport
+public partial class SerialTransport : DisposeBase, ITransport
 {
     private const String LogScope = "Pek.Net";
 
@@ -243,26 +240,7 @@ public class SerialTransport : DisposeBase, ITransport
             result[item] = item;
         }
 
-        if (!OperatingSystem.IsWindows()) return result;
-
-        try
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DEVICEMAP\SERIALCOMM", false);
-            using var usb = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB", false);
-            if (key == null) return result;
-
-            foreach (var item in key.GetValueNames())
-            {
-                var name = key.GetValue(item)?.ToString() ?? String.Empty;
-                if (String.IsNullOrWhiteSpace(name)) continue;
-
-                var description = ResolveDescription(usb, name, item);
-                result[name] = description;
-            }
-        }
-        catch
-        {
-        }
+        if (OperatingSystem.IsWindows()) TryFillPortDescriptions(result);
 
         return result;
     }
@@ -481,29 +459,5 @@ public class SerialTransport : DisposeBase, ITransport
         Close();
     }
 
-    [SupportedOSPlatform("windows")]
-    private static String ResolveDescription(RegistryKey? usb, String name, String fallback)
-    {
-        if (usb != null)
-        {
-            foreach (var vid in usb.GetSubKeyNames())
-            {
-                using var usbVid = usb.OpenSubKey(vid);
-                if (usbVid == null) continue;
-
-                foreach (var child in usbVid.GetSubKeyNames())
-                {
-                    using var sub = usbVid.OpenSubKey(child);
-                    var friendlyName = sub?.GetValue("FriendlyName")?.ToString();
-                    if (String.IsNullOrWhiteSpace(friendlyName)) continue;
-                    if (!friendlyName.Contains($"({name})", StringComparison.OrdinalIgnoreCase)) continue;
-
-                    return friendlyName.Replace($"({name})", String.Empty, StringComparison.OrdinalIgnoreCase).Trim();
-                }
-            }
-        }
-
-        var index = fallback.LastIndexOf('\\');
-        return index >= 0 ? fallback[(index + 1)..] : fallback;
-    }
+    static partial void TryFillPortDescriptions(Dictionary<String, String> result);
 }
