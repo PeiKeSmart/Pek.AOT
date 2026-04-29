@@ -63,8 +63,8 @@ public partial class SerialTransport : DisposeBase, ITransport
     /// <summary>BreakState</summary>
     public Boolean BreakState { get; set; }
 
-    /// <summary>超时时间。默认 1000ms</summary>
-    public Int32 Timeout { get; set; } = 1000;
+    /// <summary>超时时间。超过该大小未收到数据，说明是另一帧。默认 10ms</summary>
+    public Int32 Timeout { get; set; } = 10;
 
     /// <summary>字节超时。数据包间隔，默认 20ms</summary>
     public Int32 ByteTimeout { get; set; } = 20;
