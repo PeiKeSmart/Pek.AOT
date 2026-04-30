@@ -7,6 +7,7 @@ using System.Xml;
 
 using Pek.IO;
 using Pek.Log;
+using Pek.Threading;
 using Pek.Xml;
 
 namespace Pek.Configuration;
@@ -96,7 +97,11 @@ public static class ConfigManager
     
     // 文件监控
     private static FileWatcher? _fileWatcher;
+    private static TimerX? _pollTimer;
     private static readonly object _watcherLock = new();
+    private static readonly ConcurrentDictionary<String, DateTime> _lastObservedWriteTimes = new(StringComparer.OrdinalIgnoreCase);
+    private const Int32 WatcherFallbackPeriodSeconds = 60;
+    private const Int32 PollOnlyPeriodSeconds = 5;
     
     // 简化的防抖机制
     private static readonly ConcurrentDictionary<string, DateTime> _lastSaveTimes = new();
@@ -108,8 +113,8 @@ public static class ConfigManager
     private static readonly CancellationTokenSource _cancellationTokenSource = new();
     private static readonly Task _queueProcessorTask;
     
-    // 自动清理机制 - Channel版本析构函数清理
-    private static readonly ChannelCleanupHelper _cleanupHelper = new();
+    // 进程退出清理状态，避免重复清理
+    private static int _cleanupState;
     
     // 唯一事件
     public static event EventHandler<ConfigChangedEventArgs>? ConfigChanged;
@@ -121,6 +126,8 @@ public static class ConfigManager
         var channel = Channel.CreateUnbounded<ConfigChangeQueueItem>();
         _channelWriter = channel.Writer;
         _channelReader = channel.Reader;
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanupChannelResources();
         
         // 启动队列处理器
         _queueProcessorTask = Task.Run(ProcessChangeQueueAsync);
@@ -144,123 +151,58 @@ public static class ConfigManager
     }
 
     /// <summary>
-    /// Channel自动清理辅助类 - 通过析构函数实现自动资源释放
+    /// 清理 Channel 与文件监控资源
     /// </summary>
-    private sealed class ChannelCleanupHelper
+    private static void CleanupChannelResources()
     {
-        private volatile bool _isDisposed = false;
+        if (Interlocked.CompareExchange(ref _cleanupState, 1, 0) != 0) return;
 
-        /// <summary>
-        /// 析构函数 - 在垃圾回收时自动清理Channel相关资源
-        /// </summary>
-        ~ChannelCleanupHelper()
+        try
         {
-            if (!_isDisposed)
-            {
-                PerformCleanup();
-            }
-        }
+            WriteConfigLog("Cleanup", "开始停止配置文件监控器");
 
-        /// <summary>
-        /// 手动清理资源
-        /// </summary>
-        public void Dispose()
-        {
-            if (!_isDisposed)
+            lock (_watcherLock)
             {
-                PerformCleanup();
-                _isDisposed = true;
-                GC.SuppressFinalize(this); // 抑制析构函数调用
-            }
-        }
+                if (_fileWatcher != null)
+                {
+                    try
+                    {
+                        _fileWatcher.Stop();
+                        _fileWatcher.Dispose();
+                        _fileWatcher = null;
+                        WriteConfigLog("Cleanup", "文件监控器已停止并释放");
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteConfigLog("Cleanup", $"停止文件监控器时出错 Error={TrimLogMessage(ex.Message)}");
+                    }
+                }
 
-        /// <summary>
-        /// 执行实际的清理操作
-        /// </summary>
-        private void PerformCleanup()
+                if (_pollTimer != null)
+                {
+                    try
+                    {
+                        _pollTimer.Dispose();
+                        _pollTimer = null;
+                        WriteConfigLog("Cleanup", "配置轮询器已停止并释放");
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteConfigLog("Cleanup", $"停止配置轮询器时出错 Error={TrimLogMessage(ex.Message)}");
+                    }
+                }
+            }
+
+            WriteConfigLog("Cleanup", "配置系统退出清理完成");
+        }
+        catch (Exception ex)
         {
             try
             {
-                WriteConfigLog("Cleanup", "开始自动清理配置系统资源");
-
-                // 1. 停止Channel写入
-                try
-                {
-                    _channelWriter?.Complete();
-                    WriteConfigLog("Cleanup", "Channel写入已停止");
-                }
-                catch (Exception ex)
-                {
-                    WriteConfigLog("Cleanup", $"停止Channel写入时出错 Error={TrimLogMessage(ex.Message)}");
-                }
-                
-                // 2. 取消后台任务
-                try
-                {
-                    _cancellationTokenSource?.Cancel();
-                    WriteConfigLog("Cleanup", "后台任务取消信号已发送");
-                }
-                catch (Exception ex)
-                {
-                    WriteConfigLog("Cleanup", $"取消后台任务时出错 Error={TrimLogMessage(ex.Message)}");
-                }
-                
-                // 3. 等待后台任务完成（有超时限制，避免析构函数阻塞）
-                if (_queueProcessorTask != null && !_queueProcessorTask.IsCompleted)
-                {
-                    // 在析构函数中使用较短的超时时间
-                    if (_queueProcessorTask.Wait(TimeSpan.FromSeconds(3)))
-                    {
-                        WriteConfigLog("Cleanup", "后台任务已正常完成");
-                    }
-                    else
-                    {
-                        WriteConfigLog("Cleanup", "后台任务未能在3秒内完成，继续清理");
-                    }
-                }
-                
-                // 4. 清理文件监控器
-                lock (_watcherLock)
-                {
-                    if (_fileWatcher != null)
-                    {
-                        try
-                        {
-                            _fileWatcher.Stop();
-                            _fileWatcher = null;
-                            WriteConfigLog("Cleanup", "文件监控器已自动停止");
-                        }
-                        catch (Exception ex)
-                        {
-                            WriteConfigLog("Cleanup", $"停止文件监控器时出错 Error={TrimLogMessage(ex.Message)}");
-                        }
-                    }
-                }
-                
-                // 5. 释放CancellationTokenSource
-                try
-                {
-                    _cancellationTokenSource?.Dispose();
-                    WriteConfigLog("Cleanup", "CancellationTokenSource已释放");
-                }
-                catch (Exception ex)
-                {
-                    WriteConfigLog("Cleanup", $"释放CancellationTokenSource时出错 Error={TrimLogMessage(ex.Message)}");
-                }
-
-                WriteConfigLog("Cleanup", "配置系统资源自动清理完成");
+                WriteConfigLog("Cleanup", $"清理过程中发生异常 Error={TrimLogMessage(ex.Message)}");
             }
-            catch (Exception ex)
+            catch
             {
-                // 清理过程中的异常不应该抛出，静默处理
-                try
-                {
-                    WriteConfigLog("Cleanup", $"自动清理过程中发生异常 Error={TrimLogMessage(ex.Message)}");
-                }
-                catch
-                {
-                    // 如果连日志都无法记录，则完全静默
-                }
             }
         }
     }
@@ -288,6 +230,7 @@ public static class ConfigManager
         // 建立文件路径到配置类型的映射
         var filePath = GetConfigFilePath(configType);
         _filePathToConfigType[filePath] = configType;
+        if (File.Exists(filePath)) _lastObservedWriteTimes[filePath] = File.GetLastWriteTimeUtc(filePath);
         
         // 始终初始化文件监控器（自动重新加载始终启用）
         InitializeFileWatcher();
@@ -676,6 +619,7 @@ public static class ConfigManager
         }
 
         File.Move(tempFilePath, filePath);
+        _lastObservedWriteTimes[filePath] = File.GetLastWriteTimeUtc(filePath);
 
         if (writeLog)
         {
@@ -779,7 +723,7 @@ public static class ConfigManager
     {
         lock (_watcherLock)
         {
-            if (_fileWatcher != null)
+            if (_fileWatcher != null || _pollTimer != null)
             {
                 return;
             }
@@ -795,12 +739,26 @@ public static class ConfigManager
                     Directory.CreateDirectory(configDir);
                 }
                 
-                // 创建文件监控器
-                _fileWatcher = new FileWatcher(new[] { configDir });
-                _fileWatcher.EventHandler += OnConfigFileChanged;
-                _fileWatcher.Start();
-                
-                WriteConfigLog("Watch", $"配置文件监控器已启动 Path={configDir}");
+                var hasWatcher = false;
+
+                try
+                {
+                    _fileWatcher = new FileWatcher(new[] { configDir });
+                    _fileWatcher.EventHandler += OnConfigFileChanged;
+                    _fileWatcher.Start();
+                    hasWatcher = true;
+
+                    WriteConfigLog("Watch", $"配置文件监控器已启动 Path={configDir}");
+                }
+                catch (Exception ex)
+                {
+                    _fileWatcher = null;
+                    WriteConfigLog("Watch", $"配置文件监控器启动失败，改用轮询兜底 Path={configDir} Error={TrimLogMessage(ex.Message)}");
+                }
+
+                var period = hasWatcher ? WatcherFallbackPeriodSeconds : PollOnlyPeriodSeconds;
+                _pollTimer = new TimerX(PollConfigFiles, null, period * 1000, period * 1000) { Async = true };
+                WriteConfigLog("Watch", $"配置文件轮询器已启动 Period={period}s Mode={(hasWatcher ? "Fallback" : "Polling")}");
             }
             catch (Exception ex)
             {
@@ -829,23 +787,59 @@ public static class ConfigManager
             return;
         }
 
-        // 创建并入队配置变更项
+        EnqueueConfigChange(args.FullPath, configType, "Watch");
+    }
+
+    private static Task PollConfigFiles(Object state)
+    {
+        foreach (var item in _filePathToConfigType)
+        {
+            try
+            {
+                var filePath = item.Key;
+                if (!File.Exists(filePath)) continue;
+
+                var writeTime = File.GetLastWriteTimeUtc(filePath);
+                if (!_lastObservedWriteTimes.TryGetValue(filePath, out var observedWriteTime))
+                {
+                    _lastObservedWriteTimes[filePath] = writeTime;
+                    continue;
+                }
+
+                if (writeTime <= observedWriteTime) continue;
+                if (IsCodeSaveTriggered(filePath))
+                {
+                    _lastObservedWriteTimes[filePath] = writeTime;
+                    continue;
+                }
+
+                EnqueueConfigChange(filePath, item.Value, "Poll");
+            }
+            catch (Exception ex)
+            {
+                XXTrace.WriteException(ex);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void EnqueueConfigChange(String filePath, Type configType, String source)
+    {
+        if (File.Exists(filePath)) _lastObservedWriteTimes[filePath] = File.GetLastWriteTimeUtc(filePath);
+
         var queueItem = new ConfigChangeQueueItem
         {
-            FilePath = args.FullPath,
+            FilePath = filePath,
             ConfigType = configType,
             QueueTime = DateTime.Now,
             RetryCount = 0
         };
 
         if (_channelWriter.TryWrite(queueItem))
-        {
-            WriteConfigLog("Queue", $"配置变更已加入队列 Config={configType.Name} Path={args.FullPath}");
-        }
+            WriteConfigLog("Queue", $"配置变更已加入队列 Source={source} Config={configType.Name} Path={filePath}");
         else
-        {
-            WriteConfigLog("Queue", $"配置变更入队失败 Config={configType.Name} Path={args.FullPath}");
-        }
+            WriteConfigLog("Queue", $"配置变更入队失败 Source={source} Config={configType.Name} Path={filePath}");
     }
 
     /// <summary>

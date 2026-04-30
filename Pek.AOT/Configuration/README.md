@@ -25,7 +25,7 @@ XML 输出遵循更接近 DH.NCore 的风格：
 - 显式格式：JSON
 - 首次访问 `Config<T>.Current` 时，如果文件不存在，会按默认值立即生成配置文件
 - 如果某个配置已改为 XML 默认格式，但磁盘上仍是旧 JSON 内容，系统会先按旧 JSON 读入，再自动回写为 XML
-- 配置文件变更会通过 `ConfigManager.ConfigChanged` 事件通知
+- 配置文件变更会通过 `ConfigManager.ConfigChanged` 事件通知，热重载同时使用文件事件和轮询兜底
 - 未指定配置名时，默认使用类型名，并自动裁掉末尾的 `Config` 或 `Setting` 后缀
 - 支持 `OnLoaded()` 加载后钩子；如果钩子修改了已加载配置，会自动静默回写
 
