@@ -261,8 +261,7 @@ public static class ConfigManager
             }
 
             var config = LoadConfig<TConfig>();
-            _configs[configType] = config;
-            return config;
+            return GetOrUpdateCachedConfig(configType, config, serializerOptions: null);
         }
     }
 
@@ -292,7 +291,6 @@ public static class ConfigManager
             if (_configReloadDelegates.TryGetValue(configType, out var reloadDelegate))
             {
                 var config = reloadDelegate();
-                _configs[configType] = config;
                 return config;
             }
             else
@@ -321,7 +319,7 @@ public static class ConfigManager
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
 
-        _configs[config.GetType()] = config;
+        GetOrUpdateCachedConfig(config.GetType(), config, serializerOptions: null);
     }
 
     /// <summary>
@@ -969,6 +967,7 @@ public static class ConfigManager
 
         // 获取旧配置
         var oldConfig = _configs.TryGetValue(item.ConfigType, out var cached) ? cached : null;
+        var oldSnapshot = CloneConfig(oldConfig, item.ConfigType);
 
         // 重新加载配置
         if (!_configTryReloadDelegates.TryGetValue(item.ConfigType, out var reloadDelegate))
@@ -985,7 +984,7 @@ public static class ConfigManager
         WriteConfigLog("Reload", $"配置重新加载成功 Config={item.ConfigType.Name}");
 
         // 触发配置变更事件
-        ConfigChanged?.Invoke(null, new ConfigChangedEventArgs(item.ConfigType, oldConfig ?? newConfig, newConfig, GetPropertyChanges(oldConfig, newConfig)));
+        ConfigChanged?.Invoke(null, new ConfigChangedEventArgs(item.ConfigType, oldSnapshot ?? newConfig, newConfig, GetPropertyChanges(oldSnapshot, newConfig)));
 
         return true;
     }
@@ -1017,6 +1016,57 @@ public static class ConfigManager
         }
     }
 
+    private static TConfig GetOrUpdateCachedConfig<TConfig>(Type configType, TConfig loadedConfig, JsonSerializerOptions? serializerOptions)
+        where TConfig : Config
+    {
+        if (!_configs.TryGetValue(configType, out var cachedConfig) || cachedConfig is not TConfig existingConfig || ReferenceEquals(existingConfig, loadedConfig))
+        {
+            _configs[configType] = loadedConfig;
+            return loadedConfig;
+        }
+
+        serializerOptions ??= _serializerOptions.TryGetValue(configType, out var options) ? options : null;
+        if (serializerOptions == null)
+        {
+            _configs[configType] = loadedConfig;
+            return loadedConfig;
+        }
+
+        ApplyConfigValues(configType, existingConfig, loadedConfig, serializerOptions);
+        return existingConfig;
+    }
+
+    private static Object? CloneConfig(Object? config, Type configType)
+    {
+        if (config == null) return null;
+        if (!_serializerOptions.TryGetValue(configType, out var options)) return config;
+
+        try
+        {
+            var json = SerializeConfig(config, configType, options);
+            return DeserializeConfig(json, configType, options);
+        }
+        catch (Exception ex)
+        {
+            XXTrace.WriteException(ex);
+            return config;
+        }
+    }
+
+    private static void ApplyConfigValues(Type configType, Object target, Object source, JsonSerializerOptions options)
+    {
+        var typeInfo = GetJsonTypeInfo(configType, options);
+        foreach (var property in typeInfo.Properties)
+        {
+            var getter = property.Get;
+            var setter = property.Set;
+            if (getter == null || setter == null) continue;
+            if (property.IsExtensionData) continue;
+
+            setter(target, getter(source));
+        }
+    }
+
     /// <summary>
     /// 内部重新加载配置方法
     /// </summary>
@@ -1026,8 +1076,7 @@ public static class ConfigManager
     {
         var configType = typeof(TConfig);
         var config = LoadConfig<TConfig>();
-        _configs[configType] = config;
-        return config;
+        return GetOrUpdateCachedConfig(configType, config, serializerOptions: null);
     }
 
     private static Boolean TryReloadConfigInternal<TConfig>(out object? config, out String? error) where TConfig : Config, new()
@@ -1035,8 +1084,7 @@ public static class ConfigManager
         var configType = typeof(TConfig);
         if (TryLoadConfig<TConfig>(false, out var loaded, out error))
         {
-            _configs[configType] = loaded;
-            config = loaded;
+            config = GetOrUpdateCachedConfig(configType, loaded, serializerOptions: null);
             return true;
         }
 
