@@ -4,7 +4,7 @@ using Pek.Log;
 namespace Pek.Threading;
 
 /// <summary>定时器调度器</summary>
-public class TimerScheduler : IDisposable
+public class TimerScheduler : IDisposable, ILogFeature
 {
     private const String LogScope = "Pek.Threading";
 
@@ -204,17 +204,31 @@ public class TimerScheduler : IDisposable
                     timer.Calling = true;
                     if (timer.IsAsyncTask)
                     {
-                        Task.Run(() => ExecuteAsync(timer));
+                        _ = Task.Run(() => ExecuteAsync(timer));
                     }
                     else if (timer.Async)
                     {
-                        ThreadPool.UnsafeQueueUserWorkItem(state => Execute(state), timer);
+                        ThreadPool.UnsafeQueueUserWorkItem(state =>
+                        {
+                            try
+                            {
+                                Execute(state);
+                            }
+                            catch (Exception ex)
+                            {
+                                XTrace.WriteException(ex);
+                            }
+                        }, timer);
                     }
                     else
                     {
                         Execute(timer);
                     }
                 }
+            }
+            catch (ThreadInterruptedException)
+            {
+                break;
             }
             catch (Exception ex)
             {

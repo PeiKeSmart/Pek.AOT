@@ -734,15 +734,27 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
 
         var span = Tracer?.NewSpan($"net:{Name}:SendMessageAsync", message);
         var context = CreateContext(this);
+        CancellationTokenRegistration cancellationRegistration = default;
         try
         {
             if (span != null && message is ITraceMessage traceMessage && traceMessage.TraceId.IsNullOrEmpty()) traceMessage.TraceId = span.ToString();
 
             var source = new TaskCompletionSource<Object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (cancellationToken.CanBeCanceled)
+            {
+                cancellationRegistration = cancellationToken.Register(static state =>
+                {
+                    if (state is TaskCompletionSource<Object> taskSource && !taskSource.Task.IsCompleted)
+                        taskSource.TrySetCanceled();
+                }, source);
+            }
+
             if (span != null)
             {
                 _ = source.Task.ContinueWith(task =>
                 {
+                    cancellationRegistration.Dispose();
+
                     if (task.IsCanceled)
                         span.AppendTag("Canceled");
                     else if (task.IsFaulted && task.Exception != null)
@@ -750,6 +762,10 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
 
                     span.Dispose();
                 }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+            else if (cancellationToken.CanBeCanceled)
+            {
+                _ = source.Task.ContinueWith(_ => cancellationRegistration.Dispose(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
 
             context["TaskSource"] = source;
@@ -765,15 +781,6 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
                 return new ValueTask<Object>(source.Task);
             }
 
-            if (cancellationToken.CanBeCanceled)
-            {
-                cancellationToken.Register(static state =>
-                {
-                    if (state is TaskCompletionSource<Object> taskSource && !taskSource.Task.IsCompleted)
-                        taskSource.TrySetCanceled();
-                }, source);
-            }
-
             return new ValueTask<Object>(source.Task);
         }
         catch (Exception ex)
@@ -783,6 +790,7 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
             else
                 span?.SetError(ex, null);
 
+            cancellationRegistration.Dispose();
             span?.Dispose();
             if (context != null) ReturnContext(context);
             throw;
