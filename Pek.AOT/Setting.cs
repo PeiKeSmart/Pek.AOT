@@ -23,15 +23,15 @@ public class Setting : Config<Setting, SettingJsonContext>
 
     /// <summary>文件日志目录</summary>
     [Description("文件日志目录。默认Log子目录")]
-    public String LogPath { get; set; } = "Log";
+    public String LogPath { get; set; } = String.Empty;
 
     /// <summary>日志文件上限，单位 MB，0 表示不限制</summary>
     [Description("日志文件上限。超过上限后拆分新日志文件，默认10MB，0表示不限制大小")]
     public Int32 LogFileMaxBytes { get; set; } = 10;
 
     /// <summary>日志文件备份数量，0 表示不限制</summary>
-    [Description("日志文件备份。超过备份数后，最旧的文件将被删除，默认100，0表示不限制个数")]
-    public Int32 LogFileBackups { get; set; } = 100;
+    [Description("日志文件备份。超过备份数后，最旧的文件将被删除，网络安全法要求至少保存6个月日志，默认200，0表示不限制个数")]
+    public Int32 LogFileBackups { get; set; } = 200;
 
     /// <summary>日志文件格式，支持 {0} 日期和 {1} 日志等级</summary>
     [Description("日志文件格式。默认{0:yyyy_MM_dd}.log，支持日志等级如 {1}_{0:yyyy_MM_dd}.log")]
@@ -51,15 +51,15 @@ public class Setting : Config<Setting, SettingJsonContext>
 
     /// <summary>数据目录</summary>
     [Description("数据目录。本地数据库目录，默认Data子目录")]
-    public String DataPath { get; set; } = "Data";
+    public String DataPath { get; set; } = String.Empty;
 
     /// <summary>备份目录</summary>
     [Description("备份目录。备份数据库时存放的目录，默认Backup子目录")]
-    public String BackupPath { get; set; } = "Backup";
+    public String BackupPath { get; set; } = String.Empty;
 
     /// <summary>插件目录</summary>
     [Description("插件目录")]
-    public String PluginPath { get; set; } = "Plugins";
+    public String PluginPath { get; set; } = String.Empty;
 
     /// <summary>插件服务器地址</summary>
     [Description("插件服务器。将从该网页上根据关键字分析链接并下载插件")]
