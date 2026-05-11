@@ -226,6 +226,9 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
         {
             CloseReason = reason;
 
+            var responseSource = Interlocked.Exchange(ref _responseSource, null);
+            responseSource?.TrySetResult(null);
+
             if (Pipeline != null)
             {
                 var context = CreateContext(this);
@@ -845,11 +848,18 @@ public abstract class SessionBase : DisposeBase, ISocketClient, ITransport, ILog
 
     private async Task<IPacket?> WaitResponseAsync(TaskCompletionSource<IPacket?> source)
     {
-        if (Timeout <= 0) return await source.Task.ConfigureAwait(false);
+        try
+        {
+            if (Timeout <= 0) return await source.Task.ConfigureAwait(false);
 
-        using var cancellationTokenSource = new CancellationTokenSource(Timeout);
-        using var registration = cancellationTokenSource.Token.Register(() => source.TrySetResult(null));
-        return await source.Task.ConfigureAwait(false);
+            using var cancellationTokenSource = new CancellationTokenSource(Timeout);
+            using var registration = cancellationTokenSource.Token.Register(() => source.TrySetResult(null));
+            return await source.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ReferenceEquals(_responseSource, source)) _responseSource = null;
+        }
     }
 
     private void ReleaseRecv(SocketAsyncEventArgs socketEventArgs, String reason)
