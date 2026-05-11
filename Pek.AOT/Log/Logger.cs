@@ -87,7 +87,17 @@ public abstract class Logger : ILog
     {
         var setting = XTrace.GetSetting();
         var process = Process.GetCurrentProcess();
-        var name = AppDomain.CurrentDomain.FriendlyName;
+        var name = String.Empty;
+        var assembly = Assembly.GetEntryAssembly();
+        if (assembly != null)
+        {
+            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetName().Name ?? String.Empty;
+        }
+
+        if (String.IsNullOrWhiteSpace(name)) name = AppDomain.CurrentDomain.FriendlyName;
         if (String.IsNullOrWhiteSpace(name)) name = process.ProcessName;
 
         var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;

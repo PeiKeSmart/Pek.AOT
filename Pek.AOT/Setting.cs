@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Text.Json.Serialization;
 
 using Pek.Configuration;
@@ -85,7 +86,9 @@ public class Setting : Config<Setting, SettingJsonContext>
             directory = directory.Parent;
         }
 
-        var appName = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName) ?? String.Empty;
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        var appName = assembly?.GetName().Name;
+        if (appName.IsNullOrEmpty()) appName = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName) ?? String.Empty;
         if (appName.EndsWithIgnoreCase("Web", "Api", "Server", "Service", "Job"))
         {
             // 日志目录分开，其它目录共用
