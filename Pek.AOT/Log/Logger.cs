@@ -60,8 +60,26 @@ public abstract class Logger : ILog
     protected String Format(String format, Object?[]? args)
     {
         if (String.IsNullOrEmpty(format)) return String.Empty;
+        if (args != null && args.Length > 0)
+        {
+            if (args.Length == 1 && args[0] is Exception ex && (String.IsNullOrEmpty(format) || format == "{0}"))
+                return Pek.Utility.GetMessage(ex);
+
+            for (var i = 0; i < args.Length; i++)
+            {
+                if (args[i] is not DateTime dt || !format.Contains("{" + i + "}")) continue;
+
+                dt = dt.AddHours(Setting.Current.UtcIntervalHours);
+                if (dt.Millisecond > 0)
+                    args[i] = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                else if (dt.Hour > 0 || dt.Minute > 0 || dt.Second > 0)
+                    args[i] = dt.ToString("yyyy-MM-dd HH:mm:ss");
+                else
+                    args[i] = dt.ToString("yyyy-MM-dd");
+            }
+        }
+
         if (args == null || args.Length == 0) return format;
-        if (args.Length == 1 && args[0] is Exception ex && format == "{0}") return ex.ToString();
 
         return String.Format(format, args);
     }
@@ -69,8 +87,14 @@ public abstract class Logger : ILog
     /// <summary>是否启用日志</summary>
     public virtual Boolean Enable { get; set; } = true;
 
+    private LogLevel? _level;
+
     /// <summary>日志等级</summary>
-    public virtual LogLevel Level { get; set; } = LogLevel.Info;
+    public virtual LogLevel Level
+    {
+        get => _level ?? XTrace.GetSetting().LogLevel;
+        set => _level = value;
+    }
 
     /// <summary>空日志</summary>
     public static ILog Null { get; } = new NullLogger();

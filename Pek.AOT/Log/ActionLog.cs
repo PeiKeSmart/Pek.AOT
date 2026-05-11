@@ -8,13 +8,13 @@ public class ActionLog : Logger
 
     /// <summary>使用指定方法实例化动作日志</summary>
     /// <param name="action">日志输出动作</param>
-    public ActionLog(Action<String, Object?[]> action) => Method = action ?? throw new ArgumentNullException(nameof(action));
+    public ActionLog(Action<String, Object?[]> action) => Method = action;
 
     /// <summary>写日志</summary>
     /// <param name="level">日志级别</param>
     /// <param name="format">格式化字符串</param>
     /// <param name="args">格式化参数数组</param>
-    protected override void OnWrite(LogLevel level, String format, params Object?[] args) => Method.Invoke(format, args);
+    protected override void OnWrite(LogLevel level, String format, params Object?[] args) => Method?.Invoke(format, args);
 
     /// <summary>已重载</summary>
     /// <returns>字符串表示</returns>
