@@ -109,6 +109,9 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
     /// <summary>日志</summary>
     public ILog Log { get; set; } = Logger.Null;
 
+    /// <summary>会话日志</summary>
+    public ILog? SessionLog { get; set; }
+
     private readonly ConcurrentDictionary<Int32, INetSession> _sessions = new();
 
     /// <summary>会话集合</summary>
@@ -172,7 +175,7 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
     {
         if (Servers.Contains(server)) return false;
 
-        server.Name = Name;
+        server.Name = $"{Name}{(server.Local.IsTcp ? "Tcp" : "Udp")}{(server.Local.Address.IsIPv4() ? String.Empty : "6")}";
         server.NewSession += Server_NewSession;
 
         if (SessionTimeout > 0) server.SessionTimeout = SessionTimeout;
@@ -184,8 +187,55 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
         server.LogReceive = LogReceive;
         server.Error += OnError;
 
+        if (server is TcpServer tcpServer)
+        {
+            tcpServer.ReuseAddress = ReuseAddress;
+            tcpServer.SslProtocol = SslProtocol;
+            if (Certificate != null) tcpServer.Certificate = Certificate;
+        }
+        else if (server is UdpServer udpServer)
+        {
+            udpServer.ReuseAddress = ReuseAddress;
+        }
+
         Servers.Add(server);
         return true;
+    }
+
+    /// <summary>添加服务器监听</summary>
+    /// <param name="address">监听地址</param>
+    /// <param name="port">监听端口</param>
+    /// <param name="protocol">协议类型</param>
+    /// <param name="family">地址族</param>
+    /// <returns>添加数量</returns>
+    public virtual Int32 AddServer(IPAddress address, Int32 port, NetType protocol = NetType.Unknown, AddressFamily family = AddressFamily.Unspecified)
+    {
+        var list = CreateServer(address, port, protocol, family);
+        var count = 0;
+        foreach (var item in list)
+        {
+            AttachServer(item);
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>确保创建服务器</summary>
+    public virtual void EnsureCreateServer()
+    {
+        if (Servers.Count > 0) return;
+
+        var uri = Local;
+        var family = AddressFamily;
+        if (family <= AddressFamily.Unspecified && uri.Host != "*" && !uri.Address.IsAny())
+            family = uri.Address.AddressFamily;
+
+        var list = CreateServer(uri.Address, uri.Port, uri.Type, family);
+        foreach (var item in list)
+        {
+            AttachServer(item);
+        }
     }
 
     /// <summary>添加管道处理器</summary>
@@ -202,21 +252,56 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
     public void Start()
     {
         if (Active) return;
-        if (Servers.Count == 0)
+
+        OnStart();
+
+        if (Server == null)
         {
             this.WriteLog("没有可用Socket服务器！");
             return;
         }
 
-        foreach (var item in Servers)
+        Local.Type = Server.Local.Type;
+        this.WriteLog("准备就绪！");
+    }
+
+    /// <summary>开始时调用的方法</summary>
+    protected virtual void OnStart()
+    {
+        EnsureCreateServer();
+
+        if (Servers.Count == 0) throw new Exception($"Failed to listen to all ports! Port=[{Port}]");
+
+        var snapshot = Servers.ToArray();
+        this.WriteLog("准备开始监听{0}个服务器", snapshot.Length);
+
+        foreach (var item in snapshot)
         {
             item.Start();
+
+            if (Port == 0)
+            {
+                Port = item.Port;
+
+                foreach (var other in Servers)
+                {
+                    if (!ReferenceEquals(other, item) && other.Port == 0) other.Port = Port;
+                }
+            }
+
             this.WriteLog("开始监听 {0}", item);
         }
 
-        if (Server != null) Local.Type = Server.Local.Type;
-        Active = true;
-        this.WriteLog("准备就绪！");
+        if (Pipeline is Pipeline pipe && pipe.Handlers.Count > 0)
+        {
+            this.WriteLog("初始化管道：");
+            foreach (var handler in pipe.Handlers)
+            {
+                this.WriteLog("    {0}", handler);
+            }
+        }
+
+        Active = Servers.Any(e => e.Active);
     }
 
     /// <summary>停止服务</summary>
@@ -230,8 +315,18 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
             return;
         }
 
-        if (String.IsNullOrEmpty(reason)) reason = GetType().Name + "Stop";
+        OnStop(reason);
+        this.WriteLog("已停止！");
+    }
 
+    /// <summary>停止时调用的方法</summary>
+    /// <param name="reason">关闭原因</param>
+    protected virtual void OnStop(String? reason)
+    {
+        var activeServers = Servers.Where(e => e.Active).ToArray();
+        this.WriteLog("准备停止监听{0}个服务器 {1}", activeServers.Length, reason);
+
+        if (String.IsNullOrEmpty(reason)) reason = GetType().Name + "Stop";
         foreach (var item in activeServers)
         {
             this.WriteLog("停止监听 {0}", item);
@@ -240,6 +335,7 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
 
         if (_sessions.Count > 0)
         {
+            this.WriteLog("准备释放网络会话{0}个！", _sessions.Count);
             foreach (var item in _sessions.Values.ToArray())
             {
                 item.TryDispose();
@@ -248,8 +344,18 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
             _sessions.Clear();
         }
 
+        if (Servers.Count > 0)
+        {
+            this.WriteLog("准备释放服务{0}个！", Servers.Count);
+            foreach (var item in Servers)
+            {
+                item.TryDispose();
+            }
+
+            Servers.Clear();
+        }
+
         Active = false;
-        this.WriteLog("已停止！");
     }
 
     /// <summary>新会话事件</summary>
@@ -283,7 +389,7 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
         if (netSession is NetSession typedSession)
         {
             typedSession.ID = Interlocked.Increment(ref _sessionID);
-            typedSession.Log = Log;
+            typedSession.Log = SessionLog ?? Log;
         }
 
         netSession.Host = this;
@@ -418,6 +524,60 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
         }
 
         return count;
+    }
+
+    /// <summary>创建服务器集合</summary>
+    /// <param name="address">监听地址</param>
+    /// <param name="port">监听端口</param>
+    /// <param name="protocol">协议类型</param>
+    /// <param name="family">地址族</param>
+    /// <returns>服务器数组</returns>
+    protected ISocketServer[] CreateServer(IPAddress address, Int32 port, NetType protocol, AddressFamily family)
+    {
+        switch (protocol)
+        {
+            case NetType.Tcp:
+                return CreateServer<TcpServer>(address, port, family);
+            case NetType.Http:
+            case NetType.WebSocket:
+                var tcpServers = CreateServer<TcpServer>(address, port, family);
+                foreach (var item in tcpServers)
+                {
+                    if (item is TcpServer tcpServer) tcpServer.EnableHttp = true;
+                }
+                return tcpServers;
+            case NetType.Udp:
+                return CreateServer<UdpServer>(address, port, family);
+            case NetType.Unknown:
+            default:
+                var list = new List<ISocketServer>();
+                list.AddRange(CreateServer<TcpServer>(address, port, family));
+                list.AddRange(CreateServer<UdpServer>(address, port, family));
+                return list.ToArray();
+        }
+    }
+
+    private ISocketServer[] CreateServer<TServer>(IPAddress address, Int32 port, AddressFamily family) where TServer : ISocketServer, new()
+    {
+        var list = new List<ISocketServer>();
+        switch (family)
+        {
+            case AddressFamily.InterNetwork:
+            case AddressFamily.InterNetworkV6:
+                var actualAddress = address.GetRightAny(family);
+                var server = new TServer();
+                server.Local.Address = actualAddress;
+                server.Local.Port = port;
+                list.Add(server);
+                break;
+            default:
+                list.AddRange(CreateServer<TServer>(address, port, AddressFamily.InterNetwork));
+                if (Socket.OSSupportsIPv6 && !Runtime.Mono)
+                    list.AddRange(CreateServer<TServer>(address, port, AddressFamily.InterNetworkV6));
+                break;
+        }
+
+        return list.ToArray();
     }
 
     /// <summary>为会话创建网络数据处理器</summary>

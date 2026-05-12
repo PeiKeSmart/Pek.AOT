@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 
 using Pek.Collections;
 
@@ -70,6 +71,41 @@ public static class NetHelper
     /// <param name="address">地址</param>
     /// <returns>是否 IPv4</returns>
     public static Boolean IsIPv4(this IPAddress address) => address.AddressFamily == AddressFamily.InterNetwork;
+
+    /// <summary>根据本地网络标识创建客户端</summary>
+    /// <param name="local">本地网络标识</param>
+    /// <returns>Socket客户端</returns>
+    public static ISocketClient CreateClient(this NetUri local)
+    {
+        if (local == null) throw new ArgumentNullException(nameof(local));
+
+        return local.Type switch
+        {
+            NetType.Tcp => new TcpSession { Local = local },
+            NetType.Udp => new UdpServer { Local = local },
+            _ => throw new NotSupportedException($"The {local.Type} protocol is not supported"),
+        };
+    }
+
+    /// <summary>根据远程网络标识创建客户端</summary>
+    /// <param name="remote">远程网络标识</param>
+    /// <returns>Socket客户端</returns>
+    public static ISocketClient CreateRemote(this NetUri remote)
+    {
+        if (remote == null) throw new ArgumentNullException(nameof(remote));
+
+        return remote.Type switch
+        {
+            NetType.Tcp => new TcpSession { Remote = remote },
+            NetType.Udp => new UdpServer { Remote = remote },
+            NetType.Http => new TcpSession
+            {
+                Remote = remote,
+                SslProtocol = remote.Port == 443 ? SslProtocols.Tls12 : SslProtocols.None,
+            },
+            _ => throw new NotSupportedException($"The {remote.Type} protocol is not supported"),
+        };
+    }
 
     /// <summary>创建 TCP Socket</summary>
     /// <param name="ipv4">是否 IPv4</param>
