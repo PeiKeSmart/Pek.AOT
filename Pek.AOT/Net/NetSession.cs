@@ -190,7 +190,7 @@ public class NetSession : DisposeBase, INetSession, IServiceProvider, IExtend
 
     /// <summary>客户端连接已断开</summary>
     /// <param name="reason">断开原因</param>
-    protected virtual void OnDisconnected(String reason) => Disconnected?.Invoke(this, EventArgs.Empty);
+    protected virtual void OnDisconnected(String reason) => Disconnected?.Invoke(this, new EventArgs<String>(reason));
 
     /// <summary>客户端连接已断开</summary>
     [Obsolete("=>OnDisconnected(String reason)")]
