@@ -103,7 +103,28 @@ public static class NetHelper
                 Remote = remote,
                 SslProtocol = remote.Port == 443 ? SslProtocols.Tls12 : SslProtocols.None,
             },
+            NetType.WebSocket => new WebSocketClient
+            {
+                Remote = remote,
+                Uri = new Uri(remote.ToString()),
+                SslProtocol = remote.Port == 443 ? SslProtocols.Tls12 : SslProtocols.None,
+            },
             _ => throw new NotSupportedException($"The {remote.Type} protocol is not supported"),
+        };
+    }
+
+    /// <summary>根据 Uri 创建客户端</summary>
+    /// <param name="uri">资源地址</param>
+    /// <returns>Socket客户端</returns>
+    public static ISocketClient CreateRemote(this Uri uri)
+    {
+        if (uri == null) throw new ArgumentNullException(nameof(uri));
+
+        return uri.Scheme switch
+        {
+            "wss" => new WebSocketClient(uri) { SslProtocol = SslProtocols.Tls12 },
+            "ws" => new WebSocketClient(uri),
+            _ => throw new NotSupportedException($"The {uri.Scheme} protocol is not supported"),
         };
     }
 

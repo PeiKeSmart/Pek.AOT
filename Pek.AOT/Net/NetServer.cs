@@ -453,11 +453,13 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
 
     protected virtual INetSession CreateSession(ISocketSession session)
     {
-        var netSession = new NetSession
-        {
-            Server = session.Server,
-            Session = session
-        };
+        var netSession = session.Server.Local.Type == NetType.WebSocket
+            ? new WebSocketSession()
+            : new NetSession();
+
+        netSession.Server = session.Server;
+        netSession.Session = session;
+
         ((INetSession)netSession).Host = this;
 
         return netSession;
@@ -543,6 +545,7 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
                 var tcpServers = CreateServer<TcpServer>(address, port, family);
                 foreach (var item in tcpServers)
                 {
+                    item.Local.Type = protocol;
                     if (item is TcpServer tcpServer) tcpServer.EnableHttp = true;
                 }
                 return tcpServers;
