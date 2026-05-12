@@ -39,7 +39,39 @@ public class HttpServer : NetServer, IHttpHost
     public void Map(String path, HttpProcessDelegate handler)
     {
         if (handler == null) throw new ArgumentNullException(nameof(handler));
-        SetRoute(path, new ProcessHandler(handler));
+        SetRoute(path, new DelegateHandler { Callback = handler });
+    }
+
+    /// <summary>映射无参结果委托</summary>
+    /// <typeparam name="TResult">结果类型</typeparam>
+    /// <param name="path">路径</param>
+    /// <param name="handler">处理委托</param>
+    public void Map<TResult>(String path, Func<TResult> handler)
+    {
+        if (handler == null) throw new ArgumentNullException(nameof(handler));
+        SetRoute(path, new DelegateHandler { Callback = () => (Object?)handler() });
+    }
+
+    /// <summary>映射带上下文的结果委托</summary>
+    /// <typeparam name="TResult">结果类型</typeparam>
+    /// <param name="path">路径</param>
+    /// <param name="handler">处理委托</param>
+    public void Map<TResult>(String path, Func<IHttpContext, TResult> handler)
+    {
+        if (handler == null) throw new ArgumentNullException(nameof(handler));
+        SetRoute(path, new DelegateHandler { Callback = (Func<IHttpContext, Object?>)(context => handler(context)) });
+    }
+
+    /// <summary>映射静态文件目录</summary>
+    /// <param name="path">映射路径</param>
+    /// <param name="contentPath">内容目录</param>
+    public void MapStaticFiles(String path, String contentPath)
+    {
+        if (contentPath.IsNullOrEmpty()) throw new ArgumentNullException(nameof(contentPath));
+
+        path = path.EnsureStart("/");
+        var path2 = path.EnsureEnd("/").EnsureEnd("*");
+        SetRoute(path2, new StaticFilesHandler { Path = path.EnsureEnd("/"), ContentPath = contentPath });
     }
 
     private void SetRoute(String path, IHttpHandler handler)
@@ -73,20 +105,11 @@ public class HttpServer : NetServer, IHttpHost
 
             if (Routes.TryGetValue(key, out handler))
             {
-                if (path.Split('/').Length <= 3) _pathCache[path] = key;
+                if (handler is StaticFilesHandler || path.Split('/').Length <= 3) _pathCache[path] = key;
                 return handler;
             }
         }
 
         return null;
-    }
-
-    private sealed class ProcessHandler : IHttpHandler
-    {
-        private readonly HttpProcessDelegate _handler;
-
-        public ProcessHandler(HttpProcessDelegate handler) => _handler = handler;
-
-        public void ProcessRequest(IHttpContext context) => _handler(context);
     }
 }
