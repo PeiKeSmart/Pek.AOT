@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Pek.Extension;
 using Pek.Net;
 
@@ -60,6 +62,30 @@ public class HttpServer : NetServer, IHttpHost
     {
         if (handler == null) throw new ArgumentNullException(nameof(handler));
         SetRoute(path, new DelegateHandler { Callback = (Func<IHttpContext, Object?>)(context => handler(context)) });
+    }
+
+    /// <summary>映射控制器</summary>
+    /// <typeparam name="TController">控制器类型</typeparam>
+    /// <param name="path">路径</param>
+    public void MapController<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TController>(String? path = null) where TController : class
+        => MapController(typeof(TController), path);
+
+    /// <summary>映射控制器</summary>
+    /// <param name="controllerType">控制器类型</param>
+    /// <param name="path">路径</param>
+    public void MapController([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type controllerType, String? path = null)
+    {
+        if (controllerType == null) throw new ArgumentNullException(nameof(controllerType));
+
+        if (path.IsNullOrEmpty())
+        {
+            var name = controllerType.Name;
+            if (name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase)) name = name[..^10];
+            path = "/" + name;
+        }
+
+        var path2 = path.EnsureStart("/").EnsureEnd("/*");
+        SetRoute(path2, new ControllerHandler { ControllerType = controllerType });
     }
 
     /// <summary>映射静态文件目录</summary>
