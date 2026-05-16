@@ -13,6 +13,9 @@ public class DefaultHttpClientFactory : IHttpClientFactory
     /// <summary>处理器有效时间</summary>
     public TimeSpan HandlerLifetime { get; set; } = TimeSpan.FromMinutes(2);
 
+    /// <summary>内部处理器</summary>
+    public HttpMessageHandler? InnerHandler { get; set; }
+
     /// <summary>是否使用代理</summary>
     public Boolean UseProxy { get; set; }
 
@@ -88,7 +91,7 @@ public class DefaultHttpClientFactory : IHttpClientFactory
     /// <returns>内部处理器</returns>
     protected virtual HttpMessageHandler CreateInnerHandler(String name)
     {
-        HttpMessageHandler handler = HttpHelper.CreateHandler(UseProxy, UseCookie, IgnoreSsl);
+        HttpMessageHandler handler = InnerHandler ?? HttpHelper.CreateHandler(UseProxy, UseCookie, IgnoreSsl);
         var resolver = Resolver;
         if (resolver != null) handler = new DnsHttpHandler(handler) { Resolver = resolver };
 

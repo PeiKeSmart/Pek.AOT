@@ -12,9 +12,6 @@ public class HttpCodec : Handler
     private const String EncoderKey = "Encoder";
     private const String MessageKey = "Message";
 
-    /// <summary>首包已识别为Http的上下文标记</summary>
-    private sealed class HttpCodecMarker { }
-
     /// <summary>允许分析头部。默认false</summary>
     /// <remarks>分析头部对性能有一定损耗。</remarks>
     public Boolean AllowParseHeader { get; set; }
@@ -48,11 +45,11 @@ public class HttpCodec : Handler
         var isGet = packet.Total >= 4 && packet[0] == 'G' && packet[1] == 'E' && packet[2] == 'T' && packet[3] == ' ';
         var isPost = packet.Total >= 5 && packet[0] == 'P' && packet[1] == 'O' && packet[2] == 'S' && packet[3] == 'T' && packet[4] == ' ';
 
-        if (ext[EncoderKey] is not HttpCodecMarker)
+        if (ext[EncoderKey] is not HttpEncoder)
         {
             if (!isGet && !isPost) return base.Read(context, message);
 
-            ext[EncoderKey] = new HttpCodecMarker();
+            ext[EncoderKey] = new HttpEncoder();
         }
 
         if (ext[MessageKey] is HttpMessage pending)
