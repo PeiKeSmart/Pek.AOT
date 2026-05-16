@@ -9,7 +9,7 @@ namespace Pek.Net;
 /// <summary>收到数据时的事件参数</summary>
 public class ReceivedEventArgs : EventArgs, IData
 {
-    private static readonly Pool<ReceivedEventArgs> _pool = new();
+    private static readonly Pool<ReceivedEventArgs> _pool = new(factory: static () => new ReceivedEventArgs());
 
     /// <summary>编码处理器上下文</summary>
     /// <remarks>类似 HttpContext，用于在一次接收处理中携带请求/响应信息。</remarks>

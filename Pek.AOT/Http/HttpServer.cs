@@ -70,6 +70,16 @@ public class HttpServer : NetServer, IHttpHost
     public void MapController<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TController>(String? path = null) where TController : class
         => MapController(typeof(TController), path);
 
+    /// <summary>映射控制器并注册其静态声明的Actions</summary>
+    /// <typeparam name="TController">控制器类型</typeparam>
+    /// <param name="path">路径</param>
+    public void MapControllerActions<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TController>(String? path = null)
+        where TController : class, IHttpControllerRegistration<TController>
+    {
+        MapController<TController>(path);
+        TController.MapActions(this, path);
+    }
+
     /// <summary>映射控制器</summary>
     /// <param name="controllerType">控制器类型</param>
     /// <param name="path">路径</param>

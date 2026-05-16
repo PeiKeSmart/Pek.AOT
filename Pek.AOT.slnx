@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Samples/">
     <Project Path="Samples/AvaloniaLogSample/AvaloniaLogSample.csproj" />
+    <Project Path="Samples/HttpServerSample/HttpServerSample.csproj" />
     <Project Path="Samples/TimerXSample/TimerXSample.csproj" />
     <Project Path="Samples/XTraceSample/XTraceSample.csproj" />
   </Folder>
