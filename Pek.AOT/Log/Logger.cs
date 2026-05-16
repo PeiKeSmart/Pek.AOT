@@ -60,7 +60,7 @@ public abstract class Logger : ILog
     /// <param name="format">格式化模板</param>
     /// <param name="args">格式化参数</param>
     /// <returns>格式化结果</returns>
-    protected String Format(String format, Object?[]? args)
+    internal protected virtual String Format(String format, Object?[]? args)
     {
         if (String.IsNullOrEmpty(format)) return String.Empty;
         if (args != null && args.Length > 0)

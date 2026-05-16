@@ -17,6 +17,56 @@ public static class IOHelper
     /// </remarks>
     public static Int32 MaxSafeArraySize { get; set; } = 1024 * 1024;
 
+    /// <summary>把字节数组写入流</summary>
+    /// <param name="stream">目标流</param>
+    /// <param name="buffer">要写入的字节数组</param>
+    /// <returns>目标流</returns>
+    public static Stream Write(this Stream stream, params Byte[] buffer)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        if (buffer != null && buffer.Length > 0) stream.Write(buffer, 0, buffer.Length);
+        return stream;
+    }
+
+    /// <summary>写入长度前缀字节数组</summary>
+    /// <param name="stream">目标流</param>
+    /// <param name="buffer">要写入的字节数组</param>
+    /// <returns>目标流</returns>
+    public static Stream WriteArray(this Stream stream, params Byte[] buffer)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        if (buffer == null || buffer.Length == 0)
+        {
+            stream.WriteByte(0);
+            return stream;
+        }
+
+        WriteEncodedInt(stream, buffer.Length);
+        stream.Write(buffer, 0, buffer.Length);
+
+        return stream;
+    }
+
+    /// <summary>读取长度前缀字节数组</summary>
+    /// <param name="stream">源流</param>
+    /// <returns>读取到的字节数组</returns>
+    public static Byte[] ReadArray(this Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        var length = ReadEncodedInt(stream);
+        if (length <= 0) return [];
+
+        if (stream.CanSeek && length > stream.Length - stream.Position)
+            throw new XException("ReadArray error, variable length array length is {0}, but the available data for the data stream is only {1}", length, stream.Length - stream.Position);
+        if (length > MaxSafeArraySize)
+            throw new XException("Security required, reading large variable length arrays is not allowed {0:n0}>{1:n0}", length, MaxSafeArraySize);
+
+        return stream.ReadExactly(length);
+    }
+
     /// <summary>复制数组</summary>
     public static Byte[] ReadBytes(this Byte[] src, Int32 offset, Int32 count)
     {
@@ -235,6 +285,37 @@ public static class IOHelper
         }
 
         return encoding.GetString(buf, offset + skip, count - skip);
+    }
+
+    private static void WriteEncodedInt(Stream stream, Int32 value)
+    {
+        var number = (UInt32)value;
+        while (number >= 0x80)
+        {
+            stream.WriteByte((Byte)(number | 0x80));
+            number >>= 7;
+        }
+
+        stream.WriteByte((Byte)number);
+    }
+
+    private static Int32 ReadEncodedInt(Stream stream)
+    {
+        UInt32 result = 0;
+        Byte shift = 0;
+
+        while (true)
+        {
+            var value = stream.ReadByte();
+            if (value < 0) throw new EndOfStreamException();
+
+            result |= (UInt32)((value & 0x7f) << shift);
+            if ((value & 0x80) == 0) return (Int32)result;
+
+            shift += 7;
+            if (shift >= 32)
+                throw new FormatException("The number value is too large to read in compressed format!");
+        }
     }
 
     /// <summary>把字节数组编码为十六进制字符串</summary>

@@ -81,11 +81,16 @@ public class TextFileLog : Logger, IDisposable
     }
 
     /// <summary>销毁日志</summary>
-    public void Dispose()
+    public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
+
+    /// <summary>销毁日志</summary>
+    /// <param name="disposing">是否释放托管资源</param>
+    protected virtual void Dispose(Boolean disposing)
     {
+        if (!disposing) return;
+
         _timer.Dispose();
         if (Interlocked.CompareExchange(ref _writing, 1, 0) == 0) WriteAndClose(DateTime.MinValue);
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>写入日志</summary>
@@ -141,7 +146,7 @@ public class TextFileLog : Logger, IDisposable
         }
     }
 
-    private void WriteFile()
+    protected virtual void WriteFile()
     {
         var setting = XTrace.GetSetting();
         var now = TimerX.Now.AddHours(setting.UtcIntervalHours);
@@ -201,7 +206,7 @@ public class TextFileLog : Logger, IDisposable
         if (!_isFile && Backups > 0) CleanupBackups();
     }
 
-    private void WriteAndClose(DateTime closeTime)
+    protected virtual void WriteAndClose(DateTime closeTime)
     {
         try
         {

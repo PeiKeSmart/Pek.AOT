@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 
 using Pek.Http;
+using Pek.Net;
 
 namespace Pek.Log;
 
@@ -15,11 +15,8 @@ public class NetworkLog : Logger, IDisposable
     private readonly ConcurrentQueue<String> _logs = new();
     private volatile Int32 _logCount;
     private Int32 _writing;
+    private NetClient? _client;
     private HttpClient? _httpClient;
-    private TcpClient? _tcpClient;
-    private UdpClient? _udpClient;
-    private IPEndPoint? _udpEndPoint;
-    private Uri? _serverUri;
     private Boolean _inited;
 
     /// <summary>服务端</summary>
@@ -32,7 +29,7 @@ public class NetworkLog : Logger, IDisposable
     public String? ClientId { get; set; }
 
     /// <summary>实例化网络日志。默认广播到 514 端口</summary>
-    public NetworkLog() => Server = "udp://255.255.255.255:514";
+    public NetworkLog() => Server = new NetUri(NetType.Udp, IPAddress.Broadcast, 514) + String.Empty;
 
     /// <summary>指定日志服务器地址来实例化网络日志</summary>
     /// <param name="server">服务地址</param>
@@ -49,9 +46,8 @@ public class NetworkLog : Logger, IDisposable
                 Thread.Sleep(500);
         }
 
+        _client?.Dispose();
         _httpClient?.Dispose();
-        _tcpClient?.Dispose();
-        _udpClient?.Dispose();
     }
 
     /// <summary>写日志</summary>
@@ -99,33 +95,27 @@ public class NetworkLog : Logger, IDisposable
             ClientId = Runtime.ClientId;
 
         if (String.IsNullOrWhiteSpace(Server)) return;
-        if (!Uri.TryCreate(Server, UriKind.Absolute, out var uri)) return;
-
-        _serverUri = uri;
-        switch (uri.Scheme.ToLowerInvariant())
+        var uri = new NetUri(Server);
+        switch (uri.Type)
         {
-            case "http":
-            case "https":
+            case NetType.Tcp:
+            case NetType.Udp:
+            case NetType.WebSocket:
+                _client = new NetClient(uri);
+                break;
+            case NetType.Http:
+            case NetType.Https:
+                if (!Uri.TryCreate(Server, UriKind.Absolute, out var httpUri)) return;
+
                 var handler = HttpHelper.CreateHandler(false, false);
-                _httpClient = new HttpClient(handler) { BaseAddress = uri };
+                _httpClient = new HttpClient(handler) { BaseAddress = httpUri };
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-AppId", AppId);
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-ClientId", ClientId);
                 _httpClient.SetUserAgent();
                 break;
-            case "tcp":
-                _tcpClient = new TcpClient();
-                _tcpClient.Connect(uri.Host, uri.Port > 0 ? uri.Port : 514);
-                break;
-            case "udp":
-                var addresses = Dns.GetHostAddresses(uri.Host);
-                var address = addresses.FirstOrDefault() ?? IPAddress.Broadcast;
-                _udpEndPoint = new IPEndPoint(address, uri.Port > 0 ? uri.Port : 514);
-                _udpClient = new UdpClient();
-                if (IPAddress.Broadcast.Equals(address)) _udpClient.EnableBroadcast = true;
-                break;
         }
 
-        if (_httpClient == null && _tcpClient == null && _udpClient == null) return;
+        if (_client == null && _httpClient == null) return;
 
         Send(GetHead());
         _inited = true;
@@ -134,7 +124,7 @@ public class NetworkLog : Logger, IDisposable
     private void PushLog()
     {
         Init();
-        if (_httpClient == null && _tcpClient == null && _udpClient == null) return;
+        if (_client == null && _httpClient == null) return;
 
         var max = _httpClient != null ? 8192 : 1460;
         var builder = new StringBuilder();
@@ -158,6 +148,12 @@ public class NetworkLog : Logger, IDisposable
     {
         if (String.IsNullOrEmpty(value)) return;
 
+        if (_client != null)
+        {
+            _client.Send(value);
+            return;
+        }
+
         if (_httpClient != null)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, String.Empty)
@@ -165,32 +161,6 @@ public class NetworkLog : Logger, IDisposable
                 Content = new StringContent(value, Encoding.UTF8, "text/plain")
             };
             _httpClient.SendAsync(request).Wait(30_000);
-            return;
-        }
-
-        var data = Encoding.UTF8.GetBytes(value);
-        if (_udpClient != null && _udpEndPoint != null)
-        {
-            _udpClient.Send(data, data.Length, _udpEndPoint);
-            return;
-        }
-
-        if (_tcpClient?.Connected == true)
-        {
-            var stream = _tcpClient.GetStream();
-            stream.Write(data, 0, data.Length);
-            stream.Flush();
-            return;
-        }
-
-        if (_serverUri != null && _serverUri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase))
-        {
-            _tcpClient?.Dispose();
-            _tcpClient = new TcpClient();
-            _tcpClient.Connect(_serverUri.Host, _serverUri.Port > 0 ? _serverUri.Port : 514);
-            var stream = _tcpClient.GetStream();
-            stream.Write(data, 0, data.Length);
-            stream.Flush();
         }
     }
 }

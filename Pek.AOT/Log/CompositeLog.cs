@@ -1,3 +1,5 @@
+using Pek.Collections;
+
 namespace Pek.Log;
 
 /// <summary>复合日志</summary>
@@ -50,6 +52,15 @@ public class CompositeLog : Logger
         return this;
     }
 
+    /// <summary>移除日志提供者</summary>
+    /// <param name="log">日志提供者</param>
+    /// <returns>当前对象</returns>
+    public CompositeLog Remove(ILog log)
+    {
+        if (Logs.Contains(log)) Logs.Remove(log);
+        return this;
+    }
+
     /// <summary>获取指定类型的日志提供者</summary>
     /// <typeparam name="TLog">日志类型</typeparam>
     /// <returns>日志提供者</returns>
@@ -77,6 +88,28 @@ public class CompositeLog : Logger
         foreach (var item in Logs)
         {
             item.Write(level, format, args);
+        }
+    }
+
+    /// <summary>已重载。</summary>
+    /// <returns>日志器信息</returns>
+    public override String ToString()
+    {
+        var builder = Pool.StringBuilder.Get();
+        try
+        {
+            builder.Append(GetType().Name);
+            foreach (var item in Logs)
+            {
+                builder.Append(' ');
+                builder.Append(item + String.Empty);
+            }
+
+            return builder.ToString();
+        }
+        finally
+        {
+            Pool.StringBuilder.Return(builder);
         }
     }
 }
