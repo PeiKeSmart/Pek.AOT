@@ -411,6 +411,15 @@ public class FullRedis : Redis
     /// <returns>结果</returns>
     public virtual Int32 SISMEMBER<T>(String key, T member) => Execute(GetKey(key), redisClient => redisClient.Execute<Int32>("SISMEMBER", GetKey(key), member));
 
+    /// <summary>将成员从一个集合移动到另一个集合</summary>
+    /// <typeparam name="T">元素类型</typeparam>
+    /// <param name="key">源集合键</param>
+    /// <param name="dest">目标集合键</param>
+    /// <param name="member">成员</param>
+    /// <returns>移动结果</returns>
+    public virtual T?[] SMOVE<T>(String key, String dest, T member)
+        => DecodeArray<T>(Execute(GetKey(key), redisClient => redisClient.Execute<Object[]>("SMOVE", GetKey(key), GetKey(dest), member), true));
+
     /// <summary>随机获取多个元素</summary>
     /// <typeparam name="T">元素类型</typeparam>
     /// <param name="key">键</param>

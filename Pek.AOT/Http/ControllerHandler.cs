@@ -7,6 +7,7 @@ using Pek.Buffers;
 using Pek.Data;
 using Pek.Extension;
 using Pek.Net;
+using Pek.Model;
 using Pek.Serialization;
 
 namespace Pek.Http;
@@ -73,31 +74,8 @@ public class ControllerHandler : IHttpHandler
     {
         if (type.IsAbstract) return null;
 
-        ParameterInfo? errorParameter = null;
-        foreach (var constructor in type.GetConstructors().OrderByDescending(item => item.GetParameters().Length))
-        {
-            var parameters = constructor.GetParameters();
-            var values = new Object?[parameters.Length];
-            var success = true;
-            for (var i = 0; i < parameters.Length; i++)
-            {
-                var service = serviceProvider?.GetService(parameters[i].ParameterType);
-                if (service == null)
-                {
-                    success = false;
-                    errorParameter = parameters[i];
-                    break;
-                }
-
-                values[i] = service;
-            }
-
-            if (success) return constructor.Invoke(values);
-        }
-
-        if (type.GetConstructor(Type.EmptyTypes) != null) return Activator.CreateInstance(type);
-
-        throw new InvalidOperationException($"No suitable constructor was found for '{type}'. Unable to resolve parameter '{errorParameter}'");
+        serviceProvider ??= ObjectContainer.Provider;
+        return ObjectContainer.CreateInstance(type, serviceProvider, null, false);
     }
 }
 

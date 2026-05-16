@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security;
+using System.Text.Json.Serialization;
 using Microsoft.Win32;
 using Pek.Collections;
 using Pek.Data;
@@ -139,7 +140,7 @@ public partial class MachineInfo : IExtend
     /// <summary>机器信息提供者。外部实现可修改部分行为</summary>
     public static IMachineInfo? Provider { get; set; }
 
-    //static MachineInfo() => RegisterAsync().Wait(100);
+    static MachineInfo() => JsonHelper.Register(MachineInfoJsonContext.Default.MachineInfo);
 
     private static Task<MachineInfo>? _task;
     /// <summary>异步注册一个初始化后的机器信息实例</summary>
@@ -426,7 +427,6 @@ public partial class MachineInfo : IExtend
         //    if (cpu.TryGetValue("LoadPercentage", out str)) CpuRate = (Single)(str.ToDouble() / 100);
         //}
 #endif
-
 #if !NETFRAMEWORK
         if (OSName.IsNullOrEmpty())
             OSName = RuntimeInformation.OSDescription.TrimStart("Microsoft").Trim();
@@ -1345,4 +1345,10 @@ public partial class MachineInfo : IExtend
     }
 #endif
     #endregion
+}
+
+/// <summary>MachineInfo 的 AOT 序列化上下文</summary>
+[JsonSerializable(typeof(MachineInfo))]
+public partial class MachineInfoJsonContext : JsonSerializerContext
+{
 }
