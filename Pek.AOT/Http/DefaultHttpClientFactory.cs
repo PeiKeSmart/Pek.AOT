@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 
 using Pek.Log;
+using Pek.Net;
 using Pek.Threading;
 
 namespace Pek.Http;
@@ -23,6 +24,9 @@ public class DefaultHttpClientFactory : IHttpClientFactory
 
     /// <summary>跟踪器</summary>
     public ITracer? Tracer { get; set; } = HttpHelper.Tracer;
+
+    /// <summary>DNS解析器</summary>
+    public IDnsResolver? Resolver { get; set; }
 
     /// <summary>日志</summary>
     public ILog Log { get; set; } = Logger.Null;
@@ -85,6 +89,9 @@ public class DefaultHttpClientFactory : IHttpClientFactory
     protected virtual HttpMessageHandler CreateInnerHandler(String name)
     {
         HttpMessageHandler handler = HttpHelper.CreateHandler(UseProxy, UseCookie, IgnoreSsl);
+        var resolver = Resolver;
+        if (resolver != null) handler = new DnsHttpHandler(handler) { Resolver = resolver };
+
         var tracer = Tracer;
         if (tracer != null) handler = new HttpTraceHandler(handler) { Tracer = tracer };
 
