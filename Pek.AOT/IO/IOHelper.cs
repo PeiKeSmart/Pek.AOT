@@ -67,6 +67,33 @@ public static class IOHelper
         return stream.ReadExactly(length);
     }
 
+    /// <summary>写入 Unix 格式时间，1970 年以来秒数，绝对时间，非 UTC</summary>
+    /// <param name="stream">目标流</param>
+    /// <param name="value">时间</param>
+    /// <returns>目标流</returns>
+    public static Stream WriteDateTime(this Stream stream, DateTime value)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        var seconds = (Int32)(value - new DateTime(1970, 1, 1)).TotalSeconds;
+        stream.Write(BitConverter.GetBytes(seconds), 0, 4);
+
+        return stream;
+    }
+
+    /// <summary>读取 Unix 格式时间，1970 年以来秒数，绝对时间，非 UTC</summary>
+    /// <param name="stream">源流</param>
+    /// <returns>时间</returns>
+    public static DateTime ReadDateTime(this Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        var buffer = stream.ReadExactly(4);
+        var seconds = BitConverter.ToInt32(buffer, 0);
+
+        return new DateTime(1970, 1, 1).AddSeconds(seconds);
+    }
+
     /// <summary>复制数组</summary>
     public static Byte[] ReadBytes(this Byte[] src, Int32 offset, Int32 count)
     {

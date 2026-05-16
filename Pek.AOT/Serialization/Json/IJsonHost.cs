@@ -281,6 +281,7 @@ public class SystemJson : IJsonHost
     {
         if (String.IsNullOrWhiteSpace(json)) return null;
         if (type == null) throw new ArgumentNullException(nameof(type));
+        if (type == typeof(Object)) return Parse(json);
 
         if (JsonHelper.TryGetTypeInfo(type, out var typeInfo))
             return JsonSerializer.Deserialize(json, typeInfo);
@@ -302,6 +303,7 @@ public class SystemJson : IJsonHost
         var actualType = nullableType ?? targetType;
 
         if (obj is JsonNode node) return Read(node.ToJsonString(), actualType);
+        if (obj is JsonElement element) return Read(element.GetRawText(), actualType);
         if (obj is String str)
         {
             if (actualType == typeof(String)) return str;
@@ -327,7 +329,9 @@ public class SystemJson : IJsonHost
         if (obj is IDictionary<String, Object?> or IList<Object?>)
         {
             if (actualType.IsInstanceOfType(obj)) return obj;
-            throw new NotSupportedException($"Type {actualType.FullName} is not registered for AOT-safe JSON conversion. Register a JsonTypeInfo first.");
+
+            var json = CreateJsonNode(obj)?.ToJsonString() ?? "null";
+            return Read(json, actualType);
         }
 
         return System.Convert.ChangeType(obj, actualType, CultureInfo.InvariantCulture);
@@ -514,6 +518,56 @@ public class SystemJson : IJsonHost
         }
 
         return node.ToJsonString();
+    }
+
+    private static JsonNode? CreateJsonNode(Object? value)
+    {
+        if (value == null) return null;
+        if (value is JsonNode node) return node.DeepClone();
+
+        if (value is IDictionary<String, Object?> dictionary)
+        {
+            var jsonObject = new JsonObject();
+            foreach (var item in dictionary)
+            {
+                jsonObject[item.Key] = CreateJsonNode(item.Value);
+            }
+
+            return jsonObject;
+        }
+
+        if (value is IList<Object?> list)
+        {
+            var jsonArray = new JsonArray();
+            foreach (var item in list)
+            {
+                jsonArray.Add(CreateJsonNode(item));
+            }
+
+            return jsonArray;
+        }
+
+        if (value is String stringValue) return JsonValue.Create(stringValue);
+        if (value is Boolean booleanValue) return JsonValue.Create(booleanValue);
+        if (value is Byte byteValue) return JsonValue.Create(byteValue);
+        if (value is SByte sbyteValue) return JsonValue.Create(sbyteValue);
+        if (value is Int16 int16Value) return JsonValue.Create(int16Value);
+        if (value is UInt16 uint16Value) return JsonValue.Create(uint16Value);
+        if (value is Int32 int32Value) return JsonValue.Create(int32Value);
+        if (value is UInt32 uint32Value) return JsonValue.Create(uint32Value);
+        if (value is Int64 int64Value) return JsonValue.Create(int64Value);
+        if (value is UInt64 uint64Value) return JsonValue.Create(uint64Value);
+        if (value is Single singleValue) return JsonValue.Create(singleValue);
+        if (value is Double doubleValue) return JsonValue.Create(doubleValue);
+        if (value is Decimal decimalValue) return JsonValue.Create(decimalValue);
+        if (value is DateTime dateTimeValue) return JsonValue.Create(dateTimeValue);
+        if (value is DateTimeOffset dateTimeOffsetValue) return JsonValue.Create(dateTimeOffsetValue);
+        if (value is Guid guidValue) return JsonValue.Create(guidValue);
+        if (value is Byte[] buffer) return JsonValue.Create(System.Convert.ToBase64String(buffer));
+        if (value is TimeSpan timeSpanValue) return JsonValue.Create(timeSpanValue.ToString("c", CultureInfo.InvariantCulture));
+        if (value.GetType().IsEnum) return JsonValue.Create(value.ToString());
+
+        throw new NotSupportedException($"Type {value.GetType().FullName} is not registered for AOT-safe JSON conversion. Register a JsonTypeInfo first.");
     }
 
     private sealed class NullServiceProvider : IServiceProvider

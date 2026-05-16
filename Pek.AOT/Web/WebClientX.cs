@@ -22,6 +22,9 @@ public class WebClientX : DisposeBase
     /// <summary>超时，默认30000毫秒</summary>
     public Int32 Timeout { get; set; } = 30_000;
 
+    /// <summary>验证密钥。适配 CDN 的 URL 验证</summary>
+    public String? AuthKey { get; set; }
+
     /// <summary>要求的最低版本</summary>
     public Version? MinVersion { get; set; }
 
@@ -87,21 +90,22 @@ public class WebClientX : DisposeBase
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(new CancellationTokenSource(Timeout).Token, cancellationToken);
         var response = await client.SendAsync(request, cts.Token).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
 
-        _lastAddress = address;
-        if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
+        if (response.StatusCode < HttpStatusCode.BadRequest)
         {
-            _cookies ??= [];
-            foreach (var cookie in setCookies)
+            _lastAddress = client.BaseAddress == null ? address : new Uri(client.BaseAddress, address).ToString();
+            if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
             {
-                var p1 = cookie.IndexOf('=');
-                var p2 = cookie.IndexOf(';');
-                if (p1 > 0)
+                _cookies ??= [];
+                foreach (var cookie in setCookies)
                 {
-                    var key = cookie[..p1];
-                    var value = p2 > p1 ? cookie[(p1 + 1)..p2] : cookie[(p1 + 1)..];
-                    _cookies[key] = value;
+                    var p1 = cookie.IndexOf('=');
+                    if (p1 < 0) continue;
+
+                    var p2 = cookie.IndexOf(';', p1);
+                    if (p2 < 0) p2 = cookie.Length;
+
+                    _cookies[cookie[..p1]] = cookie.Substring(p1 + 1, p2 - p1 - 1);
                 }
             }
         }
@@ -109,12 +113,45 @@ public class WebClientX : DisposeBase
         return response.Content;
     }
 
+    private String CheckAuth(String url)
+    {
+        if (AuthKey.IsNullOrEmpty() || url.Contains("auth_key=", StringComparison.OrdinalIgnoreCase)) return url;
+
+        var uri = new Uri(url);
+        var path = uri.AbsolutePath;
+
+        var encoding = Encoding.UTF8;
+        if (encoding.GetByteCount(path) != path.Length)
+        {
+            var segments = path.Split('/');
+            for (var index = 0; index < segments.Length; index++)
+            {
+                segments[index] = WebUtility.UrlEncode(segments[index]);
+            }
+
+            path = String.Join("/", segments);
+        }
+
+        var time = Pek.Runtime.UtcNow.ToUnixTimeSeconds();
+        var rand = Random.Shared.Next(100_000, 1_000_000);
+        var hash = $"{path}-{time}-{rand}-0-{AuthKey}".MD5().ToLowerInvariant();
+        var key = $"{time}-{rand}-0-{hash}";
+
+        url += url.Contains('?') ? "&" : "?";
+        url += "auth_key=" + key;
+
+        return url;
+    }
+
     /// <summary>获取字符串</summary>
     /// <param name="address">地址</param>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns>字符串</returns>
-    public virtual async Task<String> DownloadStringAsync(String address)
+    public virtual async Task<String> DownloadStringAsync(String address, CancellationToken cancellationToken = default)
     {
-        using var content = await SendAsync(address).ConfigureAwait(false);
+        address = CheckAuth(address);
+
+        using var content = await SendAsync(address, null, cancellationToken).ConfigureAwait(false);
         var bytes = await content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
         var charset = content.Headers.ContentType?.CharSet;
@@ -134,15 +171,38 @@ public class WebClientX : DisposeBase
     /// <summary>下载文件</summary>
     /// <param name="address">地址</param>
     /// <param name="file">目标文件</param>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns>任务</returns>
-    public virtual async Task DownloadFileAsync(String address, String file)
+    public virtual async Task DownloadFileAsync(String address, String file, CancellationToken cancellationToken = default)
     {
-        file.EnsureDirectory();
-        using var content = await SendAsync(address).ConfigureAwait(false);
-        using var stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
-        using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.Read);
-        await stream.CopyToAsync(fileStream).ConfigureAwait(false);
-        await fileStream.FlushAsync().ConfigureAwait(false);
+        address = CheckAuth(address);
+
+        using var content = await SendAsync(address, null, cancellationToken).ConfigureAwait(false);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using (var tempStream = new FileStream(tempFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                await content.CopyToAsync(tempStream, cancellationToken).ConfigureAwait(false);
+                tempStream.SetLength(tempStream.Position);
+                await tempStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            file = file.GetFullPath();
+            file.EnsureDirectory(true);
+
+            if (File.Exists(file)) File.Delete(file);
+            File.Move(tempFile, file);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempFile)) File.Delete(tempFile);
+            }
+            catch { }
+        }
     }
 
     /// <summary>获取指定地址的Html</summary>

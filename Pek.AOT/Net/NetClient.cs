@@ -306,7 +306,7 @@ public class NetClient : DisposeBase, IExtend, ILogFeature, ITracerFeature
     /// <summary>发送字符串</summary>
     /// <param name="data">字符串</param>
     /// <returns>发送字节数</returns>
-    public Int32 Send(String data) => EnsureClient().Send(data);
+    public Int32 Send(String data) => EnsureClient().Send(data.GetBytes());
 
     /// <summary>发送消息</summary>
     /// <param name="message">消息对象</param>
