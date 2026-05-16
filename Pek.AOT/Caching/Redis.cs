@@ -569,29 +569,35 @@ public class Redis : Cache, IConfigMapping, ILogFeature, ITracerFeature
         }
     }
 
+    /// <summary>获取列表</summary>
+    /// <typeparam name="T">元素类型</typeparam>
+    /// <param name="key">键</param>
+    /// <returns>列表</returns>
+    public override IList<T> GetList<T>(String key) => new RedisList<T>(this, key);
+
     /// <summary>获取字典</summary>
     /// <typeparam name="T">值类型</typeparam>
     /// <param name="key">键</param>
     /// <returns>字典</returns>
-    public override IDictionary<String, T> GetDictionary<T>(String key) => throw new NotSupportedException("Redis 未支持该功能，需要后续补齐 FullRedis");
+    public override IDictionary<String, T> GetDictionary<T>(String key) => new RedisHash<String, T>(this, key);
 
     /// <summary>获取队列</summary>
     /// <typeparam name="T">元素类型</typeparam>
     /// <param name="key">键</param>
     /// <returns>队列</returns>
-    public override IProducerConsumer<T> GetQueue<T>(String key) => throw new NotSupportedException("Redis 未支持该功能，需要后续补齐 FullRedis");
+    public override IProducerConsumer<T> GetQueue<T>(String key) => new RedisQueue<T>(this, key);
 
     /// <summary>获取栈</summary>
     /// <typeparam name="T">元素类型</typeparam>
     /// <param name="key">键</param>
     /// <returns>栈</returns>
-    public override IProducerConsumer<T> GetStack<T>(String key) => throw new NotSupportedException("Redis 未支持该功能，需要后续补齐 FullRedis");
+    public override IProducerConsumer<T> GetStack<T>(String key) => new RedisStack<T>(this, key);
 
     /// <summary>获取集合</summary>
     /// <typeparam name="T">元素类型</typeparam>
     /// <param name="key">键</param>
     /// <returns>集合</returns>
-    public override ICollection<T> GetSet<T>(String key) => throw new NotSupportedException("Redis 未支持该功能，需要后续补齐 FullRedis");
+    public override ICollection<T> GetSet<T>(String key) => new RedisSet<T>(this, key);
 
     /// <summary>添加，已存在时不更新</summary>
     /// <typeparam name="T">值类型</typeparam>
