@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime;
 using System.Runtime.InteropServices;
 using Pek.Log;
+using Pek.Net;
 using Pek.Threading;
 
 namespace Pek;
@@ -17,7 +18,7 @@ public static class Runtime
 
     #region 静态构造
     private static Boolean? _IsConsole;
-    private static String _ClientId = String.Empty;
+    private static String? _ClientId;
     private static Int32 _ProcessId;
     private static Boolean? _createConfigOnMissing;
 
@@ -193,19 +194,21 @@ public static class Runtime
     {
         get
         {
-            if (!String.IsNullOrWhiteSpace(_ClientId)) return _ClientId;
+            if (_ClientId != null) return _ClientId;
 
             try
             {
-                var host = Environment.MachineName;
-                _ClientId = $"{host}@{ProcessId}";
+                var ip = NetHelper.MyIP();
+                var clientId = $"{ip}@{ProcessId}";
+
+                if (ip != null) _ClientId = clientId;
+
+                return clientId;
             }
             catch
             {
-                _ClientId = ProcessId.ToString();
+                return String.Empty;
             }
-
-            return _ClientId;
         }
     }
 

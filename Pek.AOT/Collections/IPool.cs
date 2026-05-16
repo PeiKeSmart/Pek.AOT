@@ -14,6 +14,11 @@ public interface IPool<T>
     /// <returns>对象实例</returns>
     T Get();
 
+    /// <summary>异步获取实例</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>对象实例</returns>
+    Task<T> GetAsync(CancellationToken cancellationToken = default);
+
     /// <summary>归还实例</summary>
     /// <param name="value">对象实例</param>
     /// <returns>是否归还成功</returns>

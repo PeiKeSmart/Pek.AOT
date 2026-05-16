@@ -123,6 +123,11 @@ public class ObjectPool<T> : DisposeBase, IPool<T> where T : notnull
         return pi.Value;
     }
 
+    /// <summary>异步获取实例；资源池本身不执行异步 IO，直接同步包装</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>对象实例</returns>
+    public virtual Task<T> GetAsync(CancellationToken cancellationToken = default) => Task.FromResult(Get());
+
     /// <summary>获取包装项，Dispose 时自动归还</summary>
     /// <returns>包装项</returns>
     public PoolItem<T> GetItem() => new(this, Get());

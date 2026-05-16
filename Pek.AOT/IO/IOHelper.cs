@@ -195,6 +195,29 @@ public static class IOHelper
         return buffer;
     }
 
+    /// <summary>从流中精确读取指定字节数到内存缓冲区</summary>
+    /// <param name="stream">源流</param>
+    /// <param name="buffer">目标缓冲区</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>实际读取字节数。成功时恒等于缓冲区长度</returns>
+    public static async ValueTask<Int32> ReadExactlyAsync(this Stream stream, Memory<Byte> buffer, CancellationToken cancellationToken = default)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (buffer.Length == 0) return 0;
+
+        var totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            var bytesRead = await stream.ReadAsync(buffer[totalRead..], cancellationToken).ConfigureAwait(false);
+            if (bytesRead == 0)
+                throw new EndOfStreamException($"Unable to read the required number of bytes. Expected {buffer.Length}, actual {totalRead}.");
+
+            totalRead += bytesRead;
+        }
+
+        return totalRead;
+    }
+
     /// <summary>字节数组转换为字符串</summary>
     public static String ToStr(this Byte[] buf, Encoding? encoding = null, Int32 offset = 0, Int32 count = -1)
     {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 
@@ -37,10 +38,25 @@ public static class PathHelper
 
         if (String.IsNullOrWhiteSpace(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
         if (String.IsNullOrWhiteSpace(directory)) directory = Environment.CurrentDirectory;
+        if (String.IsNullOrWhiteSpace(directory) || directory == Path.DirectorySeparatorChar.ToString()) directory = GetProcessDirectory();
         if (String.IsNullOrWhiteSpace(directory)) directory = Path.GetTempPath();
 
         BasePath = GetPath(directory, 1);
         if (String.IsNullOrWhiteSpace(BaseDirectory)) BaseDirectory = directory;
+    }
+
+    private static String GetProcessDirectory()
+    {
+        try
+        {
+            var fileName = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!String.IsNullOrWhiteSpace(fileName)) return Path.GetDirectoryName(fileName) ?? String.Empty;
+        }
+        catch
+        {
+        }
+
+        return String.Empty;
     }
 
     /// <summary>获取基于应用目录的完整路径</summary>

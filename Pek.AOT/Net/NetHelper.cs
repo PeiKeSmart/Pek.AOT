@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
@@ -10,6 +11,10 @@ namespace Pek.Net;
 /// <summary>网络辅助方法</summary>
 public static class NetHelper
 {
+    private static readonly Object _ipCacheLock = new();
+    private static IPAddress[]? _cachedIPs;
+    private static Int64 _cachedIPsExpire;
+
     /// <summary>设置 TCP KeepAlive 参数</summary>
     /// <param name="socket">Socket</param>
     /// <param name="isKeepAlive">是否启用</param>
@@ -71,6 +76,118 @@ public static class NetHelper
     /// <param name="address">地址</param>
     /// <returns>是否 IPv4</returns>
     public static Boolean IsIPv4(this IPAddress address) => address.AddressFamily == AddressFamily.InterNetwork;
+
+    /// <summary>获取可用的 IP 地址</summary>
+    /// <returns>按优先级排序的 IP 地址集合</returns>
+    public static IEnumerable<IPAddress> GetIPs()
+    {
+        var candidates = new List<KeyValuePair<UnicastIPAddressInformation, Int32>>();
+        foreach (var item in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (item.OperationalStatus != OperationalStatus.Up) continue;
+            if (item.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Unknown) continue;
+
+            var properties = item.GetIPProperties();
+            if (properties == null || properties.UnicastAddresses.Count == 0) continue;
+
+            var gatewayCount = 0;
+#if NET5_0_OR_GREATER
+            if (!OperatingSystem.IsAndroid()) gatewayCount = properties.GatewayAddresses.Count;
+#else
+            gatewayCount = properties.GatewayAddresses.Count;
+#endif
+
+            foreach (var addressInfo in properties.UnicastAddresses)
+            {
+                var factor = gatewayCount * 10 + 5;
+                var address = addressInfo.Address;
+                if (address.IsIPv4())
+                {
+                    factor++;
+                    if (address.GetAddressBytes()[0] == 169) factor--;
+                }
+                else
+                {
+                    if (address.IsIPv4MappedToIPv6) continue;
+                    if (address.IsIPv6LinkLocal) factor--;
+                    if (address.IsIPv6Multicast) continue;
+                    if (address.IsIPv6SiteLocal) continue;
+#if NET6_0_OR_GREATER
+                    if (address.IsIPv6UniqueLocal) factor -= 2;
+#endif
+                }
+
+#if NET5_0_OR_GREATER
+                try
+                {
+                    if (OperatingSystem.IsWindows() && addressInfo.DuplicateAddressDetectionState != DuplicateAddressDetectionState.Preferred)
+                        continue;
+                }
+                catch
+                {
+                }
+#endif
+
+                candidates.Add(new KeyValuePair<UnicastIPAddressInformation, Int32>(addressInfo, factor));
+            }
+        }
+
+        candidates.Sort(static (left, right) => right.Value.CompareTo(left.Value));
+
+        var hashes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<IPAddress>(candidates.Count);
+        foreach (var item in candidates)
+        {
+            var address = item.Key.Address;
+            if (hashes.Add(address.ToString())) list.Add(address);
+        }
+
+        return list;
+    }
+
+    /// <summary>获取本机可用 IP 地址，缓存 60 秒</summary>
+    /// <returns>IP 地址数组</returns>
+    public static IPAddress[] GetIPsWithCache()
+    {
+        var now = Runtime.TickCount64;
+        var addrs = _cachedIPs;
+        if (addrs != null && _cachedIPsExpire > now) return addrs;
+
+        lock (_ipCacheLock)
+        {
+            addrs = _cachedIPs;
+            if (addrs != null && _cachedIPsExpire > now) return addrs;
+
+            addrs = [.. GetIPs()];
+            _cachedIPs = addrs;
+            _cachedIPsExpire = now + 60_000;
+            return addrs;
+        }
+    }
+
+    /// <summary>获取本地第一个 IPv4 地址。一般是网关所在网卡的 IP 地址</summary>
+    /// <returns>IPv4 地址</returns>
+    public static IPAddress? MyIP()
+    {
+        foreach (var ip in GetIPsWithCache())
+        {
+            if (ip.IsIPv4() && !IPAddress.IsLoopback(ip) && ip.GetAddressBytes()[0] != 169) return ip;
+        }
+
+        return null;
+    }
+
+    /// <summary>获取本地第一个 IPv6 地址</summary>
+    /// <returns>IPv6 地址</returns>
+    public static IPAddress? MyIPv6()
+    {
+        foreach (var ip in GetIPsWithCache())
+        {
+            if (!ip.IsIPv4() && !IPAddress.IsLoopback(ip)) return ip;
+        }
+
+        return null;
+    }
 
     /// <summary>根据本地网络标识创建客户端</summary>
     /// <param name="local">本地网络标识</param>
