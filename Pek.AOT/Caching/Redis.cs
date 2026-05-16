@@ -599,6 +599,44 @@ public class Redis : Cache, IConfigMapping, ILogFeature, ITracerFeature
     /// <returns>集合</returns>
     public override ICollection<T> GetSet<T>(String key) => new RedisSet<T>(this, key);
 
+    /// <summary>搜索键</summary>
+    /// <param name="pattern">匹配模式</param>
+    /// <param name="offset">游标偏移</param>
+    /// <param name="count">返回数量，-1 表示尽量取完</param>
+    /// <returns>键集合</returns>
+    public override IEnumerable<String> Search(String pattern, Int32 offset = 0, Int32 count = -1)
+    {
+        var cursor = Math.Max(0, offset);
+        var remain = count < 0 ? Int32.MaxValue : count;
+        var batch = count > 0 && count < 1000 ? count : 1000;
+        if (batch <= 0) batch = 1000;
+
+        do
+        {
+            var result = Execute<Object[]?>(null, redisClient => redisClient.Execute("SCAN", cursor, "MATCH", pattern + String.Empty, "COUNT", batch) as Object[]);
+            if (result == null || result.Length != 2) yield break;
+
+            cursor = 0;
+            if (result[0] is IPacket packet)
+                cursor = packet.ToStr().ToInt();
+            else if (result[0] != null)
+                cursor = result[0].ToString().ToInt();
+
+            if (result[1] is Object[] items)
+            {
+                foreach (var item in items)
+                {
+                    if (remain-- == 0) yield break;
+
+                    if (item is IPacket itemPacket)
+                        yield return itemPacket.ToStr();
+                    else if (item != null)
+                        yield return item.ToString() ?? String.Empty;
+                }
+            }
+        } while (cursor != 0 && remain > 0);
+    }
+
     /// <summary>添加，已存在时不更新</summary>
     /// <typeparam name="T">值类型</typeparam>
     /// <param name="key">键</param>
