@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -13,6 +14,8 @@ namespace Pek.Xml;
 /// <summary>Xml 辅助类</summary>
 public static class XmlHelper
 {
+    private static readonly ConcurrentDictionary<MemberInfo, String?> _commentCache = [];
+
     /// <summary>序列化为 Xml 字符串</summary>
     /// <param name="obj">目标对象</param>
     /// <param name="type">对象类型</param>
@@ -400,11 +403,14 @@ public static class XmlHelper
 
     private static String? GetComment(MemberInfo member)
     {
-        var description = member.GetCustomAttribute<DescriptionAttribute>()?.Description;
-        if (!String.IsNullOrWhiteSpace(description)) return description;
+        return _commentCache.GetOrAdd(member, static item =>
+        {
+            var description = item.GetCustomAttribute<DescriptionAttribute>()?.Description;
+            if (!String.IsNullOrWhiteSpace(description)) return description;
 
-        var displayName = member.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName;
-        return String.IsNullOrWhiteSpace(displayName) ? null : displayName;
+            var displayName = item.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName;
+            return String.IsNullOrWhiteSpace(displayName) ? null : displayName;
+        });
     }
 
     private static String? GetComment(ICustomAttributeProvider? attributeProvider)

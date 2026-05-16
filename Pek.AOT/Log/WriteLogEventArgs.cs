@@ -13,8 +13,18 @@ public class WriteLogEventArgs : EventArgs
     [ThreadStatic]
     private static String? _currentThreadName;
 
-    private static String[]? _cachedLines;
+    private static LogField[]? _cachedFields;
     private static String? _cachedFormat;
+
+    private enum LogField
+    {
+        Time,
+        ThreadId,
+        Kind,
+        Name,
+        Level,
+        Message,
+    }
 
     /// <summary>线程局部实例</summary>
     public static WriteLogEventArgs Current => _current ??= new WriteLogEventArgs();
@@ -108,30 +118,30 @@ public class WriteLogEventArgs : EventArgs
 
         try
         {
-        foreach (var field in fields)
-        {
-            switch (field)
+            foreach (var field in fields)
             {
-                case "Time":
-                    AppendPart(builder, Time.ToString("HH:mm:ss.fff"));
-                    break;
-                case "ThreadId":
-                    AppendPart(builder, ThreadId.ToString("00"));
-                    break;
-                case "Kind":
-                    AppendPart(builder, IsPool ? (IsWeb ? "W" : "Y") : "N");
-                    break;
-                case "Name":
-                    AppendPart(builder, name);
-                    break;
-                case "Level":
-                    AppendPart(builder, $"[{Level}]");
-                    break;
-                case "Message":
-                    AppendPart(builder, message);
-                    break;
+                switch (field)
+                {
+                    case LogField.Time:
+                        AppendPart(builder, Time.ToString("HH:mm:ss.fff"));
+                        break;
+                    case LogField.ThreadId:
+                        AppendPart(builder, ThreadId.ToString("00"));
+                        break;
+                    case LogField.Kind:
+                        AppendPart(builder, IsPool ? (IsWeb ? "W" : "Y") : "N");
+                        break;
+                    case LogField.Name:
+                        AppendPart(builder, name);
+                        break;
+                    case LogField.Level:
+                        AppendPart(builder, $"[{Level}]");
+                        break;
+                    case LogField.Message:
+                        AppendPart(builder, message);
+                        break;
+                }
             }
-        }
 
             return builder.ToString();
         }
@@ -169,7 +179,7 @@ public class WriteLogEventArgs : EventArgs
         return ThreadName;
     }
 
-    private static String[] GetFields()
+    private static LogField[] GetFields()
     {
         var format = XTrace.GetSetting().LogLineFormat;
         if (String.IsNullOrWhiteSpace(format)) format = "Time|ThreadId|Kind|Name|Message";
@@ -177,10 +187,32 @@ public class WriteLogEventArgs : EventArgs
         if (!String.Equals(format, _cachedFormat, StringComparison.Ordinal))
         {
             _cachedFormat = format;
-            _cachedLines = format.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            _cachedFields = ParseFields(format);
         }
 
-        return _cachedLines ?? ["Time", "ThreadId", "Kind", "Name", "Message"];
+        return _cachedFields ?? [LogField.Time, LogField.ThreadId, LogField.Kind, LogField.Name, LogField.Message];
+    }
+
+    private static LogField[] ParseFields(String format)
+    {
+        var fields = new List<LogField>();
+        foreach (var item in format.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (String.Equals(item, "Time", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.Time);
+            else if (String.Equals(item, "ThreadId", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.ThreadId);
+            else if (String.Equals(item, "Kind", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.Kind);
+            else if (String.Equals(item, "Name", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.Name);
+            else if (String.Equals(item, "Level", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.Level);
+            else if (String.Equals(item, "Message", StringComparison.OrdinalIgnoreCase))
+                fields.Add(LogField.Message);
+        }
+
+        return fields.Count > 0 ? [.. fields] : [LogField.Time, LogField.ThreadId, LogField.Kind, LogField.Name, LogField.Message];
     }
 
     private static void AppendPart(System.Text.StringBuilder builder, String? value)

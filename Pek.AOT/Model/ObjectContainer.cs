@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -53,6 +54,7 @@ public class ObjectContainer : IObjectContainer
 
     private readonly IList<IObject> _list = [];
     private static Dictionary<TypeCode, Object?>? _defs;
+    private static readonly ConcurrentDictionary<Type, ConstructorCandidate[]> _constructorCache = [];
     #endregion
 
     #region 注册
@@ -199,13 +201,10 @@ public class ObjectContainer : IObjectContainer
         ParameterInfo? errorParameter = null;
         if (!type.IsAbstract)
         {
-            var constructors = type.GetConstructors();
-            foreach (var constructorInfo in constructors.OrderByDescending(e => e.GetParameters().Length))
+            foreach (var candidate in GetConstructorCandidates(type))
             {
-                if (constructorInfo.IsStatic) continue;
-
                 ParameterInfo? errorParameter2 = null;
-                var ps = constructorInfo.GetParameters();
+                var ps = candidate.Parameters;
                 var pv = new Object?[ps.Length];
                 for (var i = 0; i != ps.Length; i++)
                 {
@@ -229,7 +228,7 @@ public class ObjectContainer : IObjectContainer
                     }
                 }
 
-                if (errorParameter2 == null) return constructorInfo.Invoke(pv);
+                if (errorParameter2 == null) return candidate.Constructor.Invoke(pv);
                 errorParameter = errorParameter2;
             }
         }
@@ -245,6 +244,27 @@ public class ObjectContainer : IObjectContainer
     /// <summary>已重载。显示容器信息</summary>
     /// <returns>容器描述</returns>
     public override String ToString() => $"{GetType().Name}[Count={Count}]";
+
+    private static ConstructorCandidate[] GetConstructorCandidates([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type type)
+    {
+        if (_constructorCache.TryGetValue(type, out var candidates)) return candidates;
+
+        candidates = type.GetConstructors()
+            .Where(item => !item.IsStatic)
+            .OrderByDescending(item => item.GetParameters().Length)
+            .Select(item => new ConstructorCandidate(item, item.GetParameters()))
+            .ToArray();
+
+        _constructorCache[type] = candidates;
+        return candidates;
+    }
+
+    private sealed class ConstructorCandidate(ConstructorInfo constructor, ParameterInfo[] parameters)
+    {
+        public ConstructorInfo Constructor { get; } = constructor;
+
+        public ParameterInfo[] Parameters { get; } = parameters;
+    }
     #endregion
 }
 
