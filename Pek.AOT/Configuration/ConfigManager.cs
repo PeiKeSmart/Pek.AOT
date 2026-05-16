@@ -91,6 +91,7 @@ public static class ConfigManager
     private static readonly ConcurrentDictionary<Type, JsonSerializerOptions> _serializerOptions = new();
     private static readonly ConcurrentDictionary<Type, string> _configFileNames = new();
     private static readonly ConcurrentDictionary<Type, ConfigFileFormat> _configFileFormats = new();
+    private static readonly ConcurrentDictionary<Type, ConfigTypeMetadata> _configTypeMetadata = new();
     private static readonly ConcurrentDictionary<string, Type> _filePathToConfigType = new();
     private static readonly ConcurrentDictionary<Type, ConfigReloadDelegate> _configReloadDelegates = new();
     private static readonly ConcurrentDictionary<Type, ConfigTryReloadDelegate> _configTryReloadDelegates = new();
@@ -147,7 +148,7 @@ public static class ConfigManager
             // Config<T>.Current 会自动从 ConfigManager.GetConfig<T>() 获取最新实例
             // 无需额外的实例同步操作
         };
-        
+
     }
 
     /// <summary>
@@ -651,10 +652,11 @@ public static class ConfigManager
 
     private static ConfigFileFormat ResolveConfigFileFormat(Type configType, ConfigFileFormat fallbackFormat)
     {
-        if (configType.GetCustomAttribute<JsonConfigFileAttribute>() != null) return ConfigFileFormat.Json;
-        if (configType.GetCustomAttribute<XmlConfigFileAttribute>() != null) return ConfigFileFormat.Xml;
+        var metadata = GetConfigTypeMetadata(configType);
+        if (metadata.JsonConfigFile != null) return ConfigFileFormat.Json;
+        if (metadata.XmlConfigFile != null) return ConfigFileFormat.Xml;
 
-        var config = configType.GetCustomAttribute<ConfigAttribute>();
+        var config = metadata.Config;
         if (String.IsNullOrWhiteSpace(config?.Provider)) return fallbackFormat;
 
         if (String.Equals(config.Provider, "json", StringComparison.OrdinalIgnoreCase)) return ConfigFileFormat.Json;
@@ -667,12 +669,13 @@ public static class ConfigManager
     {
         if (String.IsNullOrWhiteSpace(fileName))
         {
+            var metadata = GetConfigTypeMetadata(configType);
             var attributeFileName = fileFormat == ConfigFileFormat.Json
-                ? configType.GetCustomAttribute<JsonConfigFileAttribute>()?.FileName
-                : configType.GetCustomAttribute<XmlConfigFileAttribute>()?.FileName;
+                ? metadata.JsonConfigFile?.FileName
+                : metadata.XmlConfigFile?.FileName;
 
             if (String.IsNullOrWhiteSpace(attributeFileName))
-                attributeFileName = configType.GetCustomAttribute<ConfigAttribute>()?.Name;
+                attributeFileName = metadata.Config?.Name;
 
             fileName = String.IsNullOrWhiteSpace(attributeFileName) ? GetDefaultConfigName(configType) : attributeFileName;
         }
@@ -691,6 +694,28 @@ public static class ConfigManager
             return name[..^7];
 
         return name;
+    }
+
+    private static ConfigTypeMetadata GetConfigTypeMetadata(Type configType)
+    {
+        if (_configTypeMetadata.TryGetValue(configType, out var metadata)) return metadata;
+
+        metadata = new ConfigTypeMetadata(
+            configType.GetCustomAttribute<ConfigAttribute>(),
+            configType.GetCustomAttribute<JsonConfigFileAttribute>(),
+            configType.GetCustomAttribute<XmlConfigFileAttribute>());
+        _configTypeMetadata[configType] = metadata;
+
+        return metadata;
+    }
+
+    private sealed class ConfigTypeMetadata(ConfigAttribute? config, JsonConfigFileAttribute? jsonConfigFile, XmlConfigFileAttribute? xmlConfigFile)
+    {
+        public ConfigAttribute? Config { get; } = config;
+
+        public JsonConfigFileAttribute? JsonConfigFile { get; } = jsonConfigFile;
+
+        public XmlConfigFileAttribute? XmlConfigFile { get; } = xmlConfigFile;
     }
 
     private static TConfig TryLoadLegacyJsonAndMigrate<TConfig>(Type configType, JsonSerializerOptions options, String content)

@@ -14,8 +14,14 @@ public class TimerX : ITimer, IDisposable
     private readonly Cron[]? _crons;
     private readonly DateTime _createdAt;
     private WeakReference? _state;
+    private WeakReference? _callback;
     private DateTime _AbsolutelyNext;
     private Int64 _nextTick;
+    private readonly String? _declaringTypeName;
+    private readonly Boolean _isStatic;
+    private readonly String _methodName;
+    private readonly TimerCallback? _staticCallback;
+    private readonly Func<Object, Task>? _staticAsyncCallback;
 
     internal readonly WeakReference Target;
     internal readonly MethodInfo Method;
@@ -27,12 +33,16 @@ public class TimerX : ITimer, IDisposable
 
         Target = new WeakReference(callback.Target);
         Method = callback.Method;
+        _isStatic = Method.IsStatic;
+        _methodName = Method.Name;
+        _declaringTypeName = Method.DeclaringType?.Name;
+        _staticCallback = callback.Target == null ? callback : null;
         State = state;
         Scheduler = String.IsNullOrWhiteSpace(scheduler) ? TimerScheduler.Default : TimerScheduler.Create(scheduler);
         _createdAt = Scheduler.GetNow();
         _nextTick = Runtime.TickCount64;
         _baseTime = _createdAt.AddMilliseconds(-_nextTick);
-        TracerName = $"timer:{Method.Name}";
+        TracerName = $"timer:{_methodName}";
     }
 
     private TimerX(Func<Object, Task> callback, Object? state, String? scheduler = null)
@@ -41,6 +51,10 @@ public class TimerX : ITimer, IDisposable
 
         Target = new WeakReference(callback.Target);
         Method = callback.Method;
+        _isStatic = Method.IsStatic;
+        _methodName = Method.Name;
+        _declaringTypeName = Method.DeclaringType?.Name;
+        _staticAsyncCallback = callback.Target == null ? callback : null;
         IsAsyncTask = true;
         Async = true;
         State = state;
@@ -48,7 +62,7 @@ public class TimerX : ITimer, IDisposable
         _createdAt = Scheduler.GetNow();
         _nextTick = Runtime.TickCount64;
         _baseTime = _createdAt.AddMilliseconds(-_nextTick);
-        TracerName = $"timer:{Method.Name}";
+        TracerName = $"timer:{_methodName}";
     }
 
     /// <summary>实例化定时器</summary>
@@ -295,32 +309,48 @@ public class TimerX : ITimer, IDisposable
     public override String ToString()
     {
         var periodText = _crons != null ? String.Join(';', _crons.Select(e => e.ToString())) : $"{Period}ms";
-        return $"[{Id}]{Method.DeclaringType?.Name}.{Method.Name} ({periodText})";
+        return $"[{Id}]{_declaringTypeName}.{_methodName} ({periodText})";
     }
 
     internal Boolean TryGetTarget(out Object? target)
     {
-        target = Method.IsStatic ? null : Target.Target;
-        return target != null || Method.IsStatic;
+        target = _isStatic ? null : Target.Target;
+        return target != null || _isStatic;
     }
 
     internal void Invoke()
     {
+        if (_staticCallback != null)
+        {
+            _staticCallback(State);
+            return;
+        }
+
         if (!TryGetTarget(out var target)) throw new InvalidOperationException("Timer target has been collected.");
 
-        var callback = target == null
-            ? (TimerCallback)Method.CreateDelegate(typeof(TimerCallback))
-            : (TimerCallback)Method.CreateDelegate(typeof(TimerCallback), target);
+        var callback = _callback?.Target as TimerCallback;
+        if (callback == null)
+        {
+            callback = (TimerCallback)Method.CreateDelegate(typeof(TimerCallback), target!);
+            _callback = new WeakReference(callback);
+        }
+
         callback(State);
     }
 
     internal Task InvokeAsync()
     {
+        if (_staticAsyncCallback != null) return _staticAsyncCallback(State!);
+
         if (!TryGetTarget(out var target)) throw new InvalidOperationException("Timer async target has been collected.");
 
-        var callback = target == null
-            ? (Func<Object, Task>)Method.CreateDelegate(typeof(Func<Object, Task>))
-            : (Func<Object, Task>)Method.CreateDelegate(typeof(Func<Object, Task>), target);
+        var callback = _callback?.Target as Func<Object, Task>;
+        if (callback == null)
+        {
+            callback = (Func<Object, Task>)Method.CreateDelegate(typeof(Func<Object, Task>), target!);
+            _callback = new WeakReference(callback);
+        }
+
         return callback(State!);
     }
 

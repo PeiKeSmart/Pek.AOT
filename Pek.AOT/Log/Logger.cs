@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime;
@@ -11,6 +12,8 @@ namespace Pek.Log;
 /// <summary>日志基类</summary>
 public abstract class Logger : ILog
 {
+    private static readonly ConcurrentDictionary<Assembly, String> _assemblyDisplayNameCache = [];
+
     /// <summary>调试日志</summary>
     /// <param name="format">格式化模板</param>
     /// <param name="args">格式化参数</param>
@@ -113,13 +116,7 @@ public abstract class Logger : ILog
         var process = Process.GetCurrentProcess();
         var name = String.Empty;
         var assembly = Assembly.GetEntryAssembly();
-        if (assembly != null)
-        {
-            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? String.Empty;
-            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product ?? String.Empty;
-            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ?? String.Empty;
-            if (String.IsNullOrWhiteSpace(name)) name = assembly.GetName().Name ?? String.Empty;
-        }
+        if (assembly != null) name = GetAssemblyDisplayName(assembly);
 
         if (String.IsNullOrWhiteSpace(name)) name = AppDomain.CurrentDomain.FriendlyName;
         if (String.IsNullOrWhiteSpace(name)) name = process.ProcessName;
@@ -218,5 +215,18 @@ public abstract class Logger : ILog
         var hours = (Int64)uptime.TotalHours;
 
         return $"{hours:D2}:{uptime:mm\\:ss\\.fffffff}";
+    }
+
+    private static String GetAssemblyDisplayName(Assembly assembly)
+    {
+        if (_assemblyDisplayNameCache.TryGetValue(assembly, out var name)) return name;
+
+        name = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? String.Empty;
+        if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product ?? String.Empty;
+        if (String.IsNullOrWhiteSpace(name)) name = assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ?? String.Empty;
+        if (String.IsNullOrWhiteSpace(name)) name = assembly.GetName().Name ?? String.Empty;
+
+        _assemblyDisplayNameCache[assembly] = name;
+        return name;
     }
 }
