@@ -282,7 +282,7 @@ public class MemoryCache : Cache
     public override ICollection<T> GetSet<T>(String key) => GetOrAddItem(key, static _ => new HashSet<T>()).Visit<ICollection<T>>() ?? throw new InvalidCastException($"Unable to convert the value of [{key}] to {typeof(ICollection<T>).FullName}");
 
     /// <summary>创建事件总线</summary>
-    public override IEventBus<TEvent> CreateEventBus<TEvent>(String topic, String clientId = "") => GetOrAddItem($"event:{topic}", static _ => new EventBus<TEvent>()).Visit<IEventBus<TEvent>>() ?? new EventBus<TEvent>();
+    public override IEventBus<TEvent> CreateEventBus<TEvent>(String topic, String clientId = "") => GetOrAddItem($"event:{topic}", _ => new QueueEventBus<TEvent>(this, topic)).Visit<IEventBus<TEvent>>() ?? new QueueEventBus<TEvent>(this, topic);
 
     /// <summary>性能测试</summary>
     public override Int64 Bench(Boolean rand = false, Int32 batch = 0) => 0;

@@ -105,7 +105,7 @@ public abstract class Cache : DisposeBase, ICache, IEventBusFactory
     public virtual ICollection<T> GetSet<T>(String key) => throw new NotSupportedException();
 
     /// <summary>创建事件总线</summary>
-    public virtual IEventBus<TEvent> CreateEventBus<TEvent>(String topic, String clientId = "") => new EventBus<TEvent>();
+    public virtual IEventBus<TEvent> CreateEventBus<TEvent>(String topic, String clientId = "") => new QueueEventBus<TEvent>(this, topic);
 
     /// <summary>添加</summary>
     public virtual Boolean Add<T>(String key, T value, Int32 expire = -1)
