@@ -201,37 +201,10 @@ public class UdpSession : DisposeBase, ISocketSession, ITransport, ILogFeature
 
         var span = Tracer?.NewSpan($"net:{Name}:SendMessageAsync", message);
         var context = Server.CreateContext(this);
-        CancellationTokenRegistration cancellationRegistration = default;
         try
         {
-            var source = new TaskCompletionSource<Object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (cancellationToken.CanBeCanceled)
-            {
-                cancellationRegistration = cancellationToken.Register(static state =>
-                {
-                    if (state is TaskCompletionSource<Object> taskSource && !taskSource.Task.IsCompleted)
-                        taskSource.TrySetCanceled();
-                }, source);
-            }
-
-            if (span != null)
-            {
-                _ = source.Task.ContinueWith(task =>
-                {
-                    cancellationRegistration.Dispose();
-
-                    if (task.IsCanceled)
-                        span.AppendTag("Canceled");
-                    else if (task.IsFaulted && task.Exception != null)
-                        span.SetError(task.Exception.InnerException ?? task.Exception, null);
-
-                    span.Dispose();
-                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            }
-            else if (cancellationToken.CanBeCanceled)
-            {
-                _ = source.Task.ContinueWith(_ => cancellationRegistration.Dispose(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            }
+            var source = PooledValueTaskSource.Rent();
+            source.AttachSpan(span);
 
             context["TaskSource"] = source;
             context["Span"] = span;
@@ -243,10 +216,12 @@ public class UdpSession : DisposeBase, ISocketSession, ITransport, ILogFeature
             if (result < 0)
             {
                 source.TrySetResult(null!);
-                return new ValueTask<Object>(source.Task);
+                return source.ValueTask;
             }
 
-            return new ValueTask<Object>(source.Task);
+            source.RegisterCancellation(cancellationToken);
+
+            return source.ValueTask;
         }
         catch (Exception ex)
         {
@@ -255,7 +230,6 @@ public class UdpSession : DisposeBase, ISocketSession, ITransport, ILogFeature
             else
                 span?.SetError(ex, message);
 
-            cancellationRegistration.Dispose();
             span?.Dispose();
             if (context != null) Server.ReturnContext(context);
             throw;

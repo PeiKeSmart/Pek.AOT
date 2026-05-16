@@ -171,11 +171,15 @@ public class DefaultMatchQueue : IMatchQueue
     {
         if (source is TaskCompletionSource<Object> taskSource && !taskSource.Task.IsCompleted)
             taskSource.TrySetResult(result);
+        else if (source is Pek.Net.PooledValueTaskSource pooledSource && !pooledSource.IsCompleted)
+            pooledSource.TrySetResult(result);
     }
 
     private static void SetCanceled(Object source)
     {
         if (source is TaskCompletionSource<Object> taskSource && !taskSource.Task.IsCompleted)
             taskSource.TrySetCanceled();
+        else if (source is Pek.Net.PooledValueTaskSource pooledSource && !pooledSource.IsCompleted)
+            pooledSource.TrySetCanceled();
     }
 }
