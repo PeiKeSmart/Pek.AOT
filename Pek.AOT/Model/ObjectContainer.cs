@@ -64,6 +64,9 @@ public class ObjectContainer : IObjectContainer
     {
         lock (_list)
         {
+            if (item.ImplementationType == null && item is ServiceDescriptor descriptor && !descriptor.ServiceType.IsAbstract && !descriptor.ServiceType.IsInterface)
+                descriptor.ImplementationType = descriptor.ServiceType;
+
             _list.Add(item);
         }
     }
@@ -76,6 +79,9 @@ public class ObjectContainer : IObjectContainer
         lock (_list)
         {
             if (_list.Any(e => e.ServiceType == item.ServiceType)) return false;
+
+            if (item.ImplementationType == null && item is ServiceDescriptor descriptor && !descriptor.ServiceType.IsAbstract && !descriptor.ServiceType.IsInterface)
+                descriptor.ImplementationType = descriptor.ServiceType;
 
             _list.Add(item);
 

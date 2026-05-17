@@ -90,6 +90,253 @@ public static class ObjectContainerHelper
     /// <param name="instance">实例</param>
     /// <returns>对象容器</returns>
     public static IObjectContainer AddSingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, TService? instance = null) where TService : class => container.AddSingleton(typeof(TService), instance);
+
+    /// <summary>尝试添加单实例，指定实现类型</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddSingleton(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (implementationType == null) throw new ArgumentNullException(nameof(implementationType));
+
+        var item = new ServiceDescriptor(serviceType, implementationType)
+        {
+            Lifetime = ObjectLifetime.Singleton,
+        };
+        container.TryAdd(item);
+
+        return container;
+    }
+
+    /// <summary>尝试添加单实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <typeparam name="TImplementation">实现类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddSingleton<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.TryAddSingleton(typeof(TService), typeof(TImplementation));
+    #endregion
+
+    #region 范围容器
+    /// <summary>添加范围容器实例，指定实现类型</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddScoped(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (implementationType == null) throw new ArgumentNullException(nameof(implementationType));
+
+        var item = new ServiceDescriptor(serviceType, implementationType)
+        {
+            Lifetime = ObjectLifetime.Scoped,
+        };
+        container.Add(item);
+
+        return container;
+    }
+
+    /// <summary>添加范围容器实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <typeparam name="TImplementation">实现类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.AddScoped(typeof(TService), typeof(TImplementation));
+
+    /// <summary>添加范围容器实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container) where TService : class => container.AddScoped(typeof(TService), typeof(TService));
+
+    /// <summary>添加范围容器实例，指定实现工厂</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="factory">实例工厂</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddScoped(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Func<IServiceProvider, Object> factory)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+
+        var item = new ServiceDescriptor(serviceType)
+        {
+            Factory = factory,
+            Lifetime = ObjectLifetime.Scoped,
+        };
+        container.Add(item);
+
+        return container;
+    }
+
+    /// <summary>添加范围容器实例，指定实现工厂</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <param name="factory">实例工厂</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, Func<IServiceProvider, Object> factory) where TService : class => container.AddScoped(typeof(TService), factory);
+
+    /// <summary>尝试添加范围容器实例，指定实现类型</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddScoped(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (implementationType == null) throw new ArgumentNullException(nameof(implementationType));
+
+        var item = new ServiceDescriptor(serviceType, implementationType)
+        {
+            Lifetime = ObjectLifetime.Scoped,
+        };
+        container.TryAdd(item);
+
+        return container;
+    }
+
+    /// <summary>尝试添加范围容器实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <typeparam name="TImplementation">实现类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.TryAddScoped(typeof(TService), typeof(TImplementation));
+
+    /// <summary>尝试添加范围容器实例，指定实例</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <param name="instance">实例</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, TService? instance = null) where TService : class
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+
+        var item = new ServiceDescriptor(typeof(TService))
+        {
+            Instance = instance,
+            Lifetime = ObjectLifetime.Scoped,
+        };
+        if (instance == null) item.ImplementationType = typeof(TService);
+        container.TryAdd(item);
+
+        return container;
+    }
+    #endregion
+
+    #region 瞬态注册
+    /// <summary>添加瞬态实例，指定实现类型</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddTransient(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (implementationType == null) throw new ArgumentNullException(nameof(implementationType));
+
+        var item = new ServiceDescriptor(serviceType, implementationType)
+        {
+            Lifetime = ObjectLifetime.Transient,
+        };
+        container.Add(item);
+
+        return container;
+    }
+
+    /// <summary>添加瞬态实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <typeparam name="TImplementation">实现类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddTransient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.AddTransient(typeof(TService), typeof(TImplementation));
+
+    /// <summary>添加瞬态实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddTransient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container) where TService : class => container.AddTransient(typeof(TService), typeof(TService));
+
+    /// <summary>添加瞬态实例，指定实现工厂</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="factory">实例工厂</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddTransient(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Func<IServiceProvider, Object> factory)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+
+        var item = new ServiceDescriptor(serviceType)
+        {
+            Factory = factory,
+            Lifetime = ObjectLifetime.Transient,
+        };
+        container.Add(item);
+
+        return container;
+    }
+
+    /// <summary>添加瞬态实例，指定实现工厂</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <param name="factory">实例工厂</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer AddTransient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, Func<IServiceProvider, Object> factory) where TService : class => container.AddTransient(typeof(TService), factory);
+
+    /// <summary>尝试添加瞬态实例，指定实现类型</summary>
+    /// <param name="container">对象容器</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddTransient(this IObjectContainer container, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType)
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+        if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
+        if (implementationType == null) throw new ArgumentNullException(nameof(implementationType));
+
+        var item = new ServiceDescriptor(serviceType, implementationType)
+        {
+            Lifetime = ObjectLifetime.Transient,
+        };
+        container.TryAdd(item);
+
+        return container;
+    }
+
+    /// <summary>尝试添加瞬态实例，指定实现类型</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <typeparam name="TImplementation">实现类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddTransient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>(this IObjectContainer container) where TService : class where TImplementation : class, TService => container.TryAddTransient(typeof(TService), typeof(TImplementation));
+
+    /// <summary>尝试添加瞬态实例，指定实例</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    /// <param name="container">对象容器</param>
+    /// <param name="instance">实例</param>
+    /// <returns>对象容器</returns>
+    public static IObjectContainer TryAddTransient<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(this IObjectContainer container, TService? instance = null) where TService : class
+    {
+        if (container == null) throw new ArgumentNullException(nameof(container));
+
+        var item = new ServiceDescriptor(typeof(TService))
+        {
+            Instance = instance,
+            Lifetime = ObjectLifetime.Transient,
+        };
+        if (instance == null) item.ImplementationType = typeof(TService);
+        container.TryAdd(item);
+
+        return container;
+    }
     #endregion
 
     #region 构建
