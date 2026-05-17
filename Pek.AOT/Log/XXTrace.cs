@@ -10,10 +10,10 @@ public static class XXTrace
     public static ITracer? Tracer { get => XTrace.Tracer; set => XTrace.Tracer = value; }
 
     /// <summary>是否启用调试</summary>
-    public static Boolean Debug => XTrace.Debug;
+    public static Boolean Debug { get => XTrace.Debug; set => XTrace.Debug = value; }
 
     /// <summary>日志目录</summary>
-    public static String LogPath => XTrace.LogPath;
+    public static String LogPath { get => XTrace.LogPath; set => XTrace.LogPath = value; }
 
     /// <summary>输出日志</summary>
     /// <param name="message">日志消息</param>
@@ -63,6 +63,9 @@ public static class XXTrace
     /// <summary>输出异常</summary>
     /// <param name="exception">异常对象</param>
     public static void WriteException(Exception exception) => XTrace.WriteException(exception);
+
+    /// <summary>输出核心库和启动程序的版本号</summary>
+    public static void WriteVersion() => XTrace.WriteVersion();
 
     /// <summary>启用控制台输出</summary>
     /// <param name="useColor">是否使用颜色</param>

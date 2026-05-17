@@ -1,4 +1,8 @@
+using System.Reflection;
 using System.Runtime.Versioning;
+
+using NewLife.Reflection;
+
 using Pek.Threading;
 using Pek;
 
@@ -50,10 +54,18 @@ public static class XTrace
     }
 
     /// <summary>是否启用调试</summary>
-    public static Boolean Debug => GetSetting().Debug;
+    public static Boolean Debug
+    {
+        get => GetSetting().Debug;
+        set => GetSetting().Debug = value;
+    }
 
     /// <summary>日志目录</summary>
-    public static String LogPath => GetSetting().LogPath;
+    public static String LogPath
+    {
+        get => GetSetting().LogPath;
+        set => GetSetting().LogPath = value;
+    }
 
     static XTrace()
     {
@@ -87,6 +99,7 @@ public static class XTrace
     {
         if (message == null) return;
         if (!InitLog()) return;
+        WriteVersion();
         Log.Info(message);
     }
 
@@ -97,6 +110,7 @@ public static class XTrace
     {
         if (format == null) return;
         if (!InitLog()) return;
+        WriteVersion();
         Log.Info(format, args);
     }
 
@@ -160,6 +174,7 @@ public static class XTrace
     {
         if (exception == null) return;
         if (!InitLog()) return;
+        WriteVersion();
         Log.Error(FormatScope(LogScope, nameof(XTrace), "{0}"), exception);
     }
 
@@ -333,6 +348,33 @@ public static class XTrace
     {
         if (Console.WindowWidth <= 80) Console.WindowWidth = Console.WindowWidth * 3 / 2;
         if (Console.WindowHeight <= 25) Console.WindowHeight = Console.WindowHeight * 3 / 2;
+    }
+
+    private static Int32 _writeVersion;
+
+    /// <summary>输出核心库和启动程序的版本号</summary>
+    public static void WriteVersion()
+    {
+        if (_writeVersion > 0 || Interlocked.CompareExchange(ref _writeVersion, 1, 0) != 0) return;
+
+        var asm = Assembly.GetExecutingAssembly();
+        WriteVersion(asm);
+
+        var asm2 = Assembly.GetEntryAssembly();
+        if (asm2 != null && asm2 != asm) WriteVersion(asm2);
+    }
+
+    /// <summary>输出程序集版本</summary>
+    /// <param name="asm">程序集</param>
+    public static void WriteVersion(this Assembly asm)
+    {
+        if (asm == null) return;
+
+        var asmx = AssemblyX.Create(asm);
+        if (asmx == null) return;
+
+        WriteLine("{0} v{1} Build {2:yyyy-MM-dd HH:mm:ss}", asmx.Name, asmx.FileVersion, asmx.Compile);
+        if (!String.IsNullOrWhiteSpace(asmx.Title)) WriteLine("{0}", asmx.Title);
     }
 
     private static void OnProcessExit()

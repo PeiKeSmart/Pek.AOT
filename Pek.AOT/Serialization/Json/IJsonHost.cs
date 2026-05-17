@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
@@ -330,6 +331,11 @@ public class SystemJson : IJsonHost
         {
             if (actualType.IsInstanceOfType(obj)) return obj;
 
+            if (actualType == typeof(Object[]))
+            {
+                if (obj is IList<Object?> objects) return objects.ToArray();
+            }
+
             var json = CreateJsonNode(obj)?.ToJsonString() ?? "null";
             return Read(json, actualType);
         }
@@ -374,6 +380,11 @@ public class SystemJson : IJsonHost
         if (value is Guid guidValue) return SerializeString(guidValue.ToString());
         if (value is Byte[] buffer) return SerializeString(System.Convert.ToBase64String(buffer));
         if (value is JsonNode node) return node.ToJsonString(CreateSerializerOptions(jsonOptions));
+        if (value is IDictionary or IEnumerable)
+        {
+            var container = CreateJsonNode(value);
+            if (container != null) return container.ToJsonString(CreateSerializerOptions(jsonOptions));
+        }
         if (value.GetType().IsEnum)
             return jsonOptions.EnumString ? SerializeString(value.ToString() ?? String.Empty) : System.Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture)?.ToString() ?? "0";
 
@@ -384,6 +395,8 @@ public class SystemJson : IJsonHost
     {
         var nullableType = Nullable.GetUnderlyingType(type);
         var actualType = nullableType ?? type;
+
+        if (TryReadDynamicContainer(json, actualType, out var container)) return container;
 
         if (actualType == typeof(JsonNode) || actualType == typeof(JsonObject) || actualType == typeof(JsonArray))
         {
@@ -425,6 +438,35 @@ public class SystemJson : IJsonHost
         }
 
         throw new NotSupportedException($"Type {actualType.FullName} is not registered for AOT-safe JSON deserialization. Register a JsonTypeInfo first.");
+    }
+
+    private static Boolean TryReadDynamicContainer(String json, Type actualType, out Object? value)
+    {
+        value = null;
+
+        if (actualType != typeof(Dictionary<String, Object?>) &&
+            actualType != typeof(IDictionary<String, Object?>) &&
+            actualType != typeof(IReadOnlyDictionary<String, Object?>) &&
+            actualType != typeof(List<Object?>) &&
+            actualType != typeof(IList<Object?>) &&
+            actualType != typeof(ICollection<Object?>) &&
+            actualType != typeof(IEnumerable<Object?>) &&
+            actualType != typeof(IReadOnlyList<Object?>) &&
+            actualType != typeof(IReadOnlyCollection<Object?>) &&
+            actualType != typeof(Object[]))
+            return false;
+
+        var node = JsonNode.Parse(json);
+        value = ConvertNode(node);
+        if (value == null) return true;
+
+        if (actualType == typeof(Object[]))
+        {
+            value = value is IList<Object?> list ? list.ToArray() : Array.Empty<Object?>();
+            return true;
+        }
+
+        return true;
     }
 
     private static Object? ChangeScalarValue(String value, Type type)
@@ -525,18 +567,18 @@ public class SystemJson : IJsonHost
         if (value == null) return null;
         if (value is JsonNode node) return node.DeepClone();
 
-        if (value is IDictionary<String, Object?> dictionary)
+        if (value is IDictionary dictionary)
         {
             var jsonObject = new JsonObject();
-            foreach (var item in dictionary)
+            foreach (DictionaryEntry item in dictionary)
             {
-                jsonObject[item.Key] = CreateJsonNode(item.Value);
+                jsonObject[item.Key + String.Empty] = CreateJsonNode(item.Value);
             }
 
             return jsonObject;
         }
 
-        if (value is IList<Object?> list)
+        if (value is IEnumerable list && value is not String && value is not Byte[])
         {
             var jsonArray = new JsonArray();
             foreach (var item in list)
