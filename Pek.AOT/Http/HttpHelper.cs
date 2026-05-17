@@ -3,11 +3,13 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Pek.Caching;
 using Pek.Collections;
 using Pek.Data;
 using Pek.Extension;
@@ -554,6 +556,170 @@ public static class HttpHelper
 
         return await PostAsync(client, requestUri, content, null, cancellationToken).ConfigureAwait(false);
     }
+
+    #region WebSocket
+    /// <summary>从队列消费消息并推送到WebSocket客户端</summary>
+    /// <param name="socket">WebSocket实例</param>
+    /// <param name="queue">队列</param>
+    /// <param name="onProcess">数据处理委托</param>
+    /// <param name="source">取消通知源</param>
+    /// <returns>异步任务</returns>
+    public static async Task ConsumeAndPushAsync(this WebSocket socket, IProducerConsumer<String> queue, Func<String, Byte[]>? onProcess, CancellationTokenSource source)
+    {
+        DefaultSpan.Current = null;
+        var token = source.Token;
+        while (!token.IsCancellationRequested && socket.Connected)
+        {
+            try
+            {
+                var msg = await queue.TakeOneAsync(30, token).ConfigureAwait(false);
+                if (msg != null)
+                {
+                    var buf = onProcess != null ? onProcess(msg) : msg.GetBytes();
+                    socket.Send(buf, WebSocketMessageType.Text);
+                }
+                else
+                {
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                }
+            }
+            catch (ThreadAbortException) { break; }
+            catch (ThreadInterruptedException) { break; }
+            catch (TaskCanceledException) { }
+            catch (OperationCanceledException) { }
+            catch (WebSocketException ex)
+            {
+                if (token.IsCancellationRequested) break;
+
+                XTrace.WriteLine("WebSocket异常 {0}", ex.Message);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (token.IsCancellationRequested) break;
+
+                XTrace.WriteException(ex);
+            }
+        }
+
+        try
+        {
+            if (!source.IsCancellationRequested) source.Cancel();
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>从队列消费消息并推送到WebSocket客户端</summary>
+    /// <param name="socket">WebSocket实例</param>
+    /// <param name="host">缓存主机</param>
+    /// <param name="topic">主题</param>
+    /// <param name="source">取消通知源</param>
+    /// <returns>异步任务</returns>
+    public static Task ConsumeAndPushAsync(this WebSocket socket, ICache host, String topic, CancellationTokenSource source) => ConsumeAndPushAsync(socket, host.GetQueue<String>(topic), null, source);
+
+    /// <summary>从队列消费消息并推送到System.Net.WebSockets客户端</summary>
+    /// <param name="socket">WebSocket实例</param>
+    /// <param name="queue">队列</param>
+    /// <param name="onProcess">数据处理委托</param>
+    /// <param name="source">取消通知源</param>
+    /// <returns>异步任务</returns>
+    public static async Task ConsumeAndPushAsync(this System.Net.WebSockets.WebSocket socket, IProducerConsumer<String> queue, Func<String, Byte[]>? onProcess, CancellationTokenSource source)
+    {
+        DefaultSpan.Current = null;
+        var token = source.Token;
+        while (!token.IsCancellationRequested && socket.State == System.Net.WebSockets.WebSocketState.Open)
+        {
+            try
+            {
+                var msg = await queue.TakeOneAsync(30, token).ConfigureAwait(false);
+                if (msg != null)
+                {
+                    var buf = onProcess != null ? onProcess(msg) : msg.GetBytes();
+                    if (buf != null && buf.Length > 0)
+                        await socket.SendAsync(new ArraySegment<Byte>(buf), System.Net.WebSockets.WebSocketMessageType.Text, true, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                }
+            }
+            catch (ThreadAbortException) { break; }
+            catch (ThreadInterruptedException) { break; }
+            catch (TaskCanceledException) { }
+            catch (OperationCanceledException) { }
+            catch (WebSocketException ex)
+            {
+                if (token.IsCancellationRequested) break;
+
+                XTrace.WriteLine("WebSocket异常 {0}", ex.Message);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (token.IsCancellationRequested) break;
+
+                XTrace.WriteException(ex);
+            }
+        }
+
+        try
+        {
+            if (!source.IsCancellationRequested) source.Cancel();
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>从队列消费消息并推送到System.Net.WebSockets客户端</summary>
+    /// <param name="socket">WebSocket实例</param>
+    /// <param name="host">缓存主机</param>
+    /// <param name="topic">主题</param>
+    /// <param name="source">取消通知源</param>
+    /// <returns>异步任务</returns>
+    public static Task ConsumeAndPushAsync(this System.Net.WebSockets.WebSocket socket, ICache host, String topic, CancellationTokenSource source) => ConsumeAndPushAsync(socket, host.GetQueue<String>(topic), null, source);
+
+    /// <summary>阻塞等待WebSocket关闭</summary>
+    /// <param name="socket">WebSocket实例</param>
+    /// <param name="onReceive">数据处理委托</param>
+    /// <param name="source">取消通知源</param>
+    /// <returns>异步任务</returns>
+    public static async Task WaitForClose(this System.Net.WebSockets.WebSocket socket, Action<String?>? onReceive, CancellationTokenSource source)
+    {
+        var buf = Pool.Shared.Rent(4096);
+        try
+        {
+            while (!source.IsCancellationRequested && socket.State == WebSocketState.Open)
+            {
+                try
+                {
+                    var data = await socket.ReceiveAsync(new ArraySegment<Byte>(buf), source.Token).ConfigureAwait(false);
+                    if (data.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
+                    if (data.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
+                    {
+                        var str = buf.ToStr(null, 0, data.Count);
+                        if (!str.IsNullOrEmpty()) onReceive?.Invoke(str);
+                    }
+                }
+                catch (ThreadAbortException) { break; }
+                catch (ThreadInterruptedException) { break; }
+                catch (TaskCanceledException) { }
+                catch (OperationCanceledException) { }
+                catch (WebSocketException ex)
+                {
+                    XTrace.WriteLine("WebSocket异常 {0}", ex.Message);
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    XTrace.WriteException(ex);
+                }
+            }
+        }
+        finally
+        {
+            Pool.Shared.Return(buf);
+        }
+    }
+    #endregion
 
     private static async Task<String> PostAsync(HttpClient client, String requestUri, HttpContent content, IDictionary<String, String>? headers, CancellationToken cancellationToken)
     {
