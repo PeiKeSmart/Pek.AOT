@@ -232,6 +232,25 @@ public static class NetHelper
     /// <returns>是否已占用</returns>
     public static Boolean CheckPort(this NetUri uri) => uri.Address.CheckPort(uri.Type, uri.Port);
 
+    /// <summary>获取所有Tcp连接，带进程Id</summary>
+    /// <returns>Tcp连接数组</returns>
+    [Obsolete("请使用 GetAllTcpConnections(Int32 processId = -1)")]
+    public static TcpConnectionInformation2[] GetAllTcpConnections() => GetAllTcpConnections(-1);
+
+    /// <summary>获取所有Tcp连接，带进程Id</summary>
+    /// <param name="processId">目标进程。默认-1未指定，获取所有进程的Tcp连接</param>
+    /// <returns>Tcp连接数组</returns>
+    public static TcpConnectionInformation2[] GetAllTcpConnections(Int32 processId = -1)
+    {
+        var result = !Runtime.Windows
+            ? TcpConnectionInformation2.GetLinuxTcpConnections(processId)
+            : TcpConnectionInformation2.GetWindowsTcpConnections();
+
+        if (processId <= 0) return result;
+
+        return result.Where(item => item.ProcessId == processId).ToArray();
+    }
+
     /// <summary>获取活动网络接口信息</summary>
     /// <returns>活动接口信息</returns>
     public static IEnumerable<IPInterfaceProperties> GetActiveInterfaces()
