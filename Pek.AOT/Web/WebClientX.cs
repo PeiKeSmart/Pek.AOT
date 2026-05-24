@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Buffers;
 using Pek.Extension;
@@ -15,7 +16,7 @@ namespace Pek.Web;
 /// <summary>扩展的Web客户端</summary>
 public class WebClientX : DisposeBase
 {
-    private HttpClient? _client;
+    private BclHttpClient? _client;
     private String? _lastAddress;
     private Dictionary<String, String>? _cookies;
 
@@ -55,12 +56,12 @@ public class WebClientX : DisposeBase
 
     /// <summary>创建客户端会话</summary>
     /// <returns>客户端</returns>
-    public virtual HttpClient EnsureCreate()
+    public virtual BclHttpClient EnsureCreate()
     {
         var client = _client;
         if (client == null)
         {
-            client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(Timeout) };
+            client = new BclHttpClient { Timeout = TimeSpan.FromMilliseconds(Timeout) };
             client.SetUserAgent();
             _client = client;
         }

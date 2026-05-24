@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek;
 using Pek.Configuration;
@@ -498,7 +499,7 @@ public partial class ApiHttpClient : DisposeBase, IApiClient, IConfigMapping, IL
     /// <param name="onlyHeader">仅头部响应</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>响应消息</returns>
-    protected virtual async Task<HttpResponseMessage> SendOnServiceAsync(HttpRequestMessage request, ServiceEndpoint service, HttpClient client, Boolean onlyHeader, CancellationToken cancellationToken)
+    protected virtual async Task<HttpResponseMessage> SendOnServiceAsync(HttpRequestMessage request, ServiceEndpoint service, BclHttpClient client, Boolean onlyHeader, CancellationToken cancellationToken)
     {
         var filter = Filter;
         if (filter != null) await filter.OnRequest(client, request, this, cancellationToken).ConfigureAwait(false);
@@ -514,7 +515,7 @@ public partial class ApiHttpClient : DisposeBase, IApiClient, IConfigMapping, IL
     /// <summary>确保服务有可用的 HttpClient</summary>
     /// <param name="service">服务</param>
     /// <returns>Http客户端</returns>
-    internal HttpClient EnsureClient(ServiceEndpoint service)
+    internal BclHttpClient EnsureClient(ServiceEndpoint service)
     {
         var client = service.Client;
         if (client == null)
@@ -536,12 +537,12 @@ public partial class ApiHttpClient : DisposeBase, IApiClient, IConfigMapping, IL
 
     /// <summary>创建客户端</summary>
     /// <returns>Http客户端</returns>
-    protected virtual HttpClient CreateClient()
+    protected virtual BclHttpClient CreateClient()
     {
         var handler = HttpHelper.CreateHandler(UseProxy, false, !CertificateValidation);
         if (Tracer != null) handler = new HttpTraceHandler(handler) { Tracer = Tracer };
 
-        var client = new HttpClient(handler)
+        var client = new BclHttpClient(handler)
         {
             Timeout = TimeSpan.FromMilliseconds(Timeout)
         };

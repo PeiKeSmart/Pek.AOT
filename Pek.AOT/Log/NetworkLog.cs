@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Http;
 using Pek.Net;
@@ -16,7 +17,7 @@ public class NetworkLog : Logger, IDisposable
     private volatile Int32 _logCount;
     private Int32 _writing;
     private NetClient? _client;
-    private HttpClient? _httpClient;
+    private BclHttpClient? _httpClient;
     private Boolean _inited;
 
     /// <summary>服务端</summary>
@@ -108,7 +109,7 @@ public class NetworkLog : Logger, IDisposable
                 if (!Uri.TryCreate(Server, UriKind.Absolute, out var httpUri)) return;
 
                 var handler = HttpHelper.CreateHandler(false, false);
-                _httpClient = new HttpClient(handler) { BaseAddress = httpUri };
+                _httpClient = new BclHttpClient(handler) { BaseAddress = httpUri };
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-AppId", AppId);
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-ClientId", ClientId);
                 _httpClient.SetUserAgent();

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Collections;
 using Pek.Data;
@@ -24,31 +25,31 @@ public static class ApiHelper
     public static IHttpFilter? Filter { get; set; }
 
     /// <summary>异步调用，等待返回结果</summary>
-    public static Task<TResult?> GetAsync<TResult>(this HttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
+    public static Task<TResult?> GetAsync<TResult>(this BclHttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
         client.InvokeAsync<TResult>(HttpMethod.Get, action, args, null, "data", cancellationToken);
 
     /// <summary>同步获取，参数构造在Url</summary>
-    public static TResult? Get<TResult>(this HttpClient client, String action, Object? args = null) =>
+    public static TResult? Get<TResult>(this BclHttpClient client, String action, Object? args = null) =>
         GetAsync<TResult>(client, action, args).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>异步调用，等待返回结果</summary>
-    public static Task<TResult?> PostAsync<TResult>(this HttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
+    public static Task<TResult?> PostAsync<TResult>(this BclHttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
         client.InvokeAsync<TResult>(HttpMethod.Post, action, args, null, "data", cancellationToken);
 
     /// <summary>同步提交，参数Json打包在Body</summary>
-    public static TResult? Post<TResult>(this HttpClient client, String action, Object? args = null) =>
+    public static TResult? Post<TResult>(this BclHttpClient client, String action, Object? args = null) =>
         PostAsync<TResult>(client, action, args).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>异步上传，等待返回结果</summary>
-    public static Task<TResult?> PutAsync<TResult>(this HttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
+    public static Task<TResult?> PutAsync<TResult>(this BclHttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
         client.InvokeAsync<TResult>(HttpMethod.Put, action, args, null, "data", cancellationToken);
 
     /// <summary>异步删除，等待返回结果</summary>
-    public static Task<TResult?> DeleteAsync<TResult>(this HttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
+    public static Task<TResult?> DeleteAsync<TResult>(this BclHttpClient client, String action, Object? args = null, CancellationToken cancellationToken = default) =>
         client.InvokeAsync<TResult>(HttpMethod.Delete, action, args, null, "data", cancellationToken);
 
     /// <summary>异步调用，等待返回结果</summary>
-    public static async Task<TResult?> InvokeAsync<TResult>(this HttpClient client, HttpMethod method, String action, Object? args = null, Action<HttpRequestMessage>? onRequest = null, String dataName = "data", CancellationToken cancellationToken = default)
+    public static async Task<TResult?> InvokeAsync<TResult>(this BclHttpClient client, HttpMethod method, String action, Object? args = null, Action<HttpRequestMessage>? onRequest = null, String dataName = "data", CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(method, action, args);
         var returnType = typeof(TResult);

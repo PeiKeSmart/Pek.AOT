@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Extension;
 
@@ -58,7 +59,7 @@ public class ServiceEndpoint
 
     /// <summary>Http客户端。复用连接以提高性能</summary>
     [XmlIgnore, IgnoreDataMember]
-    public HttpClient? Client { get; set; }
+    public BclHttpClient? Client { get; set; }
     #endregion
 
     #region 加权轮询属性

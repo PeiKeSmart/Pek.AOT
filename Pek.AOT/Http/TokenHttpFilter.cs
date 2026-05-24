@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Extension;
 using Pek.IO;
@@ -50,7 +51,7 @@ public class TokenHttpFilter : IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    public virtual async Task OnRequest(HttpClient client, HttpRequestMessage request, Object? state, CancellationToken cancellationToken)
+    public virtual async Task OnRequest(BclHttpClient client, HttpRequestMessage request, Object? state, CancellationToken cancellationToken)
     {
         if (request.Headers.Authorization != null) return;
 
@@ -104,7 +105,7 @@ public class TokenHttpFilter : IHttpFilter
     /// <param name="client"></param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns></returns>
-    protected virtual async Task<IToken?> SendAuth(HttpClient client, CancellationToken cancellationToken)
+    protected virtual async Task<IToken?> SendAuth(BclHttpClient client, CancellationToken cancellationToken)
     {
         if (UserName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(UserName));
 
@@ -125,7 +126,7 @@ public class TokenHttpFilter : IHttpFilter
     /// <param name="client"></param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns></returns>
-    protected virtual async Task<IToken?> SendRefresh(HttpClient client, CancellationToken cancellationToken)
+    protected virtual async Task<IToken?> SendRefresh(BclHttpClient client, CancellationToken cancellationToken)
     {
         if (Token == null) throw new ArgumentNullException(nameof(Token));
 
@@ -172,7 +173,7 @@ public class TokenHttpFilter : IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    public virtual Task OnResponse(HttpClient client, HttpResponseMessage response, Object? state, CancellationToken cancellationToken)
+    public virtual Task OnResponse(BclHttpClient client, HttpResponseMessage response, Object? state, CancellationToken cancellationToken)
     {
         var code = (Int32)response.StatusCode;
         if (ErrorCodes.Contains(code)) Expire = DateTime.MinValue;
@@ -186,5 +187,5 @@ public class TokenHttpFilter : IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    public virtual Task OnError(HttpClient client, Exception exception, Object? state, CancellationToken cancellationToken) => Task.CompletedTask;
+    public virtual Task OnError(BclHttpClient client, Exception exception, Object? state, CancellationToken cancellationToken) => Task.CompletedTask;
 }

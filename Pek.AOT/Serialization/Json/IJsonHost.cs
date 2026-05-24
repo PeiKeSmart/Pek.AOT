@@ -81,7 +81,11 @@ public static class JsonHelper
 
     internal static Boolean TryGetTypeInfo(Type type, out JsonTypeInfo typeInfo)
     {
-        if (_typeInfos.TryGetValue(type, out typeInfo!)) return true;
+        if (_typeInfos.TryGetValue(type, out typeInfo!))
+        {
+            DataMemberResolver.Modifier(typeInfo);
+            return true;
+        }
 
         if (ConfigManager.TryGetSerializerOptions(type, out var options))
         {

@@ -7,6 +7,7 @@ using System.Xml;
 
 using Pek.IO;
 using Pek.Log;
+using Pek.Serialization;
 using Pek.Threading;
 using Pek.Xml;
 
@@ -348,6 +349,8 @@ public static class ConfigManager
         {
             throw new InvalidOperationException($"配置类型 {configType.Name} 未注册 JsonTypeInfo");
         }
+
+        DataMemberResolver.Modifier(typeInfo);
 
         return typeInfo;
     }

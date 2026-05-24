@@ -2,6 +2,8 @@ using System.Diagnostics;
 
 using Pek.Log;
 
+using BclHttpClient = System.Net.Http.HttpClient;
+
 namespace Pek.Remoting;
 
 /// <summary>竞速负载均衡器</summary>
@@ -184,7 +186,7 @@ public class RaceLoadBalancer : LoadBalancerBase, ITracerFeature
         try
         {
             var watch = Stopwatch.StartNew();
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(ProbeTimeout > 0 ? ProbeTimeout : 1000) };
+            using var client = new BclHttpClient { Timeout = TimeSpan.FromMilliseconds(ProbeTimeout > 0 ? ProbeTimeout : 1000) };
             var completion = ProbeHeadersOnly ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead;
             using var response = await client.GetAsync(uri, completion, source.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return null;

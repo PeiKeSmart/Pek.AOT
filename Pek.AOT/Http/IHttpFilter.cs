@@ -1,4 +1,5 @@
 using System.Net.Http;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 namespace Pek.Http;
 
@@ -11,7 +12,7 @@ public interface IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    Task OnRequest(HttpClient client, HttpRequestMessage request, Object? state, CancellationToken cancellationToken);
+    Task OnRequest(BclHttpClient client, HttpRequestMessage request, Object? state, CancellationToken cancellationToken);
 
     /// <summary>获取响应后</summary>
     /// <param name="client">客户端</param>
@@ -19,7 +20,7 @@ public interface IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    Task OnResponse(HttpClient client, HttpResponseMessage response, Object? state, CancellationToken cancellationToken);
+    Task OnResponse(BclHttpClient client, HttpResponseMessage response, Object? state, CancellationToken cancellationToken);
 
     /// <summary>发生错误时</summary>
     /// <param name="client">客户端</param>
@@ -27,5 +28,5 @@ public interface IHttpFilter
     /// <param name="state">状态数据</param>
     /// <param name="cancellationToken">取消通知</param>
     /// <returns>任务</returns>
-    Task OnError(HttpClient client, Exception exception, Object? state, CancellationToken cancellationToken);
+    Task OnError(BclHttpClient client, Exception exception, Object? state, CancellationToken cancellationToken);
 }

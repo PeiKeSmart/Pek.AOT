@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Caching;
 using Pek.Collections;
@@ -57,7 +58,7 @@ public static class HttpHelper
     /// <summary>设置浏览器UserAgent</summary>
     /// <param name="client">客户端</param>
     /// <returns>客户端</returns>
-    public static HttpClient SetUserAgent(this HttpClient client)
+    public static BclHttpClient SetUserAgent(this BclHttpClient client)
     {
         var userAgent = DefaultUserAgent;
         if (!userAgent.IsNullOrEmpty()) client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
@@ -261,7 +262,7 @@ public static class HttpHelper
     /// <param name="headers">请求头</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>响应字符串</returns>
-    public static async Task<String> PostJsonAsync(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
+    public static async Task<String> PostJsonAsync(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
     {
         var content = data is String str
             ? new StringContent(str, Encoding.UTF8, "application/json")
@@ -275,7 +276,7 @@ public static class HttpHelper
     /// <param name="data">数据对象</param>
     /// <param name="headers">请求头</param>
     /// <returns>响应字符串</returns>
-    public static String PostJson(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostJsonAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
+    public static String PostJson(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostJsonAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>异步提交 Xml</summary>
     /// <param name="client">客户端</param>
@@ -284,7 +285,7 @@ public static class HttpHelper
     /// <param name="headers">请求头</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>响应字符串</returns>
-    public static async Task<String> PostXmlAsync(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
+    public static async Task<String> PostXmlAsync(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
     {
         var content = data is String str
             ? new StringContent(str, Encoding.UTF8, "application/xml")
@@ -298,7 +299,7 @@ public static class HttpHelper
     /// <param name="data">数据对象</param>
     /// <param name="headers">请求头</param>
     /// <returns>响应字符串</returns>
-    public static String PostXml(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostXmlAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
+    public static String PostXml(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostXmlAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>异步提交表单</summary>
     /// <param name="client">客户端</param>
@@ -307,7 +308,7 @@ public static class HttpHelper
     /// <param name="headers">请求头</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>响应字符串</returns>
-    public static async Task<String> PostFormAsync(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
+    public static async Task<String> PostFormAsync(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null, CancellationToken cancellationToken = default)
     {
         HttpContent content;
         if (data is String str)
@@ -344,7 +345,7 @@ public static class HttpHelper
     /// <param name="data">数据对象</param>
     /// <param name="headers">请求头</param>
     /// <returns>响应字符串</returns>
-    public static String PostForm(this HttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostFormAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
+    public static String PostForm(this BclHttpClient client, String requestUri, Object data, IDictionary<String, String>? headers = null) => client.PostFormAsync(requestUri, data, headers).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <summary>异步提交多段表单</summary>
     /// <param name="client">客户端</param>
@@ -352,7 +353,7 @@ public static class HttpHelper
     /// <param name="data">数据对象</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>响应字符串</returns>
-    public static async Task<String> PostMultipartFormAsync(this HttpClient client, String requestUri, Object data, CancellationToken cancellationToken = default)
+    public static async Task<String> PostMultipartFormAsync(this BclHttpClient client, String requestUri, Object data, CancellationToken cancellationToken = default)
     {
         var content = new MultipartFormDataContent();
         foreach (var item in GetDictionaryValues(data))
@@ -379,7 +380,7 @@ public static class HttpHelper
     /// <param name="requestUri">请求地址</param>
     /// <param name="headers">请求头</param>
     /// <returns>响应字符串</returns>
-    public static String GetString(this HttpClient client, String requestUri, IDictionary<String, String>? headers = null)
+    public static String GetString(this BclHttpClient client, String requestUri, IDictionary<String, String>? headers = null)
     {
         if (headers != null) client.AddHeaders(headers);
 #if NET5_0_OR_GREATER
@@ -395,7 +396,7 @@ public static class HttpHelper
     /// <param name="requestUri">请求地址</param>
     /// <param name="fileName">文件名</param>
     /// <returns>任务</returns>
-    public static async Task DownloadFileAsync(this HttpClient client, String requestUri, String fileName)
+    public static async Task DownloadFileAsync(this BclHttpClient client, String requestUri, String fileName)
     {
         fileName = fileName.GetFullPath();
         var stream = await client.GetStreamAsync(requestUri).ConfigureAwait(false);
@@ -430,7 +431,7 @@ public static class HttpHelper
     /// <param name="fileName">文件名</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>任务</returns>
-    public static async Task DownloadFileAsync(this HttpClient client, String requestUri, String fileName, CancellationToken cancellationToken)
+    public static async Task DownloadFileAsync(this BclHttpClient client, String requestUri, String fileName, CancellationToken cancellationToken)
     {
 #if NET5_0_OR_GREATER
         var stream = await client.GetStreamAsync(requestUri, cancellationToken).ConfigureAwait(false);
@@ -447,7 +448,7 @@ public static class HttpHelper
     /// <param name="expectedHash">预期哈希</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>任务</returns>
-    public static async Task DownloadFileAsync(this HttpClient client, String requestUri, String fileName, String? expectedHash, CancellationToken cancellationToken = default)
+    public static async Task DownloadFileAsync(this BclHttpClient client, String requestUri, String fileName, String? expectedHash, CancellationToken cancellationToken = default)
     {
         if (expectedHash.IsNullOrEmpty())
         {
@@ -533,7 +534,7 @@ public static class HttpHelper
     /// <param name="data">附带数据</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>响应字符串</returns>
-    public static async Task<String> UploadFileAsync(this HttpClient client, String requestUri, String fileName, Object? data = null, CancellationToken cancellationToken = default)
+    public static async Task<String> UploadFileAsync(this BclHttpClient client, String requestUri, String fileName, Object? data = null, CancellationToken cancellationToken = default)
     {
         var content = new MultipartFormDataContent();
         if (!fileName.IsNullOrEmpty())
@@ -721,7 +722,7 @@ public static class HttpHelper
     }
     #endregion
 
-    private static async Task<String> PostAsync(HttpClient client, String requestUri, HttpContent content, IDictionary<String, String>? headers, CancellationToken cancellationToken)
+    private static async Task<String> PostAsync(BclHttpClient client, String requestUri, HttpContent content, IDictionary<String, String>? headers, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, requestUri) { Content = content };
         if (headers != null)
@@ -762,7 +763,7 @@ public static class HttpHelper
         }
     }
 
-    private static HttpClient AddHeaders(this HttpClient client, IDictionary<String, String> headers)
+    private static BclHttpClient AddHeaders(this BclHttpClient client, IDictionary<String, String> headers)
     {
         foreach (var item in headers)
         {

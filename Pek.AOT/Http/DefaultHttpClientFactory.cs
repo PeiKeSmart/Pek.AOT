@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using BclHttpClient = System.Net.Http.HttpClient;
 
 using Pek.Log;
 using Pek.Net;
@@ -56,12 +57,12 @@ public class DefaultHttpClientFactory : IHttpClientFactory
     /// <summary>创建HttpClient</summary>
     /// <param name="name">名称</param>
     /// <returns>HttpClient</returns>
-    public virtual HttpClient CreateClient(String name)
+    public virtual BclHttpClient CreateClient(String name)
     {
         if (name == null) throw new ArgumentNullException(nameof(name));
 
         var handler = CreateHandler(name);
-        var client = new HttpClient(handler, disposeHandler: false);
+        var client = new BclHttpClient(handler, disposeHandler: false);
         client.SetUserAgent();
 
         return client;
