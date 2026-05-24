@@ -80,6 +80,22 @@ public static class JsonHelper
     /// <param name="typeInfo">类型信息</param>
     public static void Register<T>(JsonTypeInfo<T> typeInfo) => Register((JsonTypeInfo)typeInfo);
 
+    /// <summary>注册抽象服务类型到具体实现类型的映射</summary>
+    /// <typeparam name="TService">抽象服务类型</typeparam>
+    /// <typeparam name="TImplementation">具体实现类型</typeparam>
+    public static void RegisterServiceType<TService, TImplementation>() where TImplementation : class, TService =>
+        ServiceTypeResolver.Default.Register<TService, TImplementation>();
+
+    /// <summary>注册列表接口映射</summary>
+    /// <typeparam name="TItem">元素类型</typeparam>
+    public static void RegisterListType<TItem>() => ServiceTypeResolver.Default.RegisterList<TItem>();
+
+    /// <summary>注册字典接口映射</summary>
+    /// <typeparam name="TKey">键类型</typeparam>
+    /// <typeparam name="TValue">值类型</typeparam>
+    public static void RegisterDictionaryType<TKey, TValue>() where TKey : notnull =>
+        ServiceTypeResolver.Default.RegisterDictionary<TKey, TValue>();
+
     internal static Boolean TryGetTypeInfo(Type type, out JsonTypeInfo typeInfo)
     {
         if (_typeInfos.TryGetValue(type, out typeInfo!))
@@ -293,6 +309,8 @@ public class SystemJson : IJsonHost
         if (type == null) throw new ArgumentNullException(nameof(type));
         if (type == typeof(Object)) return Parse(json);
 
+        type = ResolveServiceType(type);
+
         if (JsonHelper.TryGetTypeInfo(type, out var typeInfo))
         {
             var result = JsonSerializer.Deserialize(json, typeInfo);
@@ -311,6 +329,8 @@ public class SystemJson : IJsonHost
     {
         if (obj == null) return null;
         if (targetType == null) throw new ArgumentNullException(nameof(targetType));
+
+        targetType = ResolveServiceType(targetType);
         if (targetType.IsInstanceOfType(obj)) return obj;
 
         var nullableType = Nullable.GetUnderlyingType(targetType);
@@ -402,6 +422,13 @@ public class SystemJson : IJsonHost
             return jsonOptions.EnumString ? SerializeString(value.ToString() ?? String.Empty) : System.Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture)?.ToString() ?? "0";
 
         throw new NotSupportedException($"Type {value.GetType().FullName} is not registered for AOT-safe JSON serialization. Register a JsonTypeInfo first.");
+    }
+
+    private Type ResolveServiceType(Type serviceType)
+    {
+        if (!serviceType.IsInterface && !serviceType.IsAbstract) return serviceType;
+
+        return ServiceTypeResolver.Default.Resolve(serviceType, ServiceProvider);
     }
 
     private static Boolean TrySerializeExtendable(Object value, JsonTypeInfo typeInfo, out String json)
