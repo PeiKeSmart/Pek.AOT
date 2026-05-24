@@ -22,6 +22,9 @@ public class ApiAction
     /// <remarks>如果指定控制器对象，则每次调用前不再实例化对象。</remarks>
     public Object? Controller { get; set; }
 
+    /// <summary>控制器工厂</summary>
+    internal Func<IServiceProvider?, Object?>? ControllerFactory { get; set; }
+
     /// <summary>是否二进制参数</summary>
     public Boolean IsPacketParameter { get; }
 

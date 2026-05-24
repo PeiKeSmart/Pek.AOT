@@ -10,7 +10,7 @@ public interface IApiManager
 
     /// <summary>注册服务提供类。该类的所有公开方法将直接暴露</summary>
     /// <typeparam name="TService">服务类型</typeparam>
-    void Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] TService>();
+    void Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors)] TService>();
 
     /// <summary>注册服务</summary>
     /// <param name="controller">控制器对象</param>

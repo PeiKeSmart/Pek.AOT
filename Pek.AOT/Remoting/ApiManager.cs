@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 
+using Pek.Model;
+
 namespace Pek.Remoting;
 
 /// <summary>接口管理器</summary>
@@ -13,7 +15,7 @@ public class ApiManager : IApiManager
 
     /// <summary>注册服务提供类。该类的所有公开方法将直接暴露</summary>
     /// <typeparam name="TService">服务类型</typeparam>
-    public void Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] TService>() => Register(typeof(TService), null, null);
+    public void Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors)] TService>() => Register(typeof(TService), null, null, static serviceProvider => CreateController<TService>(serviceProvider));
 
     /// <summary>注册服务</summary>
     /// <param name="controller">控制器对象</param>
@@ -23,7 +25,7 @@ public class ApiManager : IApiManager
     {
         if (controller == null) throw new ArgumentNullException(nameof(controller));
 
-        Register(controller.GetType(), controller, method);
+        Register(controller.GetType(), controller, method, null);
     }
 
     /// <summary>查找服务</summary>
@@ -37,13 +39,13 @@ public class ApiManager : IApiManager
         return api;
     }
 
-    private void Register([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type serviceType, Object? controller, String? method)
+    private void Register([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Object? controller, String? method, Func<IServiceProvider?, Object?>? controllerFactory)
     {
         if (serviceType == null) throw new ArgumentNullException(nameof(serviceType));
 
         if (!String.IsNullOrEmpty(method))
         {
-            var api = CreateAction(serviceType, controller, method!);
+            var api = CreateAction(serviceType, controller, controllerFactory, method!);
             if (api != null) _services[api.Name] = api;
 
             return;
@@ -51,18 +53,18 @@ public class ApiManager : IApiManager
 
         foreach (var item in GetCandidateMethods(serviceType))
         {
-            var api = new ApiAction(item, serviceType) { Controller = controller };
+            var api = new ApiAction(item, serviceType) { Controller = controller, ControllerFactory = controllerFactory };
             _services[api.Name] = api;
         }
     }
 
-    private static ApiAction? CreateAction([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type serviceType, Object? controller, String method)
+    private static ApiAction? CreateAction([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType, Object? controller, Func<IServiceProvider?, Object?>? controllerFactory, String method)
     {
         var match = GetCandidateMethods(serviceType)
             .FirstOrDefault(e => String.Equals(e.Name, method, StringComparison.OrdinalIgnoreCase) || String.Equals(ApiAction.GetName(serviceType, e), method, StringComparison.OrdinalIgnoreCase));
         if (match == null) return null;
 
-        return new ApiAction(match, serviceType) { Controller = controller };
+        return new ApiAction(match, serviceType) { Controller = controller, ControllerFactory = controllerFactory };
     }
 
     private static IEnumerable<MethodInfo> GetCandidateMethods([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type serviceType)
@@ -76,5 +78,12 @@ public class ApiManager : IApiManager
 
             yield return item;
         }
+    }
+
+    private static Object? CreateController<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicConstructors)] TService>(IServiceProvider? serviceProvider)
+    {
+        serviceProvider ??= ObjectContainer.Provider;
+
+        return serviceProvider.GetService(typeof(TService)) ?? ObjectContainer.CreateInstance(typeof(TService), serviceProvider, null, false);
     }
 }
