@@ -18,12 +18,18 @@ public class ApiAction
     /// <summary>方法</summary>
     public MethodInfo Method { get; }
 
+    /// <summary>方法参数</summary>
+    internal ParameterInfo[] Parameters { get; }
+
     /// <summary>控制器对象</summary>
     /// <remarks>如果指定控制器对象，则每次调用前不再实例化对象。</remarks>
     public Object? Controller { get; set; }
 
     /// <summary>控制器工厂</summary>
     internal Func<IServiceProvider?, Object?>? ControllerFactory { get; set; }
+
+    /// <summary>动作执行器</summary>
+    internal Func<Object, ControllerContext, Object?>? Executor { get; set; }
 
     /// <summary>是否二进制参数</summary>
     public Boolean IsPacketParameter { get; }
@@ -49,8 +55,8 @@ public class ApiAction
         Type = type;
         Method = method;
 
-        var parameters = method.GetParameters();
-        if (parameters.Length == 1 && typeof(IPacket).IsAssignableFrom(parameters[0].ParameterType)) IsPacketParameter = true;
+        Parameters = method.GetParameters();
+        if (Parameters.Length == 1 && typeof(IPacket).IsAssignableFrom(Parameters[0].ParameterType)) IsPacketParameter = true;
 
         if (typeof(IPacket).IsAssignableFrom(method.ReturnType)) IsPacketReturn = true;
     }

@@ -144,7 +144,8 @@ public class ApiServer : ApiHost, IServer
         if (Active) return;
 
         Encoder ??= new JsonEncoder();
-        if (Handler == null) throw new InvalidOperationException("未配置 IApiHandler。请提供 AOT 安全的处理器实现后再启动服务。");
+        Handler ??= new ApiHandler();
+        if (Handler is ApiHandler apiHandler) apiHandler.Host = this;
 
         Encoder.Log = EncoderLog;
 
