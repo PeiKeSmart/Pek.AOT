@@ -178,6 +178,9 @@ public class ApiHandler : IApiHandler
 
     private static Func<Object, ControllerContext, Object?> CreateExecutor(ApiAction api)
     {
+        var registered = ApiActionRegistry.Resolve(api.Type, api.Name);
+        if (registered != null) return (controller, context) => registered(controller, context).ConfigureAwait(false).GetAwaiter().GetResult();
+
         if (api.Parameters.Length > 4) throw new NotSupportedException($"AOT-safe ApiHandler currently supports up to 4 parameters. Action [{api.Name}] has {api.Parameters.Length} parameters.");
         if (api.Parameters.Any(static item => item.ParameterType.IsValueType)) throw new NotSupportedException($"AOT-safe ApiHandler does not support value-type parameters yet. Action [{api.Name}] contains unsupported parameter types.");
         if (api.Parameters.Any(static item => String.Equals(item.ParameterType.FullName, "Pek.Data.Packet", StringComparison.Ordinal))) throw new NotSupportedException($"AOT-safe ApiHandler does not support legacy Packet parameters. Action [{api.Name}] should use IPacket or Byte[].");

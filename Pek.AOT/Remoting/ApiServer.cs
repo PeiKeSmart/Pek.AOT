@@ -62,7 +62,7 @@ public class ApiServer : ApiHost, IServer
 
         Manager = new ApiManager();
 
-        Register<ApiController>();
+        RegisterControllerActions<ApiController>();
     }
 
     /// <summary>使用指定端口实例化网络服务应用接口提供者</summary>
@@ -88,6 +88,15 @@ public class ApiServer : ApiHost, IServer
     /// <summary>注册服务提供类。该类的所有公开方法将直接暴露</summary>
     /// <typeparam name="TService">服务类型</typeparam>
     public void Register<[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)] TService>() => Manager.Register<TService>();
+
+    /// <summary>注册服务并注册其静态声明的Actions</summary>
+    /// <typeparam name="TService">服务类型</typeparam>
+    public void RegisterControllerActions<[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+        where TService : class, IApiControllerRegistration<TService>
+    {
+        Register<TService>();
+        TService.MapActions(this);
+    }
 
     /// <summary>注册服务</summary>
     /// <param name="controller">控制器对象</param>

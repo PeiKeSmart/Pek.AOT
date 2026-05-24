@@ -14,7 +14,7 @@ using NewLife.Reflection;
 namespace Pek.Remoting;
 
 /// <summary>API控制器</summary>
-public class ApiController : IApi
+public class ApiController : IApi, IApiControllerRegistration<ApiController>
 {
     /// <summary>主机</summary>
     public IApiHost Host { get; set; } = null!;
@@ -23,6 +23,14 @@ public class ApiController : IApi
     public IApiSession Session { get; set; } = null!;
 
     private String[]? _all;
+
+    static void IApiControllerRegistration<ApiController>.MapActions(ApiServer server)
+    {
+        if (server == null) throw new ArgumentNullException(nameof(server));
+
+        ApiActionRegistry.Register<ApiController, String[]>("Api/All", static controller => controller.All());
+        ApiActionRegistry.Register<ApiController, String, Object>("Api/Info", ApiActionRegistry.FromParameter<String>("state"), static (controller, state) => controller.Info(state));
+    }
 
     /// <summary>获取所有接口</summary>
     /// <returns>接口列表</returns>
