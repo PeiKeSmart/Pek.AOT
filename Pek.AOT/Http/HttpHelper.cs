@@ -799,7 +799,15 @@ public static class HttpHelper
 
         var jsonOptions = JsonHelper.Default.Options;
         var options = new JsonSerializerOptions { WriteIndented = jsonOptions.WriteIndented };
+        if (jsonOptions.CamelCase) options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         if (jsonOptions.IgnoreNullValues) options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault;
+        if (jsonOptions.IgnoreCycles) options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.Converters.Add(new LocalTimeConverter { DateTimeFormat = jsonOptions.FullTime ? "yyyy-MM-dd HH:mm:ss" : "O" });
+        if (jsonOptions.Int64AsString)
+        {
+            options.Converters.Add(new SafeInt64Converter());
+            options.Converters.Add(new SafeUInt64Converter());
+        }
         return data.ToXml(data.GetType(), options);
     }
 

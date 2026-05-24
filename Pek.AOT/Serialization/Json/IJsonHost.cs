@@ -8,6 +8,7 @@ using System.Text.Json.Serialization.Metadata;
 
 using Pek.Collections;
 using Pek.Configuration;
+using Pek.Data;
 
 namespace Pek.Serialization;
 
@@ -273,7 +274,11 @@ public class SystemJson : IJsonHost
         if (value == null) return "null";
 
         if (JsonHelper.TryGetTypeInfo(value.GetType(), out var typeInfo))
+        {
+            if (TrySerializeExtendable(value, typeInfo, out var extendJson)) return extendJson;
+
             return JsonSerializer.Serialize(value, typeInfo);
+        }
 
         return SerializeKnownValue(value, jsonOptions ?? Options);
     }
@@ -289,7 +294,11 @@ public class SystemJson : IJsonHost
         if (type == typeof(Object)) return Parse(json);
 
         if (JsonHelper.TryGetTypeInfo(type, out var typeInfo))
-            return JsonSerializer.Deserialize(json, typeInfo);
+        {
+            var result = JsonSerializer.Deserialize(json, typeInfo);
+            AttachExtensionItems(result, json, typeInfo);
+            return result;
+        }
 
         return DeserializeKnownValue(json, type);
     }
@@ -393,6 +402,40 @@ public class SystemJson : IJsonHost
             return jsonOptions.EnumString ? SerializeString(value.ToString() ?? String.Empty) : System.Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture)?.ToString() ?? "0";
 
         throw new NotSupportedException($"Type {value.GetType().FullName} is not registered for AOT-safe JSON serialization. Register a JsonTypeInfo first.");
+    }
+
+    private static Boolean TrySerializeExtendable(Object value, JsonTypeInfo typeInfo, out String json)
+    {
+        json = String.Empty;
+
+        if (value is not IExtend extend || typeInfo.Kind != JsonTypeInfoKind.Object) return false;
+
+        var node = JsonNode.Parse(JsonSerializer.Serialize(value, typeInfo)) as JsonObject;
+        if (node == null) return false;
+
+        foreach (var item in extend.Items)
+        {
+            node[item.Key] = CreateJsonNode(item.Value);
+        }
+
+        json = node.ToJsonString(typeInfo.Options);
+        return true;
+    }
+
+    private static void AttachExtensionItems(Object? obj, String json, JsonTypeInfo typeInfo)
+    {
+        if (obj is not IExtend extend || typeInfo.Kind != JsonTypeInfoKind.Object) return;
+
+        var node = JsonNode.Parse(json) as JsonObject;
+        if (node == null) return;
+
+        var names = new HashSet<String>(typeInfo.Properties.Select(property => property.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var item in node)
+        {
+            if (names.Contains(item.Key)) continue;
+
+            extend.Items[item.Key] = ConvertNode(item.Value);
+        }
     }
 
     private static Object? DeserializeKnownValue(String json, Type type)
@@ -504,8 +547,18 @@ public class SystemJson : IJsonHost
             WriteIndented = jsonOptions.WriteIndented,
         };
 
+        if (jsonOptions.CamelCase) options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         if (jsonOptions.IgnoreNullValues)
             options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault;
+        if (jsonOptions.IgnoreCycles)
+            options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+
+        options.Converters.Add(new LocalTimeConverter { DateTimeFormat = jsonOptions.FullTime ? "yyyy-MM-dd HH:mm:ss" : "O" });
+        if (jsonOptions.Int64AsString)
+        {
+            options.Converters.Add(new SafeInt64Converter());
+            options.Converters.Add(new SafeUInt64Converter());
+        }
 
         return options;
     }
