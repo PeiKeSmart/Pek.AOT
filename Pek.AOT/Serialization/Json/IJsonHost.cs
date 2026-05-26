@@ -1,10 +1,12 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
 
 using Pek.Collections;
 using Pek.Configuration;
@@ -305,6 +307,44 @@ public static class JsonHelper
 /// <summary>System.Text.Json标准序列化</summary>
 public class SystemJson : IJsonHost
 {
+    /// <summary>获取默认序列化配置</summary>
+    /// <returns>默认序列化配置</returns>
+    public static JsonSerializerOptions GetDefaultOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNamingPolicy = null,
+        };
+
+        Apply(options, true);
+        return options;
+    }
+
+    /// <summary>将当前仓可用的 Json 兼容配置应用到指定选项</summary>
+    /// <param name="options">序列化配置</param>
+    /// <param name="web">是否为 Web 场景</param>
+    /// <returns>传入的选项实例</returns>
+    public static JsonSerializerOptions Apply(JsonSerializerOptions options, Boolean web = false)
+    {
+        if (options == null) throw new ArgumentNullException(nameof(options));
+
+        options.Encoder = JavaScriptEncoder.Create(UnicodeRanges.All);
+        AddConverter<LocalTimeConverter>(options, static () => new LocalTimeConverter());
+        AddConverter<TypeConverter>(options, static () => new TypeConverter());
+        AddConverter<ExtendableConverter>(options, static () => new ExtendableConverter());
+
+        if (web)
+        {
+            AddConverter<SafeInt64Converter>(options, static () => new SafeInt64Converter());
+            AddConverter<SafeUInt64Converter>(options, static () => new SafeUInt64Converter());
+        }
+
+        if (options.TypeInfoResolver != null && options.TypeInfoResolver is not ModifierTypeInfoResolver)
+            options.TypeInfoResolver = new ModifierTypeInfoResolver(options.TypeInfoResolver);
+
+        return options;
+    }
+
     /// <summary>服务提供者。用于反序列化时构造内部成员对象</summary>
     public IServiceProvider ServiceProvider { get; set; } = NullServiceProvider.Instance;
 
@@ -635,20 +675,45 @@ public class SystemJson : IJsonHost
             WriteIndented = jsonOptions.WriteIndented,
         };
 
+        Apply(options);
+
         if (jsonOptions.CamelCase) options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         if (jsonOptions.IgnoreNullValues)
             options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault;
         if (jsonOptions.IgnoreCycles)
             options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 
-        options.Converters.Add(new LocalTimeConverter { DateTimeFormat = jsonOptions.FullTime ? "yyyy-MM-dd HH:mm:ss" : "O" });
+        ReplaceLocalTimeConverter(options, jsonOptions.FullTime ? "yyyy-MM-dd HH:mm:ss" : "O");
         if (jsonOptions.Int64AsString)
         {
-            options.Converters.Add(new SafeInt64Converter());
-            options.Converters.Add(new SafeUInt64Converter());
+            AddConverter<SafeInt64Converter>(options, static () => new SafeInt64Converter());
+            AddConverter<SafeUInt64Converter>(options, static () => new SafeUInt64Converter());
         }
 
         return options;
+    }
+
+    private static void AddConverter<TConverter>(JsonSerializerOptions options, Func<TConverter> factory) where TConverter : JsonConverter
+    {
+        foreach (var item in options.Converters)
+        {
+            if (item is TConverter) return;
+        }
+
+        options.Converters.Add(factory());
+    }
+
+    private static void ReplaceLocalTimeConverter(JsonSerializerOptions options, String dateTimeFormat)
+    {
+        for (var i = 0; i < options.Converters.Count; i++)
+        {
+            if (options.Converters[i] is not LocalTimeConverter) continue;
+
+            options.Converters.RemoveAt(i);
+            break;
+        }
+
+        options.Converters.Add(new LocalTimeConverter { DateTimeFormat = dateTimeFormat });
     }
 
     private static String SerializeString(String value) => $"\"{JsonEncodedText.Encode(value).ToString()}\"";
@@ -772,5 +837,20 @@ public class SystemJson : IJsonHost
         public static readonly NullServiceProvider Instance = new();
 
         public Object? GetService(Type serviceType) => null;
+    }
+
+    private sealed class ModifierTypeInfoResolver : IJsonTypeInfoResolver
+    {
+        private readonly IJsonTypeInfoResolver _inner;
+
+        public ModifierTypeInfoResolver(IJsonTypeInfoResolver inner) => _inner = inner;
+
+        public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options)
+        {
+            var typeInfo = _inner.GetTypeInfo(type, options);
+            if (typeInfo != null) DataMemberResolver.Modifier(typeInfo);
+
+            return typeInfo;
+        }
     }
 }
