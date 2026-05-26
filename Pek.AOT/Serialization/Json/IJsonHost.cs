@@ -31,15 +31,22 @@ public interface IJsonHost
 
     /// <summary>写入对象，得到Json字符串</summary>
     /// <param name="value">对象</param>
-    /// <param name="jsonOptions">序列化选项</param>
+    /// <param name="jsonOptions">序列化选项。为 null 时使用 <see cref="Options"/></param>
     /// <returns>Json字符串</returns>
-    String Write(Object value, JsonOptions jsonOptions);
+    String Write(Object value, JsonOptions? jsonOptions);
 
     /// <summary>从Json字符串中读取对象</summary>
     /// <param name="json">Json字符串</param>
     /// <param name="type">目标类型</param>
     /// <returns>对象</returns>
     Object? Read(String json, Type type);
+
+    /// <summary>从Json字符串中读取对象</summary>
+    /// <param name="json">Json字符串</param>
+    /// <param name="type">目标类型</param>
+    /// <param name="jsonOptions">序列化选项。为 null 时使用 <see cref="Options"/></param>
+    /// <returns>对象</returns>
+    Object? Read(String json, Type type, JsonOptions? jsonOptions);
 
     /// <summary>类型转换</summary>
     /// <param name="obj">源对象</param>
@@ -133,7 +140,7 @@ public static class JsonHelper
     /// <param name="value">对象</param>
     /// <param name="jsonOptions">序列化选项</param>
     /// <returns>Json字符串</returns>
-    public static String ToJson(this Object value, JsonOptions jsonOptions) => Default.Write(value, jsonOptions);
+    public static String ToJson(this Object value, JsonOptions? jsonOptions) => Default.Write(value, jsonOptions);
 
     /// <summary>从Json字符串中读取对象</summary>
     /// <param name="json">Json字符串</param>
@@ -143,7 +150,19 @@ public static class JsonHelper
     {
         if (String.IsNullOrWhiteSpace(json)) return null;
 
-        return Default.Read(json, type);
+        return Default.Read(json, type, null);
+    }
+
+    /// <summary>从Json字符串中读取对象</summary>
+    /// <param name="json">Json字符串</param>
+    /// <param name="type">目标类型</param>
+    /// <param name="jsonOptions">序列化选项。为 null 时使用默认 <see cref="IJsonHost.Options"/></param>
+    /// <returns>对象</returns>
+    public static Object? ToJsonEntity(this String json, Type type, JsonOptions? jsonOptions)
+    {
+        if (String.IsNullOrWhiteSpace(json)) return null;
+
+        return Default.Read(json, type, jsonOptions);
     }
 
     /// <summary>从Json字符串中读取对象</summary>
@@ -154,7 +173,19 @@ public static class JsonHelper
     {
         if (String.IsNullOrWhiteSpace(json)) return default;
 
-        return (T?)Default.Read(json, typeof(T));
+        return (T?)Default.Read(json, typeof(T), null);
+    }
+
+    /// <summary>从Json字符串中读取对象</summary>
+    /// <typeparam name="T">目标类型</typeparam>
+    /// <param name="json">Json字符串</param>
+    /// <param name="jsonOptions">序列化选项。为 null 时使用默认 <see cref="IJsonHost.Options"/></param>
+    /// <returns>对象</returns>
+    public static T? ToJsonEntity<T>(this String json, JsonOptions? jsonOptions)
+    {
+        if (String.IsNullOrWhiteSpace(json)) return default;
+
+        return (T?)Default.Read(json, typeof(T), jsonOptions);
     }
 
     /// <summary>从Json字符串中反序列化对象</summary>
@@ -162,7 +193,15 @@ public static class JsonHelper
     /// <param name="jsonHost">Json主机</param>
     /// <param name="json">Json字符串</param>
     /// <returns>对象</returns>
-    public static T? Read<T>(this IJsonHost jsonHost, String json) => (T?)jsonHost.Read(json, typeof(T));
+    public static T? Read<T>(this IJsonHost jsonHost, String json) => (T?)jsonHost.Read(json, typeof(T), null);
+
+    /// <summary>从Json字符串中反序列化对象</summary>
+    /// <typeparam name="T">目标类型</typeparam>
+    /// <param name="jsonHost">Json主机</param>
+    /// <param name="json">Json字符串</param>
+    /// <param name="jsonOptions">序列化选项。为 null 时使用默认 <see cref="IJsonHost.Options"/></param>
+    /// <returns>对象</returns>
+    public static T? Read<T>(this IJsonHost jsonHost, String json, JsonOptions? jsonOptions = null) => (T?)jsonHost.Read(json, typeof(T), jsonOptions);
 
     /// <summary>格式化Json文本</summary>
     /// <param name="json">Json字符串</param>
@@ -279,15 +318,30 @@ public class SystemJson : IJsonHost
     /// <param name="camelCase">是否驼峰命名</param>
     /// <returns>Json字符串</returns>
     public String Write(Object value, Boolean indented = false, Boolean nullValue = true, Boolean camelCase = false)
-        => Write(value, new JsonOptions { WriteIndented = indented, IgnoreNullValues = !nullValue, CamelCase = camelCase });
+    {
+        var jsonOptions = Options;
+        var needCopy = (indented && !jsonOptions.WriteIndented) ||
+                       (!nullValue && !jsonOptions.IgnoreNullValues) ||
+                       (camelCase && !jsonOptions.CamelCase);
+        if (!needCopy)
+            return Write(value, (JsonOptions?)null);
+
+        var newOptions = new JsonOptions(jsonOptions);
+        if (indented) newOptions.WriteIndented = true;
+        if (!nullValue) newOptions.IgnoreNullValues = true;
+        if (camelCase) newOptions.CamelCase = true;
+        return Write(value, newOptions);
+    }
 
     /// <summary>写入对象，得到Json字符串</summary>
     /// <param name="value">对象</param>
     /// <param name="jsonOptions">序列化选项</param>
     /// <returns>Json字符串</returns>
-    public String Write(Object value, JsonOptions jsonOptions)
+    public String Write(Object value, JsonOptions? jsonOptions)
     {
         if (value == null) return "null";
+
+        jsonOptions ??= Options;
 
         if (JsonHelper.TryGetTypeInfo(value.GetType(), out var typeInfo))
         {
@@ -296,14 +350,21 @@ public class SystemJson : IJsonHost
             return JsonSerializer.Serialize(value, typeInfo);
         }
 
-        return SerializeKnownValue(value, jsonOptions ?? Options);
+        return SerializeKnownValue(value, jsonOptions);
     }
 
     /// <summary>从Json字符串中读取对象</summary>
     /// <param name="json">Json字符串</param>
     /// <param name="type">目标类型</param>
     /// <returns>对象</returns>
-    public Object? Read(String json, Type type)
+    public Object? Read(String json, Type type) => Read(json, type, null);
+
+    /// <summary>从Json字符串中读取对象</summary>
+    /// <param name="json">Json字符串</param>
+    /// <param name="type">目标类型</param>
+    /// <param name="jsonOptions">序列化选项</param>
+    /// <returns>对象</returns>
+    public Object? Read(String json, Type type, JsonOptions? jsonOptions)
     {
         if (String.IsNullOrWhiteSpace(json)) return null;
         if (type == null) throw new ArgumentNullException(nameof(type));
@@ -318,7 +379,7 @@ public class SystemJson : IJsonHost
             return result;
         }
 
-        return DeserializeKnownValue(json, type);
+        return DeserializeKnownValue(json, type, jsonOptions ?? Options);
     }
 
     /// <summary>类型转换</summary>
@@ -346,7 +407,7 @@ public class SystemJson : IJsonHost
             if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal) || trimmed == "null")
                 return Read(trimmed, actualType);
 
-            return ChangeScalarValue(trimmed, actualType);
+            return ChangeScalarValue(trimmed, actualType, Options);
         }
 
         if (actualType.IsEnum)
@@ -465,7 +526,7 @@ public class SystemJson : IJsonHost
         }
     }
 
-    private static Object? DeserializeKnownValue(String json, Type type)
+    private static Object? DeserializeKnownValue(String json, Type type, JsonOptions jsonOptions)
     {
         var nullableType = Nullable.GetUnderlyingType(type);
         var actualType = nullableType ?? type;
@@ -498,8 +559,8 @@ public class SystemJson : IJsonHost
         if (actualType == typeof(Single)) return Single.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture);
         if (actualType == typeof(Double)) return Double.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture);
         if (actualType == typeof(Decimal)) return Decimal.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture);
-        if (actualType == typeof(DateTime)) return DateTime.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-        if (actualType == typeof(DateTimeOffset)) return DateTimeOffset.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        if (actualType == typeof(DateTime)) return ParseDateTime(GetJsonScalarText(node), jsonOptions);
+        if (actualType == typeof(DateTimeOffset)) return ParseDateTimeOffset(GetJsonScalarText(node), jsonOptions);
         if (actualType == typeof(TimeSpan)) return TimeSpan.Parse(GetJsonScalarText(node), CultureInfo.InvariantCulture);
         if (actualType == typeof(Guid)) return Guid.Parse(GetJsonScalarText(node));
         if (actualType == typeof(Byte[])) return System.Convert.FromBase64String(GetJsonScalarText(node));
@@ -543,7 +604,7 @@ public class SystemJson : IJsonHost
         return true;
     }
 
-    private static Object? ChangeScalarValue(String value, Type type)
+    private static Object? ChangeScalarValue(String value, Type type, JsonOptions jsonOptions)
     {
         if (type == typeof(String)) return value;
         if (type == typeof(Boolean)) return Boolean.Parse(value);
@@ -558,8 +619,8 @@ public class SystemJson : IJsonHost
         if (type == typeof(Single)) return Single.Parse(value, CultureInfo.InvariantCulture);
         if (type == typeof(Double)) return Double.Parse(value, CultureInfo.InvariantCulture);
         if (type == typeof(Decimal)) return Decimal.Parse(value, CultureInfo.InvariantCulture);
-        if (type == typeof(DateTime)) return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-        if (type == typeof(DateTimeOffset)) return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        if (type == typeof(DateTime)) return ParseDateTime(value, jsonOptions);
+        if (type == typeof(DateTimeOffset)) return ParseDateTimeOffset(value, jsonOptions);
         if (type == typeof(TimeSpan)) return TimeSpan.Parse(value, CultureInfo.InvariantCulture);
         if (type == typeof(Guid)) return Guid.Parse(value);
         if (type.IsEnum) return Enum.Parse(type, value, true);
@@ -567,7 +628,7 @@ public class SystemJson : IJsonHost
         throw new NotSupportedException($"Type {type.FullName} is not supported by scalar conversion.");
     }
 
-    private static JsonSerializerOptions CreateSerializerOptions(JsonOptions jsonOptions)
+    internal static JsonSerializerOptions CreateSerializerOptions(JsonOptions jsonOptions)
     {
         var options = new JsonSerializerOptions()
         {
@@ -594,6 +655,16 @@ public class SystemJson : IJsonHost
 
     private static String FormatDateTime(DateTime value, JsonOptions jsonOptions)
         => jsonOptions.FullTime ? value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) : value.ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTime ParseDateTime(String value, JsonOptions jsonOptions)
+        => jsonOptions.FullTime
+            ? DateTime.ParseExact(value, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            : DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    private static DateTimeOffset ParseDateTimeOffset(String value, JsonOptions jsonOptions)
+        => jsonOptions.FullTime
+            ? DateTimeOffset.ParseExact(value, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            : DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     private static String GetJsonScalarText(JsonNode node)
     {

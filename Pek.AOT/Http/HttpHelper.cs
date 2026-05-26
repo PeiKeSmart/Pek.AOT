@@ -798,16 +798,7 @@ public static class HttpHelper
         if (data is IDictionary<String, String> dictionary) return dictionary.ToXml();
 
         var jsonOptions = JsonHelper.Default.Options;
-        var options = new JsonSerializerOptions { WriteIndented = jsonOptions.WriteIndented };
-        if (jsonOptions.CamelCase) options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        if (jsonOptions.IgnoreNullValues) options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault;
-        if (jsonOptions.IgnoreCycles) options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-        options.Converters.Add(new LocalTimeConverter { DateTimeFormat = jsonOptions.FullTime ? "yyyy-MM-dd HH:mm:ss" : "O" });
-        if (jsonOptions.Int64AsString)
-        {
-            options.Converters.Add(new SafeInt64Converter());
-            options.Converters.Add(new SafeUInt64Converter());
-        }
+        var options = SystemJson.CreateSerializerOptions(jsonOptions);
         return data.ToXml(data.GetType(), options);
     }
 
