@@ -339,8 +339,17 @@ public class SystemJson : IJsonHost
             AddConverter<SafeUInt64Converter>(options, static () => new SafeUInt64Converter());
         }
 
-        if (options.TypeInfoResolver != null && options.TypeInfoResolver is not ModifierTypeInfoResolver)
+        if (options.TypeInfoResolver is ModifierTypeInfoResolver)
+            return options;
+
+        if (options.TypeInfoResolver != null)
+        {
             options.TypeInfoResolver = new ModifierTypeInfoResolver(options.TypeInfoResolver);
+            return options;
+        }
+
+        if (JsonSerializer.IsReflectionEnabledByDefault)
+            options.TypeInfoResolver = new ModifierTypeInfoResolver();
 
         return options;
     }
@@ -841,16 +850,28 @@ public class SystemJson : IJsonHost
 
     private sealed class ModifierTypeInfoResolver : IJsonTypeInfoResolver
     {
-        private readonly IJsonTypeInfoResolver _inner;
+        private readonly IJsonTypeInfoResolver? _inner;
+
+        public ModifierTypeInfoResolver() { }
 
         public ModifierTypeInfoResolver(IJsonTypeInfoResolver inner) => _inner = inner;
 
         public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options)
         {
-            var typeInfo = _inner.GetTypeInfo(type, options);
+            var typeInfo = _inner != null ? _inner.GetTypeInfo(type, options) : GetFallbackTypeInfo(type, options);
             if (typeInfo != null) DataMemberResolver.Modifier(typeInfo);
 
             return typeInfo;
+        }
+
+        private static JsonTypeInfo? GetFallbackTypeInfo(Type type, JsonSerializerOptions options)
+        {
+            var fallbackOptions = new JsonSerializerOptions(options)
+            {
+                TypeInfoResolver = null,
+            };
+
+            return fallbackOptions.GetTypeInfo(type);
         }
     }
 }

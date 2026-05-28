@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 using Pek.Log;
 using Pek.Configuration;
+using Pek.Serialization;
 
 namespace Pek.Configuration;
 
@@ -469,8 +470,10 @@ public abstract class Config<TConfig> : Config where TConfig : Config<TConfig>, 
         {
             TypeInfoResolver = jsonContext,
             WriteIndented = writeIndented,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
+
+        SystemJson.Apply(jsonOptions);
+        jsonOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
 
         if (useCamelCase)
         {
