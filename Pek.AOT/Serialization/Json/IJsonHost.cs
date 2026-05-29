@@ -357,8 +357,25 @@ public class SystemJson : IJsonHost
     /// <summary>服务提供者。用于反序列化时构造内部成员对象</summary>
     public IServiceProvider ServiceProvider { get; set; } = NullServiceProvider.Instance;
 
+    /// <summary>基础 System.Text.Json 配置</summary>
+    public JsonSerializerOptions SerializerOptions
+    {
+        get => _serializerOptions;
+        set
+        {
+            _serializerOptions = value ?? throw new ArgumentNullException(nameof(value));
+            _cachedSerializerOptions = null;
+        }
+    }
+
     /// <summary>配置项</summary>
     public JsonOptions Options { get; set; } = new();
+
+    private JsonSerializerOptions _serializerOptions = null!;
+    private volatile JsonSerializerOptions? _cachedSerializerOptions;
+
+    /// <summary>实例化</summary>
+    public SystemJson() => SerializerOptions = GetDefaultOptions();
 
     /// <summary>写入对象，得到Json字符串</summary>
     /// <param name="value">对象</param>
@@ -399,7 +416,7 @@ public class SystemJson : IJsonHost
             return JsonSerializer.Serialize(value, typeInfo);
         }
 
-        return SerializeKnownValue(value, jsonOptions);
+        return SerializeKnownValue(value, jsonOptions, GetSerializerOptions(jsonOptions));
     }
 
     /// <summary>从Json字符串中读取对象</summary>
@@ -468,7 +485,7 @@ public class SystemJson : IJsonHost
         if (actualType == typeof(Guid)) return obj is Guid guid ? guid : Guid.Parse(System.Convert.ToString(obj, CultureInfo.InvariantCulture) ?? String.Empty);
         if (actualType == typeof(TimeSpan)) return obj is TimeSpan span ? span : TimeSpan.Parse(System.Convert.ToString(obj, CultureInfo.InvariantCulture) ?? String.Empty, CultureInfo.InvariantCulture);
         if (actualType == typeof(JsonNode) || actualType == typeof(JsonObject) || actualType == typeof(JsonArray))
-            return obj as JsonNode ?? JsonNode.Parse(SerializeKnownValue(obj, Options));
+            return obj as JsonNode ?? JsonNode.Parse(SerializeKnownValue(obj, Options, GetSerializerOptions(Options)));
 
         if (obj is IDictionary<String, Object?> or IList<Object?>)
         {
@@ -502,7 +519,15 @@ public class SystemJson : IJsonHost
     /// <returns>字典结果</returns>
     public IDictionary<String, Object?>? Decode(String json) => Parse(json) as IDictionary<String, Object?>;
 
-    private static String SerializeKnownValue(Object value, JsonOptions jsonOptions)
+    private JsonSerializerOptions GetSerializerOptions(JsonOptions? jsonOptions)
+    {
+        if (jsonOptions == null || ReferenceEquals(jsonOptions, Options))
+            return _cachedSerializerOptions ??= CreateSerializerOptions(Options, SerializerOptions);
+
+        return CreateSerializerOptions(jsonOptions, SerializerOptions);
+    }
+
+    private static String SerializeKnownValue(Object value, JsonOptions jsonOptions, JsonSerializerOptions serializerOptions)
     {
         if (value is String stringValue) return SerializeString(stringValue);
         if (value is Boolean booleanValue) return booleanValue ? "true" : "false";
@@ -522,11 +547,11 @@ public class SystemJson : IJsonHost
         if (value is TimeSpan timeSpanValue) return SerializeString(timeSpanValue.ToString("c", CultureInfo.InvariantCulture));
         if (value is Guid guidValue) return SerializeString(guidValue.ToString());
         if (value is Byte[] buffer) return SerializeString(System.Convert.ToBase64String(buffer));
-        if (value is JsonNode node) return node.ToJsonString(CreateSerializerOptions(jsonOptions));
+        if (value is JsonNode node) return node.ToJsonString(serializerOptions);
         if (value is IDictionary or IEnumerable)
         {
             var container = CreateJsonNode(value);
-            if (container != null) return container.ToJsonString(CreateSerializerOptions(jsonOptions));
+            if (container != null) return container.ToJsonString(serializerOptions);
         }
         if (value.GetType().IsEnum)
             return jsonOptions.EnumString ? SerializeString(value.ToString() ?? String.Empty) : System.Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture)?.ToString() ?? "0";
@@ -677,14 +702,17 @@ public class SystemJson : IJsonHost
         throw new NotSupportedException($"Type {type.FullName} is not supported by scalar conversion.");
     }
 
-    internal static JsonSerializerOptions CreateSerializerOptions(JsonOptions jsonOptions)
+    internal static JsonSerializerOptions CreateSerializerOptions(JsonOptions jsonOptions) => CreateSerializerOptions(jsonOptions, null);
+
+    internal static JsonSerializerOptions CreateSerializerOptions(JsonOptions jsonOptions, JsonSerializerOptions? baseOptions)
     {
-        var options = new JsonSerializerOptions()
+        var options = baseOptions != null ? new JsonSerializerOptions(baseOptions) : new JsonSerializerOptions()
         {
             WriteIndented = jsonOptions.WriteIndented,
         };
 
-        Apply(options);
+        if (baseOptions == null) Apply(options);
+        options.WriteIndented = jsonOptions.WriteIndented;
 
         if (jsonOptions.CamelCase) options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         if (jsonOptions.IgnoreNullValues)
