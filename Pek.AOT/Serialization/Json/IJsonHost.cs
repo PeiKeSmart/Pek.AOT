@@ -408,15 +408,16 @@ public class SystemJson : IJsonHost
         if (value == null) return "null";
 
         jsonOptions ??= Options;
+        var serializerOptions = GetSerializerOptions(jsonOptions);
 
-        if (JsonHelper.TryGetTypeInfo(value.GetType(), out var typeInfo))
+        if (TryGetJsonTypeInfo(value.GetType(), serializerOptions, out var typeInfo))
         {
             if (TrySerializeExtendable(value, typeInfo, out var extendJson)) return extendJson;
 
             return JsonSerializer.Serialize(value, typeInfo);
         }
 
-        return SerializeKnownValue(value, jsonOptions, GetSerializerOptions(jsonOptions));
+        return SerializeKnownValue(value, jsonOptions, serializerOptions);
     }
 
     /// <summary>从Json字符串中读取对象</summary>
@@ -436,16 +437,19 @@ public class SystemJson : IJsonHost
         if (type == null) throw new ArgumentNullException(nameof(type));
         if (type == typeof(Object)) return Parse(json);
 
+        jsonOptions ??= Options;
+        var serializerOptions = GetSerializerOptions(jsonOptions);
+
         type = ResolveServiceType(type);
 
-        if (JsonHelper.TryGetTypeInfo(type, out var typeInfo))
+        if (TryGetJsonTypeInfo(type, serializerOptions, out var typeInfo))
         {
             var result = JsonSerializer.Deserialize(json, typeInfo);
             AttachExtensionItems(result, json, typeInfo);
             return result;
         }
 
-        return DeserializeKnownValue(json, type, jsonOptions ?? Options);
+        return DeserializeKnownValue(json, type, jsonOptions);
     }
 
     /// <summary>类型转换</summary>
@@ -525,6 +529,86 @@ public class SystemJson : IJsonHost
             return _cachedSerializerOptions ??= CreateSerializerOptions(Options, SerializerOptions);
 
         return CreateSerializerOptions(jsonOptions, SerializerOptions);
+    }
+
+    private static Boolean TryGetJsonTypeInfo(Type type, JsonSerializerOptions serializerOptions, out JsonTypeInfo typeInfo)
+    {
+        typeInfo = TryGetTypeInfo(serializerOptions, type)!;
+        if (typeInfo != null) return true;
+
+        if (JsonHelper.TryGetTypeInfo(type, out var registeredTypeInfo))
+        {
+            typeInfo = TryRebindTypeInfo(type, serializerOptions, registeredTypeInfo) ?? registeredTypeInfo;
+            return true;
+        }
+
+        typeInfo = null!;
+        return false;
+    }
+
+    private static JsonTypeInfo? TryGetTypeInfo(JsonSerializerOptions serializerOptions, Type type)
+    {
+        try
+        {
+            return serializerOptions.GetTypeInfo(type);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static JsonTypeInfo? TryRebindTypeInfo(Type type, JsonSerializerOptions serializerOptions, JsonTypeInfo registeredTypeInfo)
+    {
+        var registeredOptions = registeredTypeInfo.Options;
+        if (registeredOptions == null || ReferenceEquals(registeredOptions, serializerOptions)) return registeredTypeInfo;
+
+        var mergedOptions = MergeSerializerOptions(registeredOptions, serializerOptions);
+        return TryGetTypeInfo(mergedOptions, type);
+    }
+
+    private static JsonSerializerOptions MergeSerializerOptions(JsonSerializerOptions baseOptions, JsonSerializerOptions overrideOptions)
+    {
+        var mergedOptions = new JsonSerializerOptions(baseOptions)
+        {
+            AllowTrailingCommas = overrideOptions.AllowTrailingCommas,
+            DefaultBufferSize = overrideOptions.DefaultBufferSize,
+            DefaultIgnoreCondition = overrideOptions.DefaultIgnoreCondition,
+            DictionaryKeyPolicy = overrideOptions.DictionaryKeyPolicy,
+            Encoder = overrideOptions.Encoder,
+            IgnoreReadOnlyFields = overrideOptions.IgnoreReadOnlyFields,
+            IgnoreReadOnlyProperties = overrideOptions.IgnoreReadOnlyProperties,
+            IncludeFields = overrideOptions.IncludeFields,
+            MaxDepth = overrideOptions.MaxDepth,
+            NumberHandling = overrideOptions.NumberHandling,
+            PreferredObjectCreationHandling = overrideOptions.PreferredObjectCreationHandling,
+            PropertyNameCaseInsensitive = overrideOptions.PropertyNameCaseInsensitive,
+            PropertyNamingPolicy = overrideOptions.PropertyNamingPolicy,
+            ReadCommentHandling = overrideOptions.ReadCommentHandling,
+            ReferenceHandler = overrideOptions.ReferenceHandler,
+            UnknownTypeHandling = overrideOptions.UnknownTypeHandling,
+            UnmappedMemberHandling = overrideOptions.UnmappedMemberHandling,
+            WriteIndented = overrideOptions.WriteIndented,
+        };
+
+        foreach (var converter in overrideOptions.Converters)
+        {
+            for (var i = 0; i < mergedOptions.Converters.Count; i++)
+            {
+                if (mergedOptions.Converters[i].GetType() != converter.GetType()) continue;
+
+                mergedOptions.Converters.RemoveAt(i);
+                break;
+            }
+
+            mergedOptions.Converters.Add(converter);
+        }
+
+        return mergedOptions;
     }
 
     private static String SerializeKnownValue(Object value, JsonOptions jsonOptions, JsonSerializerOptions serializerOptions)
