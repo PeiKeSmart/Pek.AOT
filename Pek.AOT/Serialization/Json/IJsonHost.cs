@@ -364,7 +364,6 @@ public class SystemJson : IJsonHost
         set
         {
             _serializerOptions = value ?? throw new ArgumentNullException(nameof(value));
-            _cachedSerializerOptions = null;
         }
     }
 
@@ -372,7 +371,6 @@ public class SystemJson : IJsonHost
     public JsonOptions Options { get; set; } = new();
 
     private JsonSerializerOptions _serializerOptions = null!;
-    private volatile JsonSerializerOptions? _cachedSerializerOptions;
 
     /// <summary>实例化</summary>
     public SystemJson() => SerializerOptions = GetDefaultOptions();
@@ -408,9 +406,10 @@ public class SystemJson : IJsonHost
         if (value == null) return "null";
 
         jsonOptions ??= Options;
+        var cacheMergedOptions = ReferenceEquals(jsonOptions, Options);
         var serializerOptions = GetSerializerOptions(jsonOptions);
 
-        if (TryGetJsonTypeInfo(value.GetType(), serializerOptions, out var typeInfo))
+        if (TryGetJsonTypeInfo(value.GetType(), serializerOptions, cacheMergedOptions, out var typeInfo))
         {
             if (TrySerializeExtendable(value, typeInfo, out var extendJson)) return extendJson;
 
@@ -438,11 +437,12 @@ public class SystemJson : IJsonHost
         if (type == typeof(Object)) return Parse(json);
 
         jsonOptions ??= Options;
+        var cacheMergedOptions = ReferenceEquals(jsonOptions, Options);
         var serializerOptions = GetSerializerOptions(jsonOptions);
 
         type = ResolveServiceType(type);
 
-        if (TryGetJsonTypeInfo(type, serializerOptions, out var typeInfo))
+        if (TryGetJsonTypeInfo(type, serializerOptions, cacheMergedOptions, out var typeInfo))
         {
             var result = JsonSerializer.Deserialize(json, typeInfo);
             AttachExtensionItems(result, json, typeInfo);
@@ -526,19 +526,19 @@ public class SystemJson : IJsonHost
     private JsonSerializerOptions GetSerializerOptions(JsonOptions? jsonOptions)
     {
         if (jsonOptions == null || ReferenceEquals(jsonOptions, Options))
-            return _cachedSerializerOptions ??= CreateSerializerOptions(Options, SerializerOptions);
+            return CreateSerializerOptions(Options, SerializerOptions);
 
         return CreateSerializerOptions(jsonOptions, SerializerOptions);
     }
 
-    private static Boolean TryGetJsonTypeInfo(Type type, JsonSerializerOptions serializerOptions, out JsonTypeInfo typeInfo)
+    private static Boolean TryGetJsonTypeInfo(Type type, JsonSerializerOptions serializerOptions, Boolean cacheMergedOptions, out JsonTypeInfo typeInfo)
     {
         typeInfo = TryGetTypeInfo(serializerOptions, type)!;
         if (typeInfo != null) return true;
 
         if (JsonHelper.TryGetTypeInfo(type, out var registeredTypeInfo))
         {
-            typeInfo = TryRebindTypeInfo(type, serializerOptions, registeredTypeInfo) ?? registeredTypeInfo;
+            typeInfo = TryRebindTypeInfo(type, serializerOptions, registeredTypeInfo, cacheMergedOptions) ?? registeredTypeInfo;
             return true;
         }
 
@@ -562,7 +562,7 @@ public class SystemJson : IJsonHost
         }
     }
 
-    private static JsonTypeInfo? TryRebindTypeInfo(Type type, JsonSerializerOptions serializerOptions, JsonTypeInfo registeredTypeInfo)
+    private static JsonTypeInfo? TryRebindTypeInfo(Type type, JsonSerializerOptions serializerOptions, JsonTypeInfo registeredTypeInfo, Boolean cacheMergedOptions)
     {
         var registeredOptions = registeredTypeInfo.Options;
         if (registeredOptions == null || ReferenceEquals(registeredOptions, serializerOptions)) return registeredTypeInfo;
@@ -573,6 +573,8 @@ public class SystemJson : IJsonHost
 
     private static JsonSerializerOptions MergeSerializerOptions(JsonSerializerOptions baseOptions, JsonSerializerOptions overrideOptions)
     {
+        if (ReferenceEquals(baseOptions, overrideOptions)) return overrideOptions;
+
         var mergedOptions = new JsonSerializerOptions(baseOptions)
         {
             AllowTrailingCommas = overrideOptions.AllowTrailingCommas,
@@ -986,4 +988,5 @@ public class SystemJson : IJsonHost
             return fallbackOptions.GetTypeInfo(type);
         }
     }
+
 }
