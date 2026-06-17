@@ -1,0 +1,85 @@
+using System.Diagnostics.CodeAnalysis;
+
+using Pek.Helpers;
+
+namespace Pek;
+
+/// <summary>
+/// Type 扩展方法
+/// </summary>
+public static class DHTypeExtensions
+{
+    /// <summary>
+    /// 获取类型的完整名称（包含程序集名称）
+    /// </summary>
+    /// <param name="type">类型</param>
+    public static String GetFullNameWithAssemblyName(this Type type)
+    {
+        return type.FullName + ", " + type.Assembly.GetName().Name;
+    }
+
+    /// <summary>
+    /// 确定是否可以将此类型的实例分配给
+    /// <paramref name="targetType"></paramref>的实例。
+    ///
+    /// 内部使用<see cref="Type.IsAssignableFrom"/> (相反).
+    /// </summary>
+    /// <param name="type">此类型</param>
+    /// <param name="targetType">目标类型</param>
+    public static Boolean IsAssignableTo([NotNull] this Type type, [NotNull] Type targetType)
+    {
+        Check.NotNull(type, nameof(type));
+        Check.NotNull(targetType, nameof(targetType));
+
+        return targetType.IsAssignableFrom(type);
+    }
+
+    /// <summary>
+    /// 获取此类型的所有基类。
+    /// </summary>
+    /// <param name="type">获取其基类的类型。</param>
+    /// <param name="includeObject">True，以在返回的数组中包含标准<see cref="object"/>类型。</param>
+    public static Type[] GetBaseClasses([NotNull] this Type type, Boolean includeObject = true)
+    {
+        Check.NotNull(type, nameof(type));
+
+        var types = new List<Type>();
+        AddTypeAndBaseTypesRecursively(types, type.BaseType, includeObject);
+        return types.ToArray();
+    }
+
+    /// <summary>
+    /// 获取此类型的所有基类。
+    /// </summary>
+    /// <param name="type">获取其基类的类型。</param>
+    /// <param name="stoppingType">一种停止转到更深层基类的类型。此类型将包含在返回的数组中</param>
+    /// <param name="includeObject">True，以在返回的数组中包含标准<see cref="object"/>类型。</param>
+    public static Type[] GetBaseClasses([NotNull] this Type type, Type stoppingType, Boolean includeObject = true)
+    {
+        Check.NotNull(type, nameof(type));
+
+        var types = new List<Type>();
+        AddTypeAndBaseTypesRecursively(types, type.BaseType, includeObject, stoppingType);
+        return types.ToArray();
+    }
+
+    private static void AddTypeAndBaseTypesRecursively(
+        [NotNull] List<Type> types,
+         Type type,
+         Boolean includeObject,
+         Type stoppingType = null)
+    {
+        if (type == null || type == stoppingType)
+        {
+            return;
+        }
+
+        if (!includeObject && type == typeof(Object))
+        {
+            return;
+        }
+
+        AddTypeAndBaseTypesRecursively(types, type.BaseType, includeObject, stoppingType);
+        types.Add(type);
+    }
+}

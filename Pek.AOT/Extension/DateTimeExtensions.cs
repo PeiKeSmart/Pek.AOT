@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Pek;
@@ -60,4 +61,203 @@ public static class DateTimeExtensions
         if (result.Length > 0) return result.ToString();
         return $"{span.TotalSeconds * 1000}毫秒";
     }
+
+    #region 日期获取（上游 Pek.Common Extensions.DateTime.Get 迁移）
+
+    /// <summary>
+    /// 获取年份的第一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime FirstDayOfYear(this DateTime dt) => dt.SetDate(dt.Year, 1, 1);
+
+    /// <summary>
+    /// 获取季度的第一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime FirstDayOfQuarter(this DateTime dt)
+    {
+        var currentQuarter = (dt.Month - 1) / 3 + 1;
+        var firstDay = new DateTime(dt.Year, 3 * currentQuarter - 2, 1);
+        return dt.SetDate(firstDay.Year, firstDay.Month, firstDay.Day);
+    }
+
+    /// <summary>
+    /// 获取月份的第一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime FirstDayOfMonth(this DateTime dt) => dt.SetDay(1);
+
+    /// <summary>
+    /// 获取星期的第一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime FirstDayOfWeek(this DateTime dt)
+    {
+        var currentCulture = CultureInfo.CurrentCulture;
+        var firstDayOfWeek = currentCulture.DateTimeFormat.FirstDayOfWeek;
+        var offset = dt.DayOfWeek - firstDayOfWeek < 0 ? 7 : 0;
+        var numberOfDaysSinceBeginningOfTheWeek = dt.DayOfWeek + offset - firstDayOfWeek;
+        return dt.AddDays(-numberOfDaysSinceBeginningOfTheWeek);
+    }
+
+    /// <summary>
+    /// 获取年份的最后一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime LastDayOfYear(this DateTime dt) => dt.SetDate(dt.Year, 12, 31);
+
+    /// <summary>
+    /// 获取季度的最后一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime LastDayOfQuarter(this DateTime dt)
+    {
+        var currentQuarter = (dt.Month - 1) / 3 + 1;
+        var firstDay = new DateTime(dt.Year, 3 * currentQuarter - 2, 1);
+        return firstDay.SetMonth(firstDay.Month + 2).LastDayOfMonth();
+    }
+
+    /// <summary>
+    /// 获取月份的最后一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime LastDayOfMonth(this DateTime dt) => dt.SetDay(DateTime.DaysInMonth(dt.Year, dt.Month));
+
+    /// <summary>
+    /// 获取星期的最后一天
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime LastDayOfWeek(this DateTime dt) => dt.FirstDayOfWeek().AddDays(6);
+
+    #endregion
+
+    #region 日期设置（上游 Pek.Common Extensions.DateTime.Set 迁移，DateTimeFactory.Create 替换为 new DateTime）
+
+    /// <summary>
+    /// 设置时间
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="hour">时</param>
+    public static DateTime SetTime(this DateTime dt, Int32 hour) => new DateTime(dt.Year, dt.Month, dt.Day, hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="hour">时</param>
+    /// <param name="minute">分</param>
+    public static DateTime SetTime(this DateTime dt, Int32 hour, Int32 minute) => new DateTime(dt.Year, dt.Month, dt.Day, hour, minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="hour">时</param>
+    /// <param name="minute">分</param>
+    /// <param name="second">秒</param>
+    public static DateTime SetTime(this DateTime dt, Int32 hour, Int32 minute, Int32 second) => new DateTime(dt.Year, dt.Month, dt.Day, hour, minute, second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="hour">时</param>
+    /// <param name="minute">分</param>
+    /// <param name="second">秒</param>
+    /// <param name="millisecond">毫秒</param>
+    public static DateTime SetTime(this DateTime dt, Int32 hour, Int32 minute, Int32 second, Int32 millisecond) => new DateTime(dt.Year, dt.Month, dt.Day, hour, minute, second, millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间 - 小时
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="hour">时</param>
+    public static DateTime SetHour(this DateTime dt, Int32 hour) => new DateTime(dt.Year, dt.Month, dt.Day, hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间 - 分钟
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="minute">分</param>
+    public static DateTime SetMinute(this DateTime dt, Int32 minute) => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间 - 秒
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="second">秒</param>
+    public static DateTime SetSecond(this DateTime dt, Int32 second) => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间 - 毫秒
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="millisecond">毫秒</param>
+    public static DateTime SetMillisecond(this DateTime dt, Int32 millisecond) => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置时间为凌晨0点
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime Midnight(this DateTime dt) => throw new NotImplementedException();
+
+    /// <summary>
+    /// 设置时间为中午12点
+    /// </summary>
+    /// <param name="dt">时间</param>
+    public static DateTime Noon(this DateTime dt) => dt.SetTime(12, 0, 0, 0);
+
+    /// <summary>
+    /// 设置日期
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="year">年</param>
+    public static DateTime SetDate(this DateTime dt, Int32 year) => new DateTime(year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="year">年</param>
+    /// <param name="month">月</param>
+    public static DateTime SetDate(this DateTime dt, Int32 year, Int32 month) => new DateTime(year, month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="year">年</param>
+    /// <param name="month">月</param>
+    /// <param name="day">日</param>
+    public static DateTime SetDate(this DateTime dt, Int32 year, Int32 month, Int32 day) => new DateTime(year, month, day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期 - 年
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="year">年</param>
+    public static DateTime SetYear(this DateTime dt, Int32 year) => new DateTime(year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期 - 月
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="month">月</param>
+    public static DateTime SetMonth(this DateTime dt, Int32 month) => new DateTime(dt.Year, month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期 - 日
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="day">日</param>
+    public static DateTime SetDay(this DateTime dt, Int32 day) => new DateTime(dt.Year, dt.Month, day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, dt.Kind);
+
+    /// <summary>
+    /// 设置日期种类。本地/UTC
+    /// </summary>
+    /// <param name="dt">时间</param>
+    /// <param name="kind">日期种类</param>
+    public static DateTime SetKind(this DateTime dt, DateTimeKind kind) => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond, kind);
+
+    #endregion
 }
