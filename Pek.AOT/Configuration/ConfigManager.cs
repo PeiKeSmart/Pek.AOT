@@ -81,11 +81,26 @@ internal class ConfigChangeQueueItem
 }
 
 /// <summary>
+/// 配置文件存放位置模式
+/// </summary>
+public enum ConfigPathMode
+{
+    /// <summary>当前文件夹。配置存放于应用程序 bin 目录下的 Config 子目录（默认）</summary>
+    CurrentFolder = 0,
+
+    /// <summary>系统用户文件夹。配置存放于操作系统用户应用数据目录下的 {AppName}/Config 子目录</summary>
+    SystemUserFolder = 1,
+}
+
+/// <summary>
 /// 配置管理器（极简版本）
 /// </summary>
 public static class ConfigManager
 {
     private const String LogScope = "Pek.Configuration";
+
+    /// <summary>配置文件存放位置模式。默认 CurrentFolder（bin/Config/）。启动时设为 SystemUserFolder 则存到用户目录</summary>
+    public static ConfigPathMode PathMode { get; set; } = ConfigPathMode.CurrentFolder;
 
     // 核心数据存储
     private static readonly ConcurrentDictionary<Type, object> _configs = new();
@@ -633,15 +648,45 @@ public static class ConfigManager
     }
 
     /// <summary>
+    /// 获取配置根目录。根据 PathMode 决定存放位置：
+    /// CurrentFolder → PathHelper.BasePath/Config（若未设 BasePath 则回退到 bin/Config）；
+    /// SystemUserFolder → 系统用户应用数据目录/{AppName}/Config
+    /// </summary>
+    private static String GetConfigRootDirectory()
+    {
+        if (PathMode == ConfigPathMode.SystemUserFolder)
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var appName = GetAppName();
+            return Path.Combine(appData, appName, "Config");
+        }
+
+        // CurrentFolder（默认）：优先 BasePath，未设置则用 bin 目录
+        var basePath = PathHelper.BasePath;
+        if (!String.IsNullOrWhiteSpace(basePath)) return Path.Combine(basePath, "Config");
+
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config");
+    }
+
+    private static String GetAppName()
+    {
+        var name = Assembly.GetEntryAssembly()?.GetName()?.Name;
+        if (!String.IsNullOrWhiteSpace(name)) return name;
+
+        name = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName);
+        if (!String.IsNullOrWhiteSpace(name)) return name;
+
+        return "PekApp";
+    }
+
+    /// <summary>
     /// 获取配置文件路径
     /// </summary>
     private static string GetConfigFilePath(Type configType)
     {
         var fileName = _configFileNames.TryGetValue(configType, out var name) ? name : configType.Name;
-        
-        // 获取应用程序根目录下的Config文件夹
-        var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        var configDir = Path.Combine(appDirectory, "Config");
+
+        var configDir = GetConfigRootDirectory();
 
         if (!Directory.Exists(configDir))
         {
@@ -756,15 +801,14 @@ public static class ConfigManager
             
             try
             {
-                // 获取Config目录路径
-                var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                var configDir = Path.Combine(appDirectory, "Config");
-                
+                // 根据 PathMode 获取 Config 目录路径
+                var configDir = GetConfigRootDirectory();
+
                 if (!Directory.Exists(configDir))
                 {
                     Directory.CreateDirectory(configDir);
                 }
-                
+
                 var hasWatcher = false;
 
                 try
