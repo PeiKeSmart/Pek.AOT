@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 using Pek.Helpers;
+using NewLife;
 
 namespace Pek;
 
@@ -286,5 +287,76 @@ public static class CheckExtensions
     public static Boolean IsZeroOrPercentage(this Single value) => value.IsPercentage() || value.Equals(0f);
     public static Boolean IsZeroOrPercentage(this Double value) => value.IsPercentage() || value.Equals(0d);
     public static Boolean IsZeroOrPercentage(this Decimal value) => value.IsPercentage() || value.Equals(0m);
+    #endregion
+
+    #region Value(获取枚举值)
+    /// <summary>获取枚举值</summary>
+    /// <param name="instance">枚举实例</param>
+    public static Int32 Value(this Enum instance) => Convert.ToInt32(instance);
+
+    /// <summary>获取枚举值</summary>
+    /// <typeparam name="TResult">返回值类型</typeparam>
+    /// <param name="instance">枚举实例</param>
+    public static TResult? Value<TResult>(this Enum instance) => (TResult?)(Object?)Convert.ToInt32(instance);
+    #endregion
+
+    #region SafeValue(安全获取值)
+    /// <summary>安全获取值，当值为 null 时不会抛出异常</summary>
+    /// <typeparam name="T">数据类型</typeparam>
+    /// <param name="value">可空值</param>
+    public static T SafeValue<T>(this T? value) where T : struct => value ?? default;
+    #endregion
+
+    #region Description(获取枚举描述)
+    /// <summary>获取枚举描述</summary>
+    /// <param name="instance">枚举实例</param>
+    public static String Description(this Enum instance) => EnumHelper.GetDescription(instance)!;
+    #endregion
+
+    #region GetMatch(获取匹配项)
+    /// <summary>在指定的输入字符串中搜索正则表达式的第一个匹配项</summary>
+    /// <param name="value">要搜索匹配项的字符串</param>
+    /// <param name="pattern">要匹配的正则表达式模式</param>
+    public static String GetMatch(this String value, String pattern)
+    {
+        if (value.IsEmpty()) return String.Empty;
+        return Regex.Match(value, pattern).Value;
+    }
+
+    /// <summary>获取正则表达式所有匹配项的字符串集合</summary>
+    /// <param name="value">要搜索匹配项的字符串</param>
+    /// <param name="pattern">要匹配的正则表达式模式</param>
+    public static IEnumerable<String> GetMatchingValues(this String value, String pattern)
+    {
+        if (value.IsEmpty()) return [];
+        return value.GetMatchingValues(pattern, RegexOptions.None);
+    }
+
+    /// <summary>使用正则表达式获取所有匹配的字符串枚举</summary>
+    /// <param name="value">输入字符串</param>
+    /// <param name="pattern">正则表达式</param>
+    /// <param name="options">比较规则</param>
+    public static IEnumerable<String> GetMatchingValues(this String value, String pattern, RegexOptions options) =>
+        from Match match in value.GetMatches(pattern, options) where match.Success select match.Value;
+
+    /// <summary>使用正则表达式获取所有匹配项</summary>
+    /// <param name="value">值</param>
+    /// <param name="pattern">正则表达式</param>
+    /// <param name="options">比较规则</param>
+    public static MatchCollection GetMatches(this String value, String pattern, RegexOptions options) => Regex.Matches(value, pattern, options);
+    #endregion
+
+    #region Locking(锁定扩展)
+    /// <summary>锁定给定对象标识，执行委托</summary>
+    public static void Locking(this Object source, Action action) { lock (source) action(); }
+
+    /// <summary>锁定给定源数据，执行委托</summary>
+    public static void Locking<T>(this T source, Action<T> action) { lock (source!) action(source); }
+
+    /// <summary>锁定给定对象标识，执行委托</summary>
+    public static TResult Locking<TResult>(this Object source, Func<TResult> func) { lock (source) return func(); }
+
+    /// <summary>锁定给定源数据，执行委托</summary>
+    public static TResult Locking<TSource, TResult>(this TSource source, Func<TSource, TResult> func) { lock (source!) return func(source); }
     #endregion
 }
