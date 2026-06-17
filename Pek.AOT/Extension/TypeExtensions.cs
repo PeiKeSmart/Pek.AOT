@@ -96,20 +96,6 @@ public static class TypeExtensions
     /// <param name="baseType">基类类型</param>
     public static Boolean IsBaseOn(this Type type, Type baseType) => baseType.IsAssignableFrom(type);
 
-    /// <summary>判断当前泛型类型是否可由指定类型的实例填充</summary>
-    /// <param name="genericType">泛型类型</param>
-    /// <param name="type">指定类型</param>
-    public static Boolean IsGenericAssignableFrom(this Type genericType, Type type)
-    {
-        if (!genericType.IsGenericType) return false;
-        var genericArgs = genericType.GetGenericArguments();
-        if (genericArgs.Length == 1)
-        {
-            var constructedType = genericType.GetGenericTypeDefinition().MakeGenericType(type);
-            return constructedType.IsAssignableFrom(type);
-        }
-        return false;
-    }
 
     /// <summary>是否整数类型</summary>
     public static Boolean IsIntegerType(this Type type)
@@ -126,7 +112,7 @@ public static class TypeExtensions
     }
 
     /// <summary>是否集合类型</summary>
-    public static Boolean IsCollectionType(this Type type) => type.GetInterfaces().Any(n => n.Name == nameof(IEnumerable));
+    public static Boolean IsCollectionType(this Type type) => typeof(IEnumerable).IsAssignableFrom(type) && type != typeof(String);
 
     /// <summary>是否值类型</summary>
     public static Boolean IsValueType(this Type type)
