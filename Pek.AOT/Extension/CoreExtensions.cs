@@ -599,7 +599,7 @@ public static class CoreExtensions
         }
     }
 
-    /// <summary>将对象转换为指定类型</summary>
+    /// <summary>将对象转换为指定类型。AOT 安全版：使用 Convert.ChangeType 替代 TypeDescriptor</summary>
     public static T? To<T>(this Object @this)
     {
         if (@this == null || @this == DBNull.Value)
@@ -610,18 +610,13 @@ public static class CoreExtensions
         if (sourceType == targetType)
             return (T)@this;
 
-        var converter = TypeDescriptor.GetConverter(sourceType);
-        if (converter.CanConvertTo(targetType))
-            return (T?)converter.ConvertTo(@this, targetType);
+        if (@this is IConvertible)
+            return (T)Convert.ChangeType(@this, targetType);
 
-        converter = TypeDescriptor.GetConverter(targetType);
-        if (converter.CanConvertFrom(sourceType))
-            return (T?)converter.ConvertFrom(@this);
-
-        return (T)Convert.ChangeType(@this, targetType);
+        return (T)@this;
     }
 
-    /// <summary>将对象转换为指定类型</summary>
+    /// <summary>将对象转换为指定类型。AOT 安全版：使用 Convert.ChangeType 替代 TypeDescriptor</summary>
     public static Object? To(this Object @this, Type type)
     {
         if (@this == null || @this == DBNull.Value)
@@ -633,15 +628,10 @@ public static class CoreExtensions
         if (sourceType == targetType)
             return @this;
 
-        var converter = TypeDescriptor.GetConverter(sourceType);
-        if (converter.CanConvertTo(targetType))
-            return converter.ConvertTo(@this, targetType);
+        if (@this is IConvertible)
+            return Convert.ChangeType(@this, targetType);
 
-        converter = TypeDescriptor.GetConverter(targetType);
-        if (converter.CanConvertFrom(sourceType))
-            return converter.ConvertFrom(@this);
-
-        return Convert.ChangeType(@this, targetType);
+        return @this;
     }
 
     /// <summary>将对象转换为指定类型，失败调用默认值工厂</summary>

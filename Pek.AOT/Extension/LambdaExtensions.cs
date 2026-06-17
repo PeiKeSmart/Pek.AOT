@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -20,8 +21,7 @@ public static partial class DHExtensions
     #region Property(属性表达式)
 
     /// <summary>创建属性表达式（支持多级属性，用句点分隔）</summary>
-    /// <param name="expression">表达式</param>
-    /// <param name="propertyName">属性名，支持多级属性名，范例：Customer.Name</param>
+    [RequiresUnreferencedCode("Expression.Property requires member metadata that may be trimmed.")]
     public static Expression Property(this Expression expression, String propertyName)
     {
         if (propertyName.All(t => t != '.'))
@@ -212,16 +212,12 @@ public static partial class DHExtensions
     #region Call(调用方法表达式)
 
     /// <summary>创建调用方法表达式</summary>
-    /// <param name="instance">调用的实例</param>
-    /// <param name="methodName">方法名</param>
-    /// <param name="values">参数值列表（Expression）</param>
+    [RequiresUnreferencedCode("Expression.Call requires method metadata that may be trimmed.")]
     public static Expression Call(this Expression instance, String methodName, params Expression[] values)
         => Expression.Call(instance, instance.Type.GetTypeInfo().GetMethod(methodName)!, values);
 
     /// <summary>创建调用方法表达式（自动装箱常量）</summary>
-    /// <param name="instance">调用的实例</param>
-    /// <param name="methodName">方法名</param>
-    /// <param name="values">参数值列表（Object）</param>
+    [RequiresUnreferencedCode("Expression.Call requires method metadata that may be trimmed.")]
     public static Expression Call(this Expression instance, String methodName, params Object[] values)
     {
         if (values == null || values.Length == 0)
@@ -230,10 +226,7 @@ public static partial class DHExtensions
     }
 
     /// <summary>创建调用方法表达式（指定参数类型）</summary>
-    /// <param name="instance">调用的实例</param>
-    /// <param name="methodName">方法名</param>
-    /// <param name="paramTypes">参数类型列表</param>
-    /// <param name="values">参数值列表（Object）</param>
+    [RequiresUnreferencedCode("Expression.Call requires method metadata that may be trimmed.")]
     public static Expression Call(this Expression instance, String methodName, Type[] paramTypes, params Object[] values)
     {
         if (values == null || values.Length == 0)

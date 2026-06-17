@@ -18,11 +18,13 @@ public static class AssemblyExtensions
     public static Version GetFileVersion(this Assembly assembly)
     {
         if (assembly == null)
-        {
             throw new ArgumentNullException(nameof(assembly));
-        }
 
-        var info = FileVersionInfo.GetVersionInfo(assembly.Location);
+        var location = assembly.Location;
+        if (String.IsNullOrEmpty(location))
+            return new Version(0, 0); // AOT: Location returns empty in single-file publishing
+
+        var info = FileVersionInfo.GetVersionInfo(location);
         return new Version(info.FileVersion!);
     }
 
@@ -38,11 +40,13 @@ public static class AssemblyExtensions
     public static Version GetProductVersion(this Assembly assembly)
     {
         if (assembly == null)
-        {
             throw new ArgumentNullException(nameof(assembly));
-        }
 
-        var info = FileVersionInfo.GetVersionInfo(assembly.Location);
+        var location = assembly.Location;
+        if (String.IsNullOrEmpty(location))
+            return new Version(0, 0); // AOT: Location returns empty in single-file publishing
+
+        var info = FileVersionInfo.GetVersionInfo(location);
         return new Version(info.ProductVersion!);
     }
 

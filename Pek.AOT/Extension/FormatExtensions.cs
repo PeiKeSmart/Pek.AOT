@@ -34,7 +34,7 @@ public static class FormatExtensions
             if (count > 0) appString += "  ";
             sb.AppendLine($"{appString}异常消息：{e.Message}");
             sb.AppendLine($"{appString}异常类型：{e.GetType().FullName}");
-            sb.AppendLine($"{appString}异常方法：{(e.TargetSite == null ? null : e.TargetSite.Name)}");
+            try { sb.AppendLine($"{appString}异常方法：{e.TargetSite?.Name}"); } catch { /* AOT: TargetSite may be trimmed */ }
             sb.AppendLine($"{appString}异常源：{e.Source}");
             if (!isHideStackTrace && e.StackTrace != null)
                 sb.AppendLine($"{appString}异常堆栈：{e.StackTrace}");

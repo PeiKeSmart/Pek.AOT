@@ -99,7 +99,8 @@ public static class TypeExtension
     /// </summary>
     /// <param name="type">type</param>
     /// <returns></returns>
-    public static ConstructorInfo? GetEmptyConstructor(this Type type)
+    public static ConstructorInfo? GetEmptyConstructor(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] this Type type)
     {
         var constructors = type.GetConstructors();
 
@@ -124,7 +125,9 @@ public static class TypeExtension
     /// <param name="type">The type being tested.</param>
     /// <param name="constructorParameterTypes">The types of the contractor to find.</param>
     /// <returns>The <see cref="ConstructorInfo"/> is a match is found; otherwise, <c>null</c>.</returns>
-    public static ConstructorInfo? GetMatchingConstructor(this Type type, Type[] constructorParameterTypes)
+    public static ConstructorInfo? GetMatchingConstructor(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] this Type type,
+        Type[] constructorParameterTypes)
     {
         if (constructorParameterTypes == null || constructorParameterTypes.Length == 0)
             return GetEmptyConstructor(type);
@@ -141,5 +144,7 @@ public static class TypeExtension
     /// </summary>
     /// <param name="type">type</param>
     /// <returns></returns>
-    public static IEnumerable<Type> GetImplementedInterfaces([NotNull] this Type type) => type.GetTypeInfo().ImplementedInterfaces;
+    public static IEnumerable<Type> GetImplementedInterfaces(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] [NotNull] this Type type)
+        => type.GetTypeInfo().ImplementedInterfaces;
 }

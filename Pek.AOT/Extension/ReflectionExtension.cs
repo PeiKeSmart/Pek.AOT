@@ -27,7 +27,9 @@ public static class ReflectionExtension
     /// <param name="type">类型</param>
     /// <param name="method">方法</param>
     /// <returns></returns>
-    public static MethodInfo? GetMethodBySignature(this Type type, MethodInfo method)
+    public static MethodInfo? GetMethodBySignature(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods)] this Type type,
+        MethodInfo method)
     {
         if (type == null)
             throw new ArgumentNullException(nameof(type));
