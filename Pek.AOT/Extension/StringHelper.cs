@@ -84,6 +84,14 @@ public static class StringHelper
         return true;
     }
 
+    /// <summary>安全转换为字符串，去除两端空格，当值为null时返回""</summary>
+    /// <param name="input">输入值</param>
+    /// <returns>安全转换后的字符串</returns>
+    public static String SafeString(this Object? input)
+    {
+        return input == null ? String.Empty : (input.ToString()?.Trim() ?? String.Empty);
+    }
+
     /// <summary>拆分字符串，过滤空格，无效时返回空数组</summary>
     /// <param name="value">字符串</param>
     /// <param name="separators">分组分隔符，默认逗号分号</param>
