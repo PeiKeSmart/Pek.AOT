@@ -29,7 +29,7 @@ public class Snowflake
     /// <summary>工作节点ID位数</summary>
     private const Int32 WorkerIdBits = 10;
 
-    /// <summary>序列号位数</summary>  
+    /// <summary>序列号位数</summary>
     private const Int32 SequenceBits = 12;
 
     /// <summary>最大工作节点ID</summary>
@@ -45,7 +45,7 @@ public class Snowflake
     private const Int32 WorkerIdShift = SequenceBits;
 
     /// <summary>时间回拨最大容忍度（毫秒）</summary>
-    private const Int64 MaxClockBack = 3600_000 + 10_000;
+    private const Int64 MaxClockBack = 3_600_000 + 10_000;
     #endregion
 
     #region 属性
@@ -96,17 +96,15 @@ public class Snowflake
     {
         try
         {
-            // 从容器中获取缓存提供者，查找Redis作为集群WorkerId分配器
             var provider = ObjectContainer.Provider?.GetService(typeof(ICacheProvider)) as ICacheProvider;
             if (provider is { Cache: not MemoryCache } && provider.Cache != provider.InnerCache)
                 Cluster = provider.Cache;
 
-            // 基于IP地址的默认实例ID
             var ip = NetHelper.MyIP();
             if (ip != null)
             {
-                var buf = ip.GetAddressBytes();
-                _defaultInstanceId = (buf[2] << 8) | buf[3];
+                var buffer = ip.GetAddressBytes();
+                _defaultInstanceId = (buffer[2] << 8) | buffer[3];
             }
             else
             {
@@ -115,7 +113,6 @@ public class Snowflake
         }
         catch
         {
-            // 异常时使用随机值
             _defaultInstanceId = Rand.Next(1, 1024);
         }
     }
@@ -134,25 +131,20 @@ public class Snowflake
         {
             if (_initialized) return;
 
-            // 记录雪花算法初始化埋点，及时发现算法使用错误
             using var span = DefaultTracer.Instance?.NewSpan("Snowflake-Init", new { id = Interlocked.Increment(ref _globalInstanceId) });
 
-            // 按优先级设置WorkerId
             if (WorkerId <= 0 && GlobalWorkerId > 0)
                 WorkerId = GlobalWorkerId & MaxWorkerId;
 
             if (WorkerId <= 0 && Cluster != null)
                 JoinCluster(Cluster);
 
-            // 初始化WorkerId，取5位实例加上5位进程，确保同一台机器的WorkerId不同
             if (WorkerId <= 0)
             {
                 var nodeId = _defaultInstanceId;
-                var pid = Process.GetCurrentProcess().Id;
-                var tid = Thread.CurrentThread.ManagedThreadId;
-                //WorkerId = ((nodeId & 0x1F) << 5) | (pid & 0x1F);
-                //WorkerId = (nodeId ^ pid ^ tid) & 0x3FF;
-                WorkerId = ((nodeId & 0x1F) << 5) | ((pid ^ tid) & 0x1F);
+                var processId = Process.GetCurrentProcess().Id;
+                var threadId = Thread.CurrentThread.ManagedThreadId;
+                WorkerId = ((nodeId & 0x1F) << 5) | ((processId ^ threadId) & 0x1F);
             }
 
             span?.AppendTag($"WorkerId={WorkerId} StartTimestamp={StartTimestamp.ToFullString()}");
@@ -167,25 +159,20 @@ public class Snowflake
     {
         Initialize();
 
-        // 此时嘀嗒数减去起点嘀嗒数，加上起点毫秒数
         var currentTimestamp = (Int64)(ConvertKind(DateTime.Now) - StartTimestamp).TotalMilliseconds;
         var workerId = WorkerId & MaxWorkerId;
 
-        // 获取时间戳，处理时间回拨
         var lastTime = Volatile.Read(ref _lastTimestamp);
         var timestamp = currentTimestamp;
         if (currentTimestamp < lastTime)
         {
-            // 检测时间回拨
             var clockBack = lastTime - currentTimestamp;
             if (clockBack > MaxClockBack)
                 throw new InvalidOperationException($"时间回拨过大 ({clockBack}ms)。为保证唯一性，雪花算法拒绝生成新Id");
 
-            // 使用上次时间戳，等待时间追上
             timestamp = lastTime;
         }
 
-        // 生成序列号并构建ID
         var sequence = 0;
         lock (_lockObject)
         {
@@ -193,7 +180,6 @@ public class Snowflake
             {
                 if (timestamp > _lastTimestamp)
                 {
-                    // 时间推进，重置序列号
                     _sequence = 0;
                     _lastTimestamp = timestamp;
                     sequence = 0;
@@ -202,17 +188,14 @@ public class Snowflake
 
                 if (timestamp == _lastTimestamp)
                 {
-                    // 同一毫秒内，递增序列号
                     sequence = Interlocked.Increment(ref _sequence);
                     if (sequence <= MaxSequence) break;
 
-                    // 序列号溢出，等待下一毫秒
                     timestamp = _lastTimestamp + 1;
                     _sequence = 0;
                 }
                 else
                 {
-                    // 时间未变化，使用当前时间戳
                     timestamp = _lastTimestamp;
                 }
             }
@@ -259,7 +242,6 @@ public class Snowflake
 
         time = ConvertKind(time);
 
-        // 业务id作为workerId，保留12位序列号。即传感器按1024分组，每组每毫秒最多生成4096个Id
         var timestamp = (Int64)(time - StartTimestamp).TotalMilliseconds;
         var workerId = uid & MaxWorkerId;
         var sequence = Interlocked.Increment(ref _sequence) & MaxSequence;
@@ -286,9 +268,8 @@ public class Snowflake
 
         time = ConvertKind(time);
 
-        // 业务id作为workerId，不保留序列号。即传感器按4194304（1<<22）分组，每组每毫秒最多生成1个Id
         var timestamp = (Int64)(time - StartTimestamp).TotalMilliseconds;
-        var workerId = uid & ((1 << 22) - 1); // 22位业务ID
+        var workerId = uid & ((1 << 22) - 1);
 
         return (timestamp << TimestampShift) | (Int64)workerId;
     }
@@ -308,9 +289,7 @@ public class Snowflake
     }
 
     /// <summary>解析雪花Id，得到时间、WorkerId和序列号</summary>
-    /// <remarks>
-    /// 其中的时间是StartTimestamp所属时区的时间。
-    /// </remarks>
+    /// <remarks>其中的时间是StartTimestamp所属时区的时间。</remarks>
     /// <param name="id">雪花Id</param>
     /// <param name="time">解析出的时间</param>
     /// <param name="workerId">解析出的工作节点Id</param>
@@ -330,7 +309,6 @@ public class Snowflake
     /// <returns>转换后的时间</returns>
     public DateTime ConvertKind(DateTime time)
     {
-        // 如果待转换时间未指定时区，则直接返回
         if (time.Kind == DateTimeKind.Unspecified) return time;
 
         return StartTimestamp.Kind switch
