@@ -35,7 +35,7 @@ public class ExcelWriter : DisposeBase
         DateTime = 22 // m/d/yy h:mm
     }
 
-    private static readonly ExcelCellStyle[] _cellStyles = (ExcelCellStyle[])Enum.GetValues(typeof(ExcelCellStyle));
+    private static readonly ExcelCellStyle[] _cellStyles = Enum.GetValues<ExcelCellStyle>();
     #endregion
 
     #region 灞炴€?
