@@ -234,6 +234,31 @@ public static class RSAHelper
 
         return rsa.VerifyData(data, sha512, rgbSignature);
     }
+
+    /// <summary>RS1，SHA1散列</summary>
+    /// <param name="data">原始数据</param>
+    /// <param name="priKey">私钥</param>
+    /// <returns>签名结果</returns>
+    public static Byte[] SignSha1(this Byte[] data, String priKey)
+    {
+        using var rsa = Create(priKey);
+        using var sha1 = SHA1.Create();
+
+        return rsa.SignData(data, sha1);
+    }
+
+    /// <summary>RS1，SHA1散列</summary>
+    /// <param name="data">原始数据</param>
+    /// <param name="pukKey">公钥</param>
+    /// <param name="rgbSignature">签名结果</param>
+    /// <returns>是否通过</returns>
+    public static Boolean VerifySha1(this Byte[] data, String pukKey, Byte[] rgbSignature)
+    {
+        using var rsa = Create(pukKey);
+        using var sha1 = SHA1.Create();
+
+        return rsa.VerifyData(data, sha1, rgbSignature);
+    }
     #endregion
 
     #region PEM

@@ -111,6 +111,20 @@ public class HttpMessage : Message<HttpMessage>
     /// <summary>头部集合</summary>
     public IDictionary<String, String>? Headers { get; set; }
 
+    /// <summary>根据请求创建配对的响应消息</summary>
+    /// <returns>响应消息</returns>
+    public override IMessage CreateReply()
+    {
+        if (Reply) throw new InvalidOperationException("不能根据响应消息创建响应消息");
+
+        var msg = new HttpMessage
+        {
+            Reply = true
+        };
+
+        return msg;
+    }
+
     /// <summary>释放资源</summary>
     /// <param name="disposing">是否释放托管资源</param>
     protected override void Dispose(Boolean disposing)

@@ -256,5 +256,31 @@ public static class SocketRemoteHelper
 
         return messageCount;
     }
+
+    /// <summary>以消息包形式发送文件</summary>
+    /// <param name="session">Socket会话</param>
+    /// <param name="filePath">文件路径</param>
+    /// <param name="compressed">是否启用压缩</param>
+    /// <returns>发送的消息包数量</returns>
+    /// <remarks>
+    /// <para>自动处理文件读取和分块传输，支持可选的压缩功能。</para>
+    /// <para>接收方需要按相同顺序重组消息包以还原完整文件。</para>
+    /// </remarks>
+    public static Int32 SendFile(this ISocketRemote session, String filePath, Boolean compressed = false)
+    {
+        if (session == null) throw new ArgumentNullException(nameof(session));
+        if (String.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
+
+        using var fs = filePath.AsFile().OpenRead();
+
+        if (compressed)
+        {
+            using var gs = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionMode.Decompress, true);
+            using var bs = new System.IO.BufferedStream(gs);
+            return session.SendMessages(bs);
+        }
+
+        return session.SendMessages(fs);
+    }
     #endregion
 }

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Pek;
+using Pek.Collections;
 using Pek.Data;
 using Pek.Extension;
 using Pek.Log;
@@ -588,5 +589,19 @@ public class NetServer : DisposeBase, IServer, IExtend, ILogFeature
     /// <param name="session">网络会话</param>
     /// <returns>处理器实例，默认返回null</returns>
     public virtual INetHandler? CreateHandler(INetSession session) => null;
+
+    /// <summary>获取统计信息</summary>
+    /// <returns>统计信息字符串</returns>
+    public String GetStat()
+    {
+        var max = _maxSessionCount;
+        if (max <= 0) return String.Empty;
+
+        var sb = Pool.StringBuilder.Get();
+        SessionCount = _sessions.Count;
+        sb.AppendFormat("在线：{0:n0}/{1:n0} ", SessionCount, max);
+
+        return sb.Return(true);
+    }
     #endregion
 }
