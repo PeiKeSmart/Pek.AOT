@@ -4,17 +4,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
-using Pek;
-
 namespace Pek.Helpers;
 
-/// <summary>反射操作。AOT 安全子集（移除动态类型查找/实例创建等不安全 API）</summary>
+/// <summary>反射操作。AOT 安全版</summary>
 public static class Reflection
 {
-    #region 属性
-
-    #endregion
-
     #region GetDescription(获取类型描述)
 
     /// <summary>获取类型描述，使用<see cref="DescriptionAttribute"/>设置描述</summary>
@@ -29,7 +23,7 @@ public static class Reflection
     /// <summary>获取类型成员描述，使用<see cref="DescriptionAttribute"/>设置描述</summary>
     /// <param name="type">类型</param>
     /// <param name="memberName">成员名称</param>
-    public static String GetDescription([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicMethods)] Type type, String memberName)
+    public static String GetDescription(Type type, String memberName)
     {
         if (type == null)
             return String.Empty;
@@ -63,7 +57,7 @@ public static class Reflection
     /// <param name="type">当前类型</param>
     /// <param name="baseType">基类型</param>
     /// <param name="canAbstract">能否是抽象类</param>
-    public static Boolean IsDeriveClassFrom([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type baseType, Boolean canAbstract = false)
+    public static Boolean IsDeriveClassFrom(Type type, Type baseType, Boolean canAbstract = false)
     {
         if (type == null) throw new ArgumentNullException(nameof(type));
         if (baseType == null) throw new ArgumentNullException(nameof(baseType));
@@ -83,9 +77,41 @@ public static class Reflection
     /// <summary>返回当前类型是否是指定基类的派生类</summary>
     /// <param name="type">类型</param>
     /// <param name="baseType">基类类型</param>
-    public static Boolean IsBaseOn([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type baseType) => baseType.IsGenericTypeDefinition
+    public static Boolean IsBaseOn(Type type, Type baseType) => baseType.IsGenericTypeDefinition
         ? IsGenericAssignableFrom(baseType, type)
         : baseType.IsAssignableFrom(type);
+
+    #endregion
+
+    #region IsGenericAssignableFrom(判断当前泛型类型是否可由指定类型的实例填充)
+
+    /// <summary>判断当前泛型类型是否可由指定类型的实例填充</summary>
+    /// <param name="genericType">泛型类型</param>
+    /// <param name="type">指定类型</param>
+    public static Boolean IsGenericAssignableFrom(Type genericType, Type type)
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (genericType == null) throw new ArgumentNullException(nameof(genericType));
+
+        if (!genericType.IsGenericType)
+            throw new ArgumentException("该功能只支持泛型类型的调用，非泛型类型可使用 IsAssignableFrom 方法。");
+        var allOthers = new List<Type>() { type };
+        if (genericType.IsInterface) allOthers.AddRange(type.GetInterfaces());
+
+        foreach (var other in allOthers)
+        {
+            var cur = other;
+            while (cur != null)
+            {
+                if (cur.IsGenericType)
+                    cur = cur.GetGenericTypeDefinition();
+                if (cur.IsSubclassOf(genericType) || cur == genericType)
+                    return true;
+                cur = cur.BaseType;
+            }
+        }
+        return false;
+    }
 
     #endregion
 
@@ -121,7 +147,37 @@ public static class Reflection
     public static String GetDisplayNameOrDescription(MemberInfo member)
     {
         var result = GetDisplayName(member);
-        return String.IsNullOrWhiteSpace(result) ? GetDescription(member) : result;
+        return String.IsNullOrWhiteSpace(result) ? Pek.Helpers.Reflection.GetDescription(member) : result;
+    }
+
+    #endregion
+
+    // FindTypes / GetInstancesByInterface / GetAssembly / GetAssemblies 已删除
+    // 原因：依赖运行时程序集枚举（Assembly.GetTypes / Assembly.Load），NativeAOT 不可用
+
+    #region CreateInstance(动态创建实例)
+
+    /// <summary>动态创建实例。AOT 安全版——委托到 ActivatorHelper</summary>
+    /// <typeparam name="T">目标类型</typeparam>
+    /// <param name="type">类型（必须与 T 一致）</param>
+    /// <param name="parameters">传递给构造函数的参数</param>
+    public static T? CreateInstance<T>(Type type, params Object[] parameters)
+    {
+        if (type != typeof(T))
+            throw new ArgumentException($"Type mismatch: {type.FullName} cannot be cast to {typeof(T).FullName}", nameof(type));
+        return ActivatorHelper.CreateInstance<T>(parameters);
+    }
+
+    /// <summary>动态创建实例。AOT 安全版——委托到 ActivatorHelper</summary>
+    /// <typeparam name="T">目标类型</typeparam>
+    /// <param name="className">类名，包括命名空间。AOT 下要求类型已注册</param>
+    /// <param name="parameters">传递给构造函数的参数</param>
+    public static T? CreateInstance<T>(String className, params Object[] parameters)
+    {
+        var type = Type.GetType(className) ?? Assembly.GetCallingAssembly().GetType(className);
+        if (type == null)
+            throw new InvalidOperationException($"Type '{className}' not found. Ensure it is preserved for AOT.");
+        return CreateInstance<T>(type, parameters);
     }
 
     #endregion
@@ -156,7 +212,7 @@ public static class Reflection
     /// <summary>获取属性信息</summary>
     /// <param name="type">类型</param>
     /// <param name="propertyName">属性名</param>
-    public static PropertyInfo? GetPropertyInfo([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type, String propertyName) => type.GetProperties().FirstOrDefault(p => p.Name.Equals(propertyName));
+    public static PropertyInfo? GetPropertyInfo(Type type, String propertyName) => type.GetProperties().FirstOrDefault(p => p.Name.Equals(propertyName));
 
     #endregion
 
@@ -361,6 +417,18 @@ public static class Reflection
 
     #endregion
 
+    #region GetPublicProperties(获取公共属性列表)
+
+    /// <summary>获取公共属性列表。AOT 下需确保实例类型的 PublicProperties 已保留</summary>
+    /// <param name="instance">实例</param>
+    public static List<Item> GetPublicProperties(Object instance)
+    {
+        var properties = instance.GetType().GetProperties();
+        return properties.ToList().Select(t => new Item(t.Name, t.GetValue(instance))).ToList();
+    }
+
+    #endregion
+
     #region GetTopBaseType(获取顶级基类)
 
     /// <summary>获取顶级基类</summary>
@@ -405,11 +473,30 @@ public static class Reflection
     /// <summary>获取实现泛型类型</summary>
     /// <param name="givenType">给定类型</param>
     /// <param name="genericType">泛型类型</param>
-    public static List<Type> GetImplementedGenericTypes([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type givenType, Type genericType)
+    public static List<Type> GetImplementedGenericTypes(Type givenType, Type genericType)
     {
         var result = new List<Type>();
         AddImplementedGenericTypes(result, givenType, genericType);
         return result;
+    }
+
+    /// <summary>添加实现泛型类型</summary>
+    /// <param name="result">结果</param>
+    /// <param name="givenType">给定类型</param>
+    /// <param name="genericType">泛型类型</param>
+    private static void AddImplementedGenericTypes(List<Type> result, Type givenType, Type genericType)
+    {
+        var givenTypeInfo = givenType.GetTypeInfo();
+        if (givenTypeInfo.IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
+            result.AddIfNotContains(givenType);
+        foreach (var interfaceType in givenTypeInfo.GetInterfaces())
+        {
+            if (interfaceType.GetTypeInfo().IsGenericType && interfaceType.GetGenericTypeDefinition() == genericType)
+                result.AddIfNotContains(interfaceType);
+        }
+        if (givenTypeInfo.BaseType == null)
+            return;
+        AddImplementedGenericTypes(result, givenTypeInfo.BaseType, genericType);
     }
 
     #endregion
@@ -450,6 +537,23 @@ public static class Reflection
         return false;
     }
 
+    /// <summary>是否内部元数据扩展</summary>
+    /// <param name="type">类型</param>
+    /// <param name="includeEnums">是否包含枚举</param>
+    private static Boolean IsPrimitiveExtendedInternal(Type type, Boolean includeEnums)
+    {
+        if (type.IsPrimitive)
+            return true;
+        if (includeEnums && type.IsEnum)
+            return true;
+        return type == typeof(String) ||
+               type == typeof(Decimal) ||
+               type == typeof(DateTime) ||
+               type == typeof(DateTimeOffset) ||
+               type == typeof(TimeSpan) ||
+               type == typeof(Guid);
+    }
+
     #endregion
 
     #region IsEnumerable(是否迭代集合)
@@ -484,77 +588,26 @@ public static class Reflection
     }
 
     #endregion
+}
 
-    #region 辅助
+/// <summary>名值对。用于 GetPublicProperties 返回值</summary>
+public class Item
+{
+    /// <summary>名称</summary>
+    public String Name { get; set; }
 
-    /// <summary>判断当前泛型类型是否可由指定类型的实例填充</summary>
-    /// <param name="genericType">泛型类型</param>
-    /// <param name="type">指定类型</param>
-    /// <remarks>此为 IsBaseOn 的内部辅助方法，原为公开 API，AOT 版改为私有以降低修剪风险</remarks>
-    private static Boolean IsGenericAssignableFrom(Type genericType, Type type)
+    /// <summary>值</summary>
+    public Object? Value { get; set; }
+
+    /// <summary>实例化</summary>
+    public Item() { }
+
+    /// <summary>实例化</summary>
+    /// <param name="name">名称</param>
+    /// <param name="value">值</param>
+    public Item(String name, Object? value)
     {
-        if (type == null) throw new ArgumentNullException(nameof(type));
-        if (genericType == null) throw new ArgumentNullException(nameof(genericType));
-
-        if (!genericType.IsGenericType)
-            throw new ArgumentException("该功能只支持泛型类型的调用，非泛型类型可使用 IsAssignableFrom 方法。");
-        var allOthers = new List<Type>() { type };
-        if (genericType.IsInterface) allOthers.AddRange(type.GetInterfaces());
-
-        foreach (var other in allOthers)
-        {
-            var cur = other;
-            while (cur != null)
-            {
-                if (cur.IsGenericType)
-                    cur = cur.GetGenericTypeDefinition();
-                if (cur.IsSubclassOf(genericType) || cur == genericType)
-                    return true;
-                cur = cur.BaseType!;
-            }
-        }
-        return false;
+        Name = name;
+        Value = value;
     }
-
-    /// <summary>添加实现泛型类型</summary>
-    /// <param name="result">结果</param>
-    /// <param name="givenType">给定类型</param>
-    /// <param name="genericType">泛型类型</param>
-    private static void AddImplementedGenericTypes(List<Type> result, Type givenType, Type genericType)
-    {
-        var givenTypeInfo = givenType.GetTypeInfo();
-        if (givenTypeInfo.IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
-            result.AddIfNotContains(givenType);
-        foreach (var interfaceType in givenTypeInfo.GetInterfaces())
-        {
-            if (interfaceType.GetTypeInfo().IsGenericType && interfaceType.GetGenericTypeDefinition() == genericType)
-                result.AddIfNotContains(interfaceType);
-        }
-        if (givenTypeInfo.BaseType == null)
-            return;
-        AddImplementedGenericTypes(result, givenTypeInfo.BaseType, genericType);
-    }
-
-    /// <summary>是否内部元数据扩展</summary>
-    /// <param name="type">类型</param>
-    /// <param name="includeEnums">是否包含枚举</param>
-    private static Boolean IsPrimitiveExtendedInternal(Type type, Boolean includeEnums)
-    {
-        if (type.IsPrimitive)
-            return true;
-        if (includeEnums && type.IsEnum)
-            return true;
-        return type == typeof(String) ||
-               type == typeof(Decimal) ||
-               type == typeof(DateTime) ||
-               type == typeof(DateTimeOffset) ||
-               type == typeof(TimeSpan) ||
-               type == typeof(Guid);
-    }
-
-    #endregion
-
-    #region 日志
-
-    #endregion
 }
