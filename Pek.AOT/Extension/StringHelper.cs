@@ -424,6 +424,28 @@ public static class StringHelper
         return str;
     }
 
+    /// <summary>从当前字符串结尾移除另一字符串，不区分大小写，循环多次匹配后缀</summary>
+    /// <param name="str">当前字符串</param>
+    /// <param name="ends">后缀集合</param>
+    /// <returns>移除后的字符串</returns>
+    public static String TrimSuffix(this String str, params String[] ends)
+    {
+        if (str.IsNullOrEmpty()) return str;
+        if (ends == null || ends.Length == 0 || ends[0].IsNullOrEmpty()) return str;
+        for (var i = 0; i < ends.Length; i++)
+        {
+            if (str.EndsWith(ends[i], StringComparison.OrdinalIgnoreCase))
+            {
+                str = str[..^ends[i].Length];
+                if (String.IsNullOrEmpty(str)) break;
+
+                // 从头开始
+                i = -1;
+            }
+        }
+        return str;
+    }
+
     /// <summary>修剪不可见字符。仅修剪ASCII控制字符，不包含 Unicode 其它类别</summary>
     /// <param name="value">字符串</param>
     /// <returns>处理后字符串（若未发现不可见字符返回原引用）</returns>
@@ -876,6 +898,37 @@ public static class StringHelper
         _provider.SpeakAsyncCancelAll();
 
         return value;
+    }
+    #endregion
+
+    #region Hex转换
+    /// <summary>Hex字符串转为字节数组</summary>
+    /// <param name="data">Hex编码的字符串</param>
+    /// <param name="startIndex">起始位置</param>
+    /// <param name="length">长度</param>
+    /// <returns>字节数组</returns>
+    public static Byte[] ToHex(this String? data, Int32 startIndex = 0, Int32 length = -1)
+    {
+        if (data.IsNullOrEmpty()) return [];
+
+        // 过滤特殊字符
+        data = data.Trim()
+            .Replace("-", null)
+            .Replace("0x", null)
+            .Replace("0X", null)
+            .Replace(" ", null)
+            .Replace("\r", null)
+            .Replace("\n", null)
+            .Replace(",", null);
+
+        if (length <= 0) length = data.Length - startIndex;
+
+        var bts = new Byte[length / 2];
+        for (var i = 0; i < bts.Length; i++)
+        {
+            bts[i] = Byte.Parse(data.Substring(startIndex + 2 * i, 2), System.Globalization.NumberStyles.HexNumber);
+        }
+        return bts;
     }
     #endregion
 }
