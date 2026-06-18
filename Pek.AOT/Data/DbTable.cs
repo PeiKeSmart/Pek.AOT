@@ -8,7 +8,6 @@ using System.Xml.Serialization;
 using Pek.Buffers;
 using Pek.Extension;
 using Pek.IO;
-using Pek.Reflection;
 using Pek.Serialization;
 
 namespace Pek.Data;
@@ -64,7 +63,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
             writer.Write(cs[i], 0);
 
             // 复杂类型写入类型字符串
-            var code = ts[i].GetTypeCode();
+            var code = Type.GetTypeCode(ts[i]);
             writer.Write((Byte)code);
             if (code == TypeCode.Object)
                 writer.Write(ts[i].FullName, 0);
@@ -114,9 +113,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
             // 复杂类型写入类型字符串
             var tc = (TypeCode)reader.ReadByte();
             if (tc != TypeCode.Object)
-                ts[i] = Type.GetType("System." + tc) ?? typeof(Object);
+                ts[i] = GetTypeFromCode(tc);
             else if (ver >= 2)
-                ts[i] = Type.GetType(reader.ReadString() ?? "") ?? typeof(Object);
+                ts[i] = typeof(Object); // AOT: 不支持运行时动态类型解析，复杂类型回退为Object
         }
         Columns = cs;
         Types = ts;
@@ -142,7 +141,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <param name="stream"></param>
     public Int64 Read(Stream stream)
     {
-        var buf = stream.ReadBytes();
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var buf = ms.ToArray();
         var reader = new SpanReader(buf);
         Read(ref reader);
         return buf.Length;
@@ -197,7 +198,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         {
             using var fs = file.AsFile().OpenRead();
             using var gz = new GZipStream(fs, CompressionMode.Decompress);
-            var buf = gz.ReadBytes();
+            using var ms = new MemoryStream();
+            gz.CopyTo(ms);
+            var buf = ms.ToArray();
             var reader = new SpanReader(buf);
             Read(ref reader);
             return buf.Length;
@@ -226,7 +229,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         {
             using var ms = new MemoryStream(buf);
             using var gz = new GZipStream(ms, CompressionMode.Decompress);
-            buf = gz.ReadBytes();
+            using var outMs = new MemoryStream();
+            gz.CopyTo(outMs);
+            buf = outMs.ToArray();
         }
 
         var reader = new SpanReader(buf);
@@ -251,9 +256,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
 
             var tc = (TypeCode)reader.ReadByte();
             if (tc != TypeCode.Object)
-                ts[i] = Type.GetType("System." + tc) ?? typeof(Object);
+                ts[i] = GetTypeFromCode(tc);
             else if (ver >= 2)
-                ts[i] = Type.GetType(reader.ReadString() ?? "") ?? typeof(Object);
+                ts[i] = typeof(Object); // AOT: 不支持运行时动态类型解析，复杂类型回退为Object
         }
         Columns = cs;
         Types = ts;
@@ -264,6 +269,8 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         var rows = Total;
         if (rows == 0 && buf.Length > 0) rows = -1;
 
+        // SpanReader 是 ref struct，不能跨 yield 边界。先读到列表再 yield。
+        var result = new List<Object?[]>();
         if (rows > 0)
         {
             for (var k = 0; k < rows; k++)
@@ -273,7 +280,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
                 {
                     row[i] = SpanSerializer.ReadValue(ref reader, ts[i]);
                 }
-                yield return row;
+                result.Add(row);
             }
         }
         else
@@ -285,8 +292,13 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
                 {
                     row[i] = SpanSerializer.ReadValue(ref reader, ts[i]);
                 }
-                yield return row;
+                result.Add(row);
             }
+        }
+
+        foreach (var row in result)
+        {
+            yield return row;
         }
     }
 
@@ -368,7 +380,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
             for (var i = 0; i < cs.Length; i++)
             {
                 headWriter.Write(cs[i], 0);
-                var code = ts[i].GetTypeCode();
+                var code = Type.GetTypeCode(ts[i]);
                 headWriter.Write((Byte)code);
                 if (code == TypeCode.Object)
                     headWriter.Write(ts[i].FullName, 0);
@@ -506,9 +518,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
                     if (ts[i] == typeof(Boolean))
                         writer.WriteValue(row[i].ToBoolean());
                     else if (ts[i] == typeof(DateTime))
-                        writer.WriteValue(new DateTimeOffset(row[i].ChangeType<DateTime>()));
+                        writer.WriteValue(new DateTimeOffset((DateTime)ChangeType(row[i], typeof(DateTime))!));
                     else if (ts[i] == typeof(DateTimeOffset))
-                        writer.WriteValue(row[i].ChangeType<DateTimeOffset>());
+                        writer.WriteValue((DateTimeOffset)ChangeType(row[i], typeof(DateTimeOffset))!);
                     else if (row[i] is IFormattable ft)
                         await writer.WriteStringAsync(ft + "").ConfigureAwait(false);
                     else
@@ -556,8 +568,8 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     public void WriteModels<T>(IEnumerable<T> models)
     {
         // 可用属性
-        var pis = typeof(T).GetProperties(true);
-        pis = pis.Where(e => e.PropertyType.IsBaseType()).ToArray();
+        var pis = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        pis = pis.Where(e => Type.GetTypeCode(e.PropertyType) != TypeCode.Object || e.PropertyType.IsEnum || e.PropertyType == typeof(Guid) || e.PropertyType == typeof(TimeSpan) || e.PropertyType == typeof(DateTimeOffset)).ToArray();
 
         // 头部
         if (Columns == null || Columns.Length == 0)
@@ -576,8 +588,8 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     public IEnumerable<Object?[]> Cast<T>(IEnumerable<T> models)
     {
         // 可用属性
-        var pis = typeof(T).GetProperties(true);
-        pis = pis.Where(e => e.PropertyType.IsBaseType()).ToArray();
+        var pis = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        pis = pis.Where(e => Type.GetTypeCode(e.PropertyType) != TypeCode.Object || e.PropertyType.IsEnum || e.PropertyType == typeof(Guid) || e.PropertyType == typeof(TimeSpan) || e.PropertyType == typeof(DateTimeOffset)).ToArray();
 
         foreach (var item in models)
         {
@@ -590,7 +602,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
                     if (item is IModel ext)
                         row[i] = ext[pis[i].Name];
                     else if (item != null)
-                        row[i] = item.GetValue(pis[i]);
+                        row[i] = pis[i].GetValue(item);
                 }
             }
             yield return row;
@@ -618,12 +630,12 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         if (rows == null) yield break;
 
         // 可用属性（通过 DefaultReflect 缓存，避免重复反射扫描）
-        var pis = type.GetProperties(true);
+        var pis = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var dic = pis.ToDictionary(e => SerialHelper.GetName(e), e => e, StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in rows)
         {
-            var model = type.CreateInstance();
+            var model = Activator.CreateInstance(type);
             if (model == null) continue;
 
             for (var i = 0; i < row.Length; i++)
@@ -631,11 +643,11 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
                 // 扩展赋值，或 反射赋值
                 if (dic.TryGetValue(cs[i], out var pi) && pi.CanWrite)
                 {
-                    var val = row[i].ChangeType(pi.PropertyType);
+                    var val = ChangeType(row[i], pi.PropertyType);
                     if (model is IModel ext)
                         ext[pi.Name] = val;
                     else
-                        model.SetValue(pi, val);
+                        pi.SetValue(model, val);
                 }
             }
 
@@ -669,7 +681,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         var col = GetColumn(name);
         if (col < 0) return false;
 
-        value = rs[row][col].ChangeType<T>();
+        value = (T?)ChangeType(rs[row][col], typeof(T));
 
         return true;
     }
@@ -702,9 +714,9 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
         if (_Defs == null)
         {
             var dic = new Dictionary<TypeCode, Object?>();
-            foreach (var item in Enum.GetValues(typeof(TypeCode)))
+            foreach (var item in Enum.GetValues<TypeCode>())
             {
-                if (item is not TypeCode tc2) continue;
+                var tc2 = item;
 
                 Object? val = null;
                 val = tc2 switch
@@ -732,6 +744,60 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
 
         return _Defs.TryGetValue(tc, out var obj) ? obj : null;
     }
+
+    /// <summary>AOT安全类型转换</summary>
+    private static Object? ChangeType(Object? value, Type targetType)
+    {
+        if (value == null || value == DBNull.Value) return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
+
+        var underlyingType = Nullable.GetUnderlyingType(targetType);
+        if (underlyingType != null) targetType = underlyingType;
+
+        if (targetType.IsAssignableFrom(value.GetType())) return value;
+
+        if (targetType.IsEnum) return Enum.Parse(targetType, value + "");
+
+        return Type.GetTypeCode(targetType) switch
+        {
+            TypeCode.Boolean => value.ToBoolean(),
+            TypeCode.Char => value is Char c ? c : (value + "")[0],
+            TypeCode.SByte => Convert.ToSByte(value),
+            TypeCode.Byte => Convert.ToByte(value),
+            TypeCode.Int16 => Convert.ToInt16(value),
+            TypeCode.UInt16 => Convert.ToUInt16(value),
+            TypeCode.Int32 => Convert.ToInt32(value),
+            TypeCode.UInt32 => Convert.ToUInt32(value),
+            TypeCode.Int64 => Convert.ToInt64(value),
+            TypeCode.UInt64 => Convert.ToUInt64(value),
+            TypeCode.Single => Convert.ToSingle(value),
+            TypeCode.Double => Convert.ToDouble(value),
+            TypeCode.Decimal => Convert.ToDecimal(value),
+            TypeCode.DateTime => Convert.ToDateTime(value),
+            TypeCode.String => value + "",
+            _ => value,
+        };
+    }
+
+    /// <summary>AOT安全：从TypeCode获取对应Type</summary>
+    private static Type GetTypeFromCode(TypeCode tc) => tc switch
+    {
+        TypeCode.Boolean => typeof(Boolean),
+        TypeCode.Char => typeof(Char),
+        TypeCode.SByte => typeof(SByte),
+        TypeCode.Byte => typeof(Byte),
+        TypeCode.Int16 => typeof(Int16),
+        TypeCode.UInt16 => typeof(UInt16),
+        TypeCode.Int32 => typeof(Int32),
+        TypeCode.UInt32 => typeof(UInt32),
+        TypeCode.Int64 => typeof(Int64),
+        TypeCode.UInt64 => typeof(UInt64),
+        TypeCode.Single => typeof(Single),
+        TypeCode.Double => typeof(Double),
+        TypeCode.Decimal => typeof(Decimal),
+        TypeCode.DateTime => typeof(DateTime),
+        TypeCode.String => typeof(String),
+        _ => typeof(Object),
+    };
 
     Object ICloneable.Clone() => Clone();
 

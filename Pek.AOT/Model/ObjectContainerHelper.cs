@@ -366,6 +366,24 @@ public static class ObjectContainerHelper
         return provider2;
     }
 
+    /// <summary>从对象容器创建应用主机</summary>
+    /// <param name="container"></param>
+    /// <returns></returns>
+    public static IHost BuildHost(this IObjectContainer container) => BuildHost(container, null);
+
+    /// <summary>从对象容器创建应用主机</summary>
+    /// <param name="container"></param>
+    /// <param name="innerServiceProvider">内部服务提供者，常用于NETCore的IoC</param>
+    /// <returns></returns>
+    public static IHost BuildHost(this IObjectContainer container, IServiceProvider? innerServiceProvider)
+    {
+        // 尝试注册应用主机，如果前面已经注册，则这里无效
+        container.TryAddSingleton<IHost, Host>();
+
+        var provider = container.BuildServiceProvider(innerServiceProvider);
+        return provider.GetRequiredService<IHost>();
+    }
+
     /// <summary>获取指定类型的服务对象</summary>
     /// <typeparam name="TService">服务类型</typeparam>
     /// <param name="container">对象容器</param>

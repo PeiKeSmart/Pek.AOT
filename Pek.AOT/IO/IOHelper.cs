@@ -314,35 +314,80 @@ public static class IOHelper
         return encoding.GetString(buf, offset + skip, count - skip);
     }
 
-    private static void WriteEncodedInt(Stream stream, Int32 value)
+    [ThreadStatic]
+    private static Byte[]? _encodes;
+
+    /// <summary>以压缩格式读取32位整数</summary>
+    /// <param name="stream">数据流</param>
+    /// <returns></returns>
+    public static Int32 ReadEncodedInt(this Stream stream)
     {
-        var number = (UInt32)value;
-        while (number >= 0x80)
-        {
-            stream.WriteByte((Byte)(number | 0x80));
-            number >>= 7;
-        }
-
-        stream.WriteByte((Byte)number);
-    }
-
-    private static Int32 ReadEncodedInt(Stream stream)
-    {
-        UInt32 result = 0;
-        Byte shift = 0;
-
+        Byte b;
+        UInt32 rs = 0;
+        Byte n = 0;
         while (true)
         {
-            var value = stream.ReadByte();
-            if (value < 0) throw new EndOfStreamException();
+            var bt = stream.ReadByte();
+            if (bt < 0) throw new Exception($"The data stream is out of range! The integer read is {rs: n0}");
+            b = (Byte)bt;
 
-            result |= (UInt32)((value & 0x7f) << shift);
-            if ((value & 0x80) == 0) return (Int32)result;
+            // 必须转为Int32，否则可能溢出
+            rs |= (UInt32)((b & 0x7f) << n);
+            if ((b & 0x80) == 0) break;
 
-            shift += 7;
-            if (shift >= 32)
-                throw new FormatException("The number value is too large to read in compressed format!");
+            n += 7;
+            if (n >= 32) throw new FormatException("The number value is too large to read in compressed format!");
         }
+        return (Int32)rs;
+    }
+
+    /// <summary>以压缩格式读取64位整数</summary>
+    /// <param name="stream">数据流</param>
+    /// <returns></returns>
+    public static UInt64 ReadEncodedInt64(this Stream stream)
+    {
+        Byte b;
+        UInt64 rs = 0;
+        Byte n = 0;
+        while (true)
+        {
+            var bt = stream.ReadByte();
+            if (bt < 0) throw new Exception("The data stream is out of range!");
+            b = (Byte)bt;
+
+            // 必须转为Int32，否则可能溢出
+            rs |= (UInt64)(b & 0x7f) << n;
+            if ((b & 0x80) == 0) break;
+
+            n += 7;
+            if (n >= 64) throw new FormatException("The number value is too large to read in compressed format!");
+        }
+        return rs;
+    }
+
+    /// <summary>
+    /// 以7位压缩格式写入32位整数，小于7位用1个字节，小于14位用2个字节。
+    /// 由每次写入的一个字节的第一位标记后面的字节是否还是当前数据，所以每个字节实际可利用存储空间只有后7位。
+    /// </summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="value">数值</param>
+    /// <returns>实际写入字节数</returns>
+    public static Stream WriteEncodedInt(this Stream stream, Int64 value)
+    {
+        _encodes ??= new Byte[16];
+
+        var count = 0;
+        var num = (UInt64)value;
+        while (num >= 0x80)
+        {
+            _encodes[count++] = (Byte)(num | 0x80);
+            num >>= 7;
+        }
+        _encodes[count++] = (Byte)num;
+
+        stream.Write(_encodes, 0, count);
+
+        return stream;
     }
 
     /// <summary>把字节数组编码为十六进制字符串</summary>
@@ -461,4 +506,95 @@ public static class IOHelper
     }
 
     private static Char GetHexValue(Int32 value) => value < 10 ? (Char)(value + '0') : (Char)(value - 10 + 'A');
+
+    /// <summary>从一个数据流复制特定长度数据到另一个数据流</summary>
+    /// <param name="source">源数据流</param>
+    /// <param name="destination">目标数据流</param>
+    /// <param name="length">要复制的数据长度</param>
+    /// <param name="bufferSize">缓冲区大小</param>
+    public static void CopyTo(this Stream source, Stream destination, Int64 length, Int32 bufferSize)
+    {
+        if (length <= 0) return;
+
+        var buffer = ArrayPool<Byte>.Shared.Rent(bufferSize);
+        while (length > 0)
+        {
+            var bytesRead = source.Read(buffer, 0, (Int32)Math.Min(buffer.Length, length));
+            if (bytesRead == 0) break;
+
+            destination.Write(buffer, 0, bytesRead);
+            length -= bytesRead;
+        }
+        ArrayPool<Byte>.Shared.Return(buffer);
+    }
+
+    /// <summary>从字节数据指定位置读取一个无符号64位整数</summary>
+    /// <param name="data"></param>
+    /// <param name="offset">偏移</param>
+    /// <param name="isLittleEndian">是否小端字节序</param>
+    /// <returns></returns>
+    public static UInt64 ToUInt64(this Byte[] data, Int32 offset = 0, Boolean isLittleEndian = true)
+    {
+        if (isLittleEndian) return BitConverter.ToUInt64(data, offset);
+
+        if (offset > 0) data = data.ReadBytes(offset, 8);
+        if (isLittleEndian)
+        {
+            var num1 = data[0] | data[1] << 8 | data[2] << 0x10 | data[3] << 0x18;
+            var num2 = data[4] | data[5] << 8 | data[6] << 0x10 | data[7] << 0x18;
+            return (UInt32)num1 | (UInt64)num2 << 0x20;
+        }
+        else
+        {
+            var num3 = data[0] << 0x18 | data[1] << 0x10 | data[2] << 8 | data[3];
+            var num4 = data[4] << 0x18 | data[5] << 0x10 | data[6] << 8 | data[7];
+            return (UInt32)num4 | (UInt64)num3 << 0x20;
+        }
+    }
+
+    /// <summary>从字节数据指定位置读取一个单精度浮点数</summary>
+    /// <param name="data"></param>
+    /// <param name="offset">偏移</param>
+    /// <param name="isLittleEndian">是否小端字节序</param>
+    /// <returns></returns>
+    public static Single ToSingle(this Byte[] data, Int32 offset = 0, Boolean isLittleEndian = true)
+    {
+        // BitConverter得到小端，如果不是小端字节顺序，则倒序
+        if (offset > 0) data = data.ReadBytes(offset, 4);
+        if (!isLittleEndian)
+        {
+            (data[3], data[2], data[1], data[0]) = (data[0], data[1], data[2], data[3]);
+        }
+
+        return BitConverter.ToSingle(data, offset);
+    }
+
+    /// <summary>从字节数据指定位置读取一个双精度浮点数</summary>
+    /// <param name="data"></param>
+    /// <param name="offset">偏移</param>
+    /// <param name="isLittleEndian">是否小端字节序</param>
+    /// <returns></returns>
+    public static Double ToDouble(this Byte[] data, Int32 offset = 0, Boolean isLittleEndian = true)
+    {
+        if (offset > 0) data = data.ReadBytes(offset, 8);
+        if (!isLittleEndian)
+        {
+            (data[7], data[6], data[5], data[4], data[3], data[2], data[1], data[0]) = (data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+        }
+
+        return BitConverter.ToDouble(data, offset);
+    }
+
+    /// <summary>字节数组转为Url改进型Base64编码</summary>
+    /// <param name="data"></param>
+    /// <param name="offset"></param>
+    /// <param name="count"></param>
+    /// <returns></returns>
+    public static String ToUrlBase64(this Byte[] data, Int32 offset = 0, Int32 count = -1)
+    {
+        var str = ToBase64(data, offset, count, false);
+        str = str.TrimEnd('=');
+        str = str.Replace('+', '-').Replace('/', '_');
+        return str;
+    }
 }
