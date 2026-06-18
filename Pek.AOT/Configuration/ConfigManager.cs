@@ -652,7 +652,7 @@ public static class ConfigManager
     /// CurrentFolder → PathHelper.BasePath/Config（若未设 BasePath 则回退到 bin/Config）；
     /// SystemUserFolder → 系统用户应用数据目录/{AppName}/Config
     /// </summary>
-    private static String GetConfigRootDirectory()
+    public static String GetConfigRootDirectory()
     {
         if (PathMode == ConfigPathMode.SystemUserFolder)
         {
@@ -682,7 +682,7 @@ public static class ConfigManager
     /// <summary>
     /// 获取配置文件路径
     /// </summary>
-    private static string GetConfigFilePath(Type configType)
+    public static String GetConfigFilePath(Type configType)
     {
         var fileName = _configFileNames.TryGetValue(configType, out var name) ? name : configType.Name;
 
