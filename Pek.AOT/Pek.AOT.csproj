@@ -9,8 +9,8 @@
     <AssemblyTitle>AOT可用方法库</AssemblyTitle>
     <Description>DH框架AOT可用方法库</Description>
     <Company>湖北登灏科技有限公司</Company>
-    <Copyright>©2020-2025 湖北登灏科技有限公司</Copyright>
-    <VersionPrefix>4.22</VersionPrefix>
+    <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
+    <VersionPrefix>4.24</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
@@ -53,12 +53,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.301">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="10.0.0" />
-    <PackageReference Include="System.IO.Ports" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="10.0.10" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
