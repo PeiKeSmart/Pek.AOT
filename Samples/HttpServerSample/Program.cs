@@ -4,6 +4,8 @@ using Pek.Serialization;
 
 using System.Text.Json.Serialization;
 
+using HttpClient = System.Net.Http.HttpClient;
+
 XTrace.UseConsole();
 JsonHelper.Register(HttpServerSampleJsonContext.Default.SampleItem);
 

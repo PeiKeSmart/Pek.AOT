@@ -1,6 +1,7 @@
 using System.Net;
 
 using Pek.Net;
+using DnsResolver = Pek.Net.DnsResolver;
 
 namespace Pek.Http;
 

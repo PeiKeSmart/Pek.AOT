@@ -192,7 +192,8 @@ namespace Pek.Expressions
 
             if (outs.Count == 0) return null;
 
-            return outs.ToArray().Reverse().ToArray();
+            // 注意：不要写回 outs.ToArray().Reverse().ToArray()，数组在 net9.0 下会命中返回 void 的 Span 重载
+            return outs.Reverse().ToArray();
         }
 
         /// <summary>是否有效</summary>

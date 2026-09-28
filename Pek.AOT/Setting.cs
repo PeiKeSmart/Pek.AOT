@@ -80,7 +80,7 @@ public class Setting : Config<Setting, SettingJsonContext>
         // 多应用项目，运行目录可能位于 netX 目标框架子目录，向上回退一级作为逻辑根
         var root = "../";
         var directory = ".".AsDirectory();
-        if (directory.Name.StartsWithIgnoreCase("netcoreapp", "net2", "net4", "net5", "net6", "net7", "net8", "net9", "net10") && directory.Parent != null)
+        if (directory.Name.StartsWithIgnoreCase("netcoreapp", "net2", "net4", "net5", "net6", "net7", "net8", "net9", "net10", "net11") && directory.Parent != null)
         {
             root = "../../";
             directory = directory.Parent;
