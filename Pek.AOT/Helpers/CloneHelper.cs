@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -12,10 +13,12 @@ public static class CloneHelper
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    /// <summary>深度克隆</summary>
+    /// <summary>深度克隆。AOT 下需配合 JsonSerializerContext 源生成，否则反射序列化可能失效</summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="source"></param>
     /// <returns></returns>
+    [RequiresUnreferencedCode("JSON 反射序列化在裁剪下可能失败，AOT 场景请改用带 JsonTypeInfo 的序列化")]
+    [RequiresDynamicCode("JSON 反射序列化在 AOT 下需要运行时代码生成，请使用源生成上下文")]
     public static T? DeepCloneWithJson<T>(this T source)
     {
         if (source == null) return default;

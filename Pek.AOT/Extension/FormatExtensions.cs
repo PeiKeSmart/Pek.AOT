@@ -34,7 +34,7 @@ public static class FormatExtensions
             if (count > 0) appString += "  ";
             sb.AppendLine($"{appString}异常消息：{e.Message}");
             sb.AppendLine($"{appString}异常类型：{e.GetType().FullName}");
-            try { sb.AppendLine($"{appString}异常方法：{e.TargetSite?.Name}"); } catch { /* AOT: TargetSite may be trimmed */ }
+            // AOT: TargetSite 在裁剪下不可用（IL2026），异常方法信息已包含在堆栈中，故不再单独输出
             sb.AppendLine($"{appString}异常源：{e.Source}");
             if (!isHideStackTrace && e.StackTrace != null)
                 sb.AppendLine($"{appString}异常堆栈：{e.StackTrace}");

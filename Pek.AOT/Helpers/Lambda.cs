@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -384,6 +385,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Equal<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -401,6 +403,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> NotEqual<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -418,6 +421,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Greater<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -435,6 +439,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> GreaterEqual<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -452,6 +457,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Less<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -469,6 +475,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> LessEqual<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -486,6 +493,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Starts<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -503,6 +511,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Ends<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();
@@ -520,6 +529,7 @@ public static class Lambda
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="propertyName">属性名</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按属性名动态构建表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression<Func<T, Boolean>> Contains<T>(String propertyName, Object value)
     {
         var parameter = CreateParameter<T>();

@@ -179,6 +179,7 @@ public static partial class DHExtensions
     /// <summary>头匹配表达式</summary>
     /// <param name="left">左操作数</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按方法名动态构建调用表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression StartsWith(this Expression left, Object value)
         => left.Call("StartsWith", [typeof(String)], value);
 
@@ -189,6 +190,7 @@ public static partial class DHExtensions
     /// <summary>尾匹配表达式</summary>
     /// <param name="left">左操作数</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按方法名动态构建调用表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression EndsWith(this Expression left, Object value)
         => left.Call("EndsWith", [typeof(String)], value);
 
@@ -199,6 +201,7 @@ public static partial class DHExtensions
     /// <summary>模糊匹配表达式</summary>
     /// <param name="left">左操作数</param>
     /// <param name="value">值</param>
+    [RequiresUnreferencedCode("按方法名动态构建调用表达式在裁剪下可能失败，请改用强类型表达式或确保成员被保留")]
     public static Expression Contains(this Expression left, Object value)
         => left.Call("Contains", [typeof(String)], value);
 

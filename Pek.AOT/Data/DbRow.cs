@@ -1,6 +1,8 @@
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Pek.Data;
 
 /// <summary>数据行</summary>
@@ -47,6 +49,6 @@ public readonly struct DbRow(DbTable table, Int32 index) : IModel
     /// <typeparam name="T"></typeparam>
     /// <param name="name"></param>
     /// <returns></returns>
-    public readonly T? Get<T>(String name) => Table.Get<T>(Index, name);
+    public readonly T? Get<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(String name) => Table.Get<T>(Index, name);
     #endregion
 }

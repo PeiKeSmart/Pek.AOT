@@ -11,13 +11,29 @@ public static class CacheUtil
 
     /// <summary>获取类型的所有公共属性（带缓存）</summary>
     public static PropertyInfo[] GetTypeProperties([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
-        => null == type ? throw new ArgumentNullException(nameof(type)) : TypePropertyCache.GetOrAdd(type, t => t.GetProperties());
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (!TypePropertyCache.TryGetValue(type, out var value))
+        {
+            value = type.GetProperties();
+            TypePropertyCache.TryAdd(type, value);
+        }
+        return value;
+    }
 
     private static readonly ConcurrentDictionary<Type, FieldInfo[]> TypeFieldCache = new();
 
     /// <summary>获取类型的所有公共字段（带缓存）</summary>
     public static FieldInfo[] GetTypeFields([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] Type type)
-        => null == type ? throw new ArgumentNullException(nameof(type)) : TypeFieldCache.GetOrAdd(type, t => t.GetFields());
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (!TypeFieldCache.TryGetValue(type, out var value))
+        {
+            value = type.GetFields();
+            TypeFieldCache.TryAdd(type, value);
+        }
+        return value;
+    }
 
     internal static readonly ConcurrentDictionary<Type, MethodInfo[]> TypeMethodCache = new();
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text.Json;
 
@@ -95,6 +96,8 @@ public static class HttpResponseExtensions
 {
     /// <summary>将字符串响应反序列化为 JSON 对象</summary>
     /// <typeparam name="TResult">目标类型</typeparam>
+    [RequiresUnreferencedCode("JSON 反射反序列化在裁剪下可能失败，AOT 场景请提供源生成上下文")]
+    [RequiresDynamicCode("JSON 反射反序列化在 AOT 下需要运行时代码生成，请使用源生成上下文")]
     public static HttpResponse<TResult?> AsJson<TResult>(this HttpResponse<String> response)
     {
         // JsonSerializer.Deserialize 已处理 null/空字符串情况

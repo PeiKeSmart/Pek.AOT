@@ -14,7 +14,10 @@ public static partial class DHExtensions
         if (member == null) throw new ArgumentNullException(nameof(member));
         if (instance == null) throw new ArgumentNullException(nameof(instance));
 
-        // AOT: reflection access - may return null if property metadata is trimmed
-        return instance.GetType().GetProperty(member.Name)?.GetValue(instance);
+        // AOT 安全：直接使用传入的 PropertyInfo 取值，避免按名反射查找（IL2075）；非 PropertyInfo 成员在裁剪下不保证元数据保留，返回 null
+        if (member is PropertyInfo property)
+            return property.GetValue(instance);
+
+        return null;
     }
 }

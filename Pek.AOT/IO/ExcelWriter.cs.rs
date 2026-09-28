@@ -51,7 +51,7 @@ public class ExcelWriter : DisposeBase
     /// <summary>超过该数字有效位数阈值（或极小值有大量前导0小数）则写为文本以避免科学计数法。默认 11。</summary>
     private const Int32 LongNumberAsTextThreshold = 11;
 
-    /// <summary>是否自动根据数据内容估算列宽，并写入 <c>&lt;cols&gt;</c> 来避免 WPS/Excel 出现########。默认 true。</summary>
+    /// <summary>是否自动根据数据内容估算列宽，并写入 <c>&lt;cols&gt;</c> 来避�?WPS/Excel 出现########。默认 true。</summary>
     public Boolean AutoFitColumnWidth { get; set; } = true;
 
     // 多 sheet：保持插入顺序，写 workbook.xml 时用于 sheetId 顺序
@@ -209,7 +209,7 @@ public class ExcelWriter : DisposeBase
                         var hasTime = dt.TimeOfDay.Ticks != 0;
                         style = hasTime ? ExcelCellStyle.DateTime : ExcelCellStyle.Date;
                         inner = serial.ToString("0.###############", CultureInfo.InvariantCulture);
-                        // 为避免 WPS 显示 ########，这里按常见完整格式长度估算：yyyy-MM-dd 或 yyyy-MM-dd HH:mm:ss
+                        // 为避�?WPS 显示 ########，这里按常见完整格式长度估算：yyyy-MM-dd 或 yyyy-MM-dd HH:mm:ss
                         //displayLen = hasTime ? 16 - 1 : 10 - 1;
                         displayLen = hasTime ? 14 : 0;
                         break;

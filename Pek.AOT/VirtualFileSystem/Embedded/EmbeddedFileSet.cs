@@ -76,11 +76,13 @@ public class EmbeddedFileSet : IVirtualFileSet
     {
         var lastModified = DateTimeOffset.UtcNow;
 
-        if (!String.IsNullOrEmpty(Assembly.Location))
+        // AOT 安全：单文件发布下 Assembly.Location 为空（IL3000），改用应用目录拼接程序集文件名
+        var location = Path.Combine(AppContext.BaseDirectory, Assembly.GetName().Name + ".dll");
+        if (File.Exists(location))
         {
             try
             {
-                lastModified = File.GetLastWriteTimeUtc(Assembly.Location);
+                lastModified = File.GetLastWriteTimeUtc(location);
             }
             catch (PathTooLongException)
             {

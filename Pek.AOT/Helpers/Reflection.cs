@@ -9,21 +9,29 @@ namespace Pek.Helpers;
 /// <summary>反射操作。AOT 安全版</summary>
 public static class Reflection
 {
+    /// <summary>DAM 注解用：公共成员全量集（构造/方法/字段/嵌套类型/属性/事件）</summary>
+    private const DynamicallyAccessedMemberTypes PublicMemberTypes =
+        DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicMethods |
+        DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicNestedTypes |
+        DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicEvents;
+
     #region GetDescription(获取类型描述)
 
     /// <summary>获取类型描述，使用<see cref="DescriptionAttribute"/>设置描述</summary>
     /// <typeparam name="T">类型</typeparam>
-    public static String GetDescription<T>() => GetDescription(Common.GetType<T>());
+    public static String GetDescription<[DynamicallyAccessedMembers(PublicMemberTypes)] T>() => GetDescription(typeof(T));
 
     /// <summary>获取类型成员描述，使用<see cref="DescriptionAttribute"/>设置描述</summary>
     /// <typeparam name="T">类型</typeparam>
     /// <param name="memberName">成员名称</param>
-    public static String GetDescription<T>(String memberName) => GetDescription(Common.GetType<T>(), memberName);
+    public static String GetDescription<[DynamicallyAccessedMembers(PublicMemberTypes)] T>(String memberName) => GetDescription(typeof(T), memberName);
 
     /// <summary>获取类型成员描述，使用<see cref="DescriptionAttribute"/>设置描述</summary>
     /// <param name="type">类型</param>
     /// <param name="memberName">成员名称</param>
-    public static String GetDescription(Type type, String memberName)
+    public static String GetDescription(
+        [DynamicallyAccessedMembers(PublicMemberTypes)] Type type,
+        String memberName)
     {
         if (type == null)
             return String.Empty;
@@ -51,13 +59,13 @@ public static class Reflection
     /// <typeparam name="TBaseType">基类型</typeparam>
     /// <param name="type">当前类型</param>
     /// <param name="canAbstract">能否是抽象类</param>
-    public static Boolean IsDeriveClassFrom<TBaseType>(Type type, Boolean canAbstract = false) => IsDeriveClassFrom(type, typeof(TBaseType), canAbstract);
+    public static Boolean IsDeriveClassFrom<TBaseType>([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, Boolean canAbstract = false) => IsDeriveClassFrom(type, typeof(TBaseType), canAbstract);
 
     /// <summary>判断当前类型是否可由指定类型派生</summary>
     /// <param name="type">当前类型</param>
     /// <param name="baseType">基类型</param>
     /// <param name="canAbstract">能否是抽象类</param>
-    public static Boolean IsDeriveClassFrom(Type type, Type baseType, Boolean canAbstract = false)
+    public static Boolean IsDeriveClassFrom([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, Type baseType, Boolean canAbstract = false)
     {
         if (type == null) throw new ArgumentNullException(nameof(type));
         if (baseType == null) throw new ArgumentNullException(nameof(baseType));
@@ -72,12 +80,12 @@ public static class Reflection
     /// <summary>返回当前类型是否是指定基类的派生类</summary>
     /// <typeparam name="TBaseType">基类型</typeparam>
     /// <param name="type">类型</param>
-    public static Boolean IsBaseOn<TBaseType>(Type type) => IsBaseOn(type, typeof(TBaseType));
+    public static Boolean IsBaseOn<TBaseType>([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type) => IsBaseOn(type, typeof(TBaseType));
 
     /// <summary>返回当前类型是否是指定基类的派生类</summary>
     /// <param name="type">类型</param>
     /// <param name="baseType">基类类型</param>
-    public static Boolean IsBaseOn(Type type, Type baseType) => baseType.IsGenericTypeDefinition
+    public static Boolean IsBaseOn([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, Type baseType) => baseType.IsGenericTypeDefinition
         ? IsGenericAssignableFrom(baseType, type)
         : baseType.IsAssignableFrom(type);
 
@@ -88,7 +96,7 @@ public static class Reflection
     /// <summary>判断当前泛型类型是否可由指定类型的实例填充</summary>
     /// <param name="genericType">泛型类型</param>
     /// <param name="type">指定类型</param>
-    public static Boolean IsGenericAssignableFrom(Type genericType, Type type)
+    public static Boolean IsGenericAssignableFrom(Type genericType, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type)
     {
         if (type == null) throw new ArgumentNullException(nameof(type));
         if (genericType == null) throw new ArgumentNullException(nameof(genericType));
@@ -172,6 +180,7 @@ public static class Reflection
     /// <typeparam name="T">目标类型</typeparam>
     /// <param name="className">类名，包括命名空间。AOT 下要求类型已注册</param>
     /// <param name="parameters">传递给构造函数的参数</param>
+    [RequiresUnreferencedCode("按名称动态查找类型在裁剪/AOT 下可能失败，请优先使用泛型重载，或确保目标类型已被保留")]
     public static T? CreateInstance<T>(String className, params Object[] parameters)
     {
         var type = Type.GetType(className) ?? Assembly.GetCallingAssembly().GetType(className);
@@ -212,7 +221,7 @@ public static class Reflection
     /// <summary>获取属性信息</summary>
     /// <param name="type">类型</param>
     /// <param name="propertyName">属性名</param>
-    public static PropertyInfo? GetPropertyInfo(Type type, String propertyName) => type.GetProperties().FirstOrDefault(p => p.Name.Equals(propertyName));
+    public static PropertyInfo? GetPropertyInfo([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type, String propertyName) => type.GetProperties().FirstOrDefault(p => p.Name.Equals(propertyName));
 
     #endregion
 
@@ -421,6 +430,7 @@ public static class Reflection
 
     /// <summary>获取公共属性列表。AOT 下需确保实例类型的 PublicProperties 已保留</summary>
     /// <param name="instance">实例</param>
+    [RequiresUnreferencedCode("通过实例运行时类型反射获取公共属性，需要类型成员在裁剪后仍可用")]
     public static List<Item> GetPublicProperties(Object instance)
     {
         var properties = instance.GetType().GetProperties();
@@ -473,7 +483,7 @@ public static class Reflection
     /// <summary>获取实现泛型类型</summary>
     /// <param name="givenType">给定类型</param>
     /// <param name="genericType">泛型类型</param>
-    public static List<Type> GetImplementedGenericTypes(Type givenType, Type genericType)
+    public static List<Type> GetImplementedGenericTypes([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type givenType, Type genericType)
     {
         var result = new List<Type>();
         AddImplementedGenericTypes(result, givenType, genericType);
@@ -484,7 +494,7 @@ public static class Reflection
     /// <param name="result">结果</param>
     /// <param name="givenType">给定类型</param>
     /// <param name="genericType">泛型类型</param>
-    private static void AddImplementedGenericTypes(List<Type> result, Type givenType, Type genericType)
+    private static void AddImplementedGenericTypes(List<Type> result, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type givenType, Type genericType)
     {
         var givenTypeInfo = givenType.GetTypeInfo();
         if (givenTypeInfo.IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
@@ -562,7 +572,7 @@ public static class Reflection
     /// <param name="type">类型</param>
     /// <param name="itemType">项类型</param>
     /// <param name="includePrimitives">是否包含元数据</param>
-    public static Boolean IsEnumerable(Type type, out Type? itemType, Boolean includePrimitives = true)
+    public static Boolean IsEnumerable([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type, out Type? itemType, Boolean includePrimitives = true)
     {
         if (!includePrimitives && IsPrimitiveExtended(type))
         {

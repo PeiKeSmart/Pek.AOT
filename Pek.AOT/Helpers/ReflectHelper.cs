@@ -9,7 +9,7 @@ public static class ReflectHelper
 {
     /// <summary>判断类型是否可被 await</summary>
     /// <param name="type">类型</param>
-    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
+    [RequiresUnreferencedCode("等待类型分析依赖运行时方法元数据（GetAwaiter 等），裁剪下可能失效")]
     public static Boolean IsAwaitable(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] this Type type)
     {
@@ -54,6 +54,7 @@ internal readonly struct AwaitableInfo
     /// <summary>判断类型是否可被 await</summary>
     /// <param name="type">类型</param>
     /// <param name="awaitableInfo">可等待信息</param>
+    [RequiresUnreferencedCode("等待类型分析依赖运行时方法元数据（GetAwaiter 等），裁剪下可能失效")]
     public static Boolean IsTypeAwaitable(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type,
         out AwaitableInfo? awaitableInfo)

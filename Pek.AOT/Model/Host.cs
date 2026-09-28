@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Pek.Log;
 
@@ -30,7 +31,7 @@ public static class HostedServiceExtensions
     /// <typeparam name="THostedService">主机服务类型</typeparam>
     /// <param name="services">对象容器</param>
     /// <returns>对象容器</returns>
-    public static IObjectContainer AddHostedService<THostedService>(this IObjectContainer services) where THostedService : class, IHostedService
+    public static IObjectContainer AddHostedService<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] THostedService>(this IObjectContainer services) where THostedService : class, IHostedService
     {
         services.AddSingleton<IHostedService, THostedService>();
 
@@ -68,7 +69,7 @@ public interface IHost
 
     /// <summary>添加服务类型</summary>
     /// <typeparam name="TService">服务类型</typeparam>
-    void Add<TService>() where TService : class, IHostedService;
+    void Add<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>() where TService : class, IHostedService;
 
     /// <summary>异步启动所有服务</summary>
     /// <param name="cancellationToken">取消令牌</param>
@@ -144,7 +145,7 @@ public class Host(IServiceProvider serviceProvider) : DisposeBase, IHost
     #region 服务集合
     /// <summary>添加服务类型</summary>
     /// <typeparam name="TService">服务类型</typeparam>
-    public void Add<TService>() where TService : class, IHostedService
+    public void Add<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>() where TService : class, IHostedService
     {
         // 把服务类型注册到容器中，以便后续获取
         var ioc = ObjectContainer.Current;

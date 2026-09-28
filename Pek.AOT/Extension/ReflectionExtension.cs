@@ -79,6 +79,7 @@ public static class ReflectionExtension
     /// </summary>
     /// <param name="currentMethod">当前方法</param>
     /// <returns></returns>
+    [RequiresUnreferencedCode("沿继承链按签名查找方法在裁剪下可能失败，AOT 场景请避免动态查找基类方法")]
     public static MethodInfo? GetBaseMethod(this MethodInfo currentMethod)
     {
         if (null == currentMethod?.DeclaringType?.BaseType)

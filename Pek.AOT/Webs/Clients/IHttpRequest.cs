@@ -1,5 +1,7 @@
 using System.Net;
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Pek.Webs.Clients;
 
 /// <summary>
@@ -54,6 +56,8 @@ public interface IHttpRequest<TResult> : IRequest<IHttpRequest<TResult>> where T
     /// <summary>
     /// 获取完整 HTTP 响应（包含状态码与内容）
     /// </summary>
+    [RequiresUnreferencedCode("JSON 反射反序列化在裁剪下可能失败，AOT 场景请提供源生成上下文")]
+    [RequiresDynamicCode("JSON 反射反序列化在 AOT 下需要运行时代码生成，请使用源生成上下文")]
     Task<HttpResponse<TResult>> GetResponseAsync();
 
     /// <summary>

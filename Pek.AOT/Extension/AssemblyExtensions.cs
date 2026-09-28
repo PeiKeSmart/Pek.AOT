@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 
 namespace Pek;
@@ -20,12 +19,12 @@ public static class AssemblyExtensions
         if (assembly == null)
             throw new ArgumentNullException(nameof(assembly));
 
-        var location = assembly.Location;
-        if (String.IsNullOrEmpty(location))
-            return new Version(0, 0); // AOT: Location returns empty in single-file publishing
+        // AOT 安全：Assembly.Location 在单文件发布下为空（IL3000），改为读取程序集文件版本特性
+        var attr = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>();
+        if (attr == null || !Version.TryParse(attr.Version, out var version))
+            return new Version(0, 0);
 
-        var info = FileVersionInfo.GetVersionInfo(location);
-        return new Version(info.FileVersion!);
+        return version;
     }
 
     #endregion
@@ -42,12 +41,17 @@ public static class AssemblyExtensions
         if (assembly == null)
             throw new ArgumentNullException(nameof(assembly));
 
-        var location = assembly.Location;
-        if (String.IsNullOrEmpty(location))
-            return new Version(0, 0); // AOT: Location returns empty in single-file publishing
+        // AOT 安全：Assembly.Location 在单文件发布下为空（IL3000），改为读取程序集信息版本特性
+        var attr = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+        var text = attr?.InformationalVersion;
+        if (text == null)
+            return new Version(0, 0);
 
-        var info = FileVersionInfo.GetVersionInfo(location);
-        return new Version(info.ProductVersion!);
+        // InformationalVersion 可能带 +commit 或 - 后缀，仅取主版本段
+        var index = text.IndexOfAny(['+', '-', ' ']);
+        if (index > 0) text = text[..index];
+
+        return Version.TryParse(text, out var version) ? version : new Version(0, 0);
     }
 
     #endregion

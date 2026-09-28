@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 using Pek.Extension;
 using System.Collections.Generic;
@@ -11,10 +11,10 @@ using System.Reflection;
 
 namespace Pek.IO;
 
-/// <summary>鏂囦欢璧勬簮</summary>
+/// <summary>文件资源</summary>
 public static class FileSource
 {
-    /// <summary>閲婃斁鏂囦欢</summary>
+    /// <summary>释放文件</summary>
     /// <param name="asm"></param>
     /// <param name="fileName"></param>
     /// <param name="destFile"></param>
@@ -47,7 +47,7 @@ public static class FileSource
         finally { stream.Dispose(); }
     }
 
-    /// <summary>閲婃斁鏂囦欢澶?/summary>
+    /// <summary>释放文件夹</summary>
     /// <param name="asm"></param>
     /// <param name="prefix"></param>
     /// <param name="dest"></param>
@@ -58,7 +58,7 @@ public static class FileSource
         ReleaseFolder(asm, prefix, dest, overWrite, null);
     }
 
-    /// <summary>閲婃斁鏂囦欢澶?/summary>
+    /// <summary>释放文件夹</summary>
     /// <param name="asm"></param>
     /// <param name="prefix"></param>
     /// <param name="dest"></param>
@@ -68,7 +68,7 @@ public static class FileSource
     {
         if (asm == null) asm = Assembly.GetCallingAssembly();
 
-        // 鎵惧埌绗﹀悎鏉′欢鐨勮祫婧?
+        // 找到符合条件的资源
         var names = asm.GetManifestResourceNames();
         if (names == null || names.Length <= 0) return;
         IEnumerable<String> ns;
@@ -80,7 +80,7 @@ public static class FileSource
         if (String.IsNullOrEmpty(dest)) dest = ".".GetFullPath();
         dest = dest.GetFullPath();
 
-        // 寮€濮嬪鐞?
+        // 开始处理
         foreach (var item in ns)
         {
             var stream = asm.GetManifestResourceStream(item);
@@ -88,7 +88,7 @@ public static class FileSource
 
             // 计算filename
             String? filename = null;
-            // 鍘绘帀鍓嶇紑
+            // 去掉前缀
             if (filenameResolver != null) filename = filenameResolver(item);
 
             if (String.IsNullOrEmpty(filename))
@@ -121,7 +121,7 @@ public static class FileSource
         }
     }
 
-    /// <summary>鑾峰彇鏂囦欢璧勬簮</summary>
+    /// <summary>获取文件资源</summary>
     /// <param name="asm"></param>
     /// <param name="filename"></param>
     /// <returns></returns>
@@ -134,7 +134,7 @@ public static class FileSource
         var ss = asm.GetManifestResourceNames();
         if (ss != null && ss.Length > 0)
         {
-            //鎵惧埌璧勬簮鍚?
+            //找到资源名
             name = ss.FirstOrDefault(e => e == filename);
             if (String.IsNullOrEmpty(name)) name = ss.FirstOrDefault(e => e.EqualIgnoreCase(filename));
             if (String.IsNullOrEmpty(name)) name = ss.FirstOrDefault(e => e.EndsWith(filename));

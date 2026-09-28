@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Collections;
 using System.IO.Compression;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Xml;
@@ -565,7 +566,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <summary>写入模型列表</summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="models"></param>
-    public void WriteModels<T>(IEnumerable<T> models)
+    public void WriteModels<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> models)
     {
         // 可用属性
         var pis = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -585,7 +586,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <typeparam name="T"></typeparam>
     /// <param name="models"></param>
     /// <returns></returns>
-    public IEnumerable<Object?[]> Cast<T>(IEnumerable<T> models)
+    public IEnumerable<Object?[]> Cast<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> models)
     {
         // 可用属性
         var pis = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -612,7 +613,8 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <summary>数据表转模型列表。普通反射，便于DAL查询后转任意模型列表</summary>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IEnumerable<T> ReadModels<T>()
+    [RequiresUnreferencedCode("内部按模型类型的公共属性与无参构造进行反射转换，需保证这些成员在裁剪后可用")]
+    public IEnumerable<T> ReadModels<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>()
     {
         foreach (var model in ReadModels(typeof(T)))
         {
@@ -623,7 +625,8 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <summary>数据表转模型列表。普通反射，便于DAL查询后转任意模型列表</summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public IEnumerable<Object> ReadModels(Type type)
+    [RequiresUnreferencedCode("内部按模型类型的公共属性与无参构造进行反射转换，需保证这些成员在裁剪后可用")]
+    public IEnumerable<Object> ReadModels([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type type)
     {
         var cs = Columns ?? throw new ArgumentNullException(nameof(Columns));
         var rows = Rows;
@@ -662,7 +665,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <param name="row"></param>
     /// <param name="name"></param>
     /// <returns></returns>
-    public T? Get<T>(Int32 row, String name) => !TryGet<T>(row, name, out var value) ? default : value;
+    public T? Get<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(Int32 row, String name) => !TryGet<T>(row, name, out var value) ? default : value;
 
     /// <summary>尝试读取指定行的字段值</summary>
     /// <typeparam name="T"></typeparam>
@@ -670,7 +673,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     /// <param name="name"></param>
     /// <param name="value"></param>
     /// <returns></returns>
-    public Boolean TryGet<T>(Int32 row, String name, out T? value)
+    public Boolean TryGet<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(Int32 row, String name, out T? value)
     {
         value = default;
         var rs = Rows;
@@ -746,7 +749,7 @@ public class DbTable : IEnumerable<DbRow>, ICloneable, IAccessor, ISpanSerializa
     }
 
     /// <summary>AOT安全类型转换</summary>
-    private static Object? ChangeType(Object? value, Type targetType)
+    private static Object? ChangeType(Object? value, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type targetType)
     {
         if (value == null || value == DBNull.Value) return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
 

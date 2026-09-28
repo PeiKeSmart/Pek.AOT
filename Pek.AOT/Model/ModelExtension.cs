@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Pek.Model;
 
 /// <summary>用于创建对象的工厂接口</summary>
@@ -131,5 +133,5 @@ public static class ModelExtension
     /// <param name="provider">服务提供者</param>
     /// <param name="serviceType">服务类型</param>
     /// <returns>服务实例</returns>
-    public static Object? CreateInstance(this IServiceProvider provider, Type serviceType) => ObjectContainer.CreateInstance(serviceType, provider, null, false);
+    public static Object? CreateInstance(this IServiceProvider provider, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type serviceType) => ObjectContainer.CreateInstance(serviceType, provider, null, false);
 }

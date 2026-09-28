@@ -42,10 +42,11 @@ public static class RandomUtilities
     public static T GetRandomValue<T>(this IReadOnlyList<T> items) => items[GetRandomIndex(items.Count)];
 
     /// <summary>获取随机枚举值</summary>
-    public static T GetRandomEnum<T>() where T : Enum
+    public static T GetRandomEnum<T>() where T : struct, Enum
     {
-        var enumValues = Enum.GetValues(typeof(T)).Cast<Int32>().ToArray();
-        return (T)(Object)enumValues.GetRandomValue();
+        // AOT 安全：使用泛型 GetValues<T>() 并直接随机索引，避免 Int32 强转（CA2021）
+        var enumValues = Enum.GetValues<T>();
+        return enumValues[GetRandomIndex(enumValues.Length)];
     }
 
     /// <summary>生成随机布尔值</summary>
