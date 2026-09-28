@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace Pek;
@@ -10,9 +11,9 @@ public static class ConvertibleExtensions
     /// <typeparam name="T"></typeparam>
     /// <param name="value"></param>
     /// <returns></returns>
-    public static T ConvertTo<T>(this IConvertible value) where T : IConvertible
+    public static T? ConvertTo<T>(this IConvertible value) where T : IConvertible
     {
-        return (T)ConvertTo(value, typeof(T));
+        return (T?)ConvertTo(value, typeof(T));
     }
 
     /// <summary>
@@ -22,11 +23,11 @@ public static class ConvertibleExtensions
     /// <param name="value"></param>
     /// <param name="defaultValue">转换失败的默认值</param>
     /// <returns></returns>
-    public static T TryConvertTo<T>(this IConvertible value, T defaultValue = default) where T : IConvertible
+    public static T? TryConvertTo<T>(this IConvertible value, T? defaultValue = default) where T : IConvertible
     {
         try
         {
-            return (T)ConvertTo(value, typeof(T));
+            return (T?)ConvertTo(value, typeof(T));
         }
         catch
         {
@@ -41,18 +42,22 @@ public static class ConvertibleExtensions
     /// <param name="value"></param>
     /// <param name="result">转换失败的默认值</param>
     /// <returns></returns>
-    public static Boolean TryConvertTo<T>(this IConvertible value, out T result) where T : IConvertible
+    public static Boolean TryConvertTo<T>(this IConvertible value, [MaybeNullWhen(false)] out T result) where T : IConvertible
     {
+        result = default;
         try
         {
-            result = (T)ConvertTo(value, typeof(T));
-            return true;
+            if (ConvertTo(value, typeof(T)) is T t)
+            {
+                result = t;
+                return true;
+            }
         }
         catch
         {
-            result = default;
-            return false;
         }
+
+        return false;
     }
 
     /// <summary>
@@ -62,18 +67,23 @@ public static class ConvertibleExtensions
     /// <param name="type">目标类型</param>
     /// <param name="result">转换失败的默认值</param>
     /// <returns></returns>
-    public static Boolean TryConvertTo(this IConvertible value, Type type, out Object result)
+    public static Boolean TryConvertTo(this IConvertible value, Type type, [MaybeNullWhen(false)] out Object result)
     {
+        result = default;
         try
         {
-            result = ConvertTo(value, type);
-            return true;
+            var obj = ConvertTo(value, type);
+            if (obj != null)
+            {
+                result = obj;
+                return true;
+            }
         }
         catch
         {
-            result = default;
-            return false;
         }
+
+        return false;
     }
 
     /// <summary>
@@ -82,7 +92,7 @@ public static class ConvertibleExtensions
     /// <param name="value"></param>
     /// <param name="type">目标类型</param>
     /// <returns></returns>
-    public static Object ConvertTo(this IConvertible value, Type type)
+    public static Object? ConvertTo(this IConvertible value, Type type)
     {
         if (null == value)
         {

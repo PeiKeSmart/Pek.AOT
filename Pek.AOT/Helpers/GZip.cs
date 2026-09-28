@@ -23,7 +23,7 @@ public static partial class GZip
     {
         if (String.IsNullOrWhiteSpace(content)) return String.Empty;
         var buffer = encoding.GetBytes(content);
-        return Convert.ToBase64String(Compress(buffer));
+        return Convert.ToBase64String(Compress(buffer) ?? []);
     }
 
     /// <summary>压缩</summary>
@@ -33,7 +33,7 @@ public static partial class GZip
     {
         if (String.IsNullOrWhiteSpace(content)) return String.Empty;
         var buffer = encoding.GetBytes(content);
-        return Convert.ToBase64String(await CompressAsync(buffer).ConfigureAwait(false));
+        return Convert.ToBase64String((await CompressAsync(buffer).ConfigureAwait(false)) ?? []);
     }
 
     /// <summary>压缩</summary>
@@ -79,7 +79,7 @@ public static partial class GZip
     {
         stream.Seek(0, SeekOrigin.Begin);
         var buffer = new Byte[stream.Length];
-        stream.Read(buffer, 0, buffer.Length);
+        stream.ReadExactly(buffer, 0, buffer.Length);
         return buffer;
     }
 
@@ -88,7 +88,7 @@ public static partial class GZip
     {
         stream.Seek(0, SeekOrigin.Begin);
         var buffer = new Byte[stream.Length];
-        await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+        await stream.ReadExactlyAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
         return buffer;
     }
 

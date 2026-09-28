@@ -15,7 +15,7 @@ public static class IdentityExtensions
     /// </summary>
     /// <param name="identity">标识</param>
     /// <param name="type">类型</param>
-    public static String GetValue(this IIdentity identity, String type)
+    public static String? GetValue(this IIdentity identity, String type)
     {
         if (identity == null) throw new ArgumentNullException(nameof(identity));
 
@@ -35,7 +35,7 @@ public static class IdentityExtensions
         var result = identity.GetValue(type);
         // 上游依赖 Conv.CTo<T>，用 BCL Convert.ChangeType 等价替换
         if (result.IsEmpty()) return default;
-        return (T)Convert.ChangeType(result, typeof(T));
+        return (T?)Convert.ChangeType(result, typeof(T));
     }
 
     #endregion
@@ -47,7 +47,7 @@ public static class IdentityExtensions
     /// </summary>
     /// <param name="identity">标识</param>
     /// <param name="type">类型</param>
-    public static String[] GetValues(this IIdentity identity, String type)
+    public static String[]? GetValues(this IIdentity identity, String type)
     {
         if (identity == null) throw new ArgumentNullException(nameof(identity));
 

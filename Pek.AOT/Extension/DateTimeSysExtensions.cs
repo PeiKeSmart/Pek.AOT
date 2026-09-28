@@ -47,7 +47,7 @@ public static class DateTimeSysExtensions
     /// <param name="date">DateTimeOffset</param>
     /// <param name="time">时间跨度</param>
     /// <param name="localTimeZone">时区</param>
-    public static DateTimeOffset SetDateTime(this DateTimeOffset date, TimeSpan time, TimeZoneInfo localTimeZone) =>
+    public static DateTimeOffset SetDateTime(this DateTimeOffset date, TimeSpan time, TimeZoneInfo? localTimeZone) =>
         date.ToLocalDateTime(localTimeZone).SetDateTime(time).ToDateTimeOffset(localTimeZone);
 
     #endregion
@@ -64,7 +64,7 @@ public static class DateTimeSysExtensions
     /// </summary>
     /// <param name="localDateTime">DateTime</param>
     /// <param name="localTimeZone">时区</param>
-    public static DateTimeOffset ToDateTimeOffset(this DateTime localDateTime, TimeZoneInfo localTimeZone)
+    public static DateTimeOffset ToDateTimeOffset(this DateTime localDateTime, TimeZoneInfo? localTimeZone)
     {
         if (localDateTime.Kind != DateTimeKind.Unspecified)
             localDateTime = new DateTime(localDateTime.Ticks, DateTimeKind.Unspecified);
@@ -82,6 +82,6 @@ public static class DateTimeSysExtensions
     /// </summary>
     /// <param name="dateTimeUtc">DateTimeOffset</param>
     /// <param name="localTimeZone">时区</param>
-    public static DateTime ToLocalDateTime(this DateTimeOffset dateTimeUtc, TimeZoneInfo localTimeZone) =>
+    public static DateTime ToLocalDateTime(this DateTimeOffset dateTimeUtc, TimeZoneInfo? localTimeZone) =>
         TimeZoneInfo.ConvertTime(dateTimeUtc, localTimeZone ?? TimeZoneInfo.Local).DateTime;
 }

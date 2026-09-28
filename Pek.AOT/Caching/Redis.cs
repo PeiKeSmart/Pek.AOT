@@ -620,7 +620,7 @@ public class Redis : Cache, IConfigMapping, ILogFeature, ITracerFeature
             if (result[0] is IPacket packet)
                 cursor = packet.ToStr().ToInt();
             else if (result[0] != null)
-                cursor = result[0].ToString().ToInt();
+                cursor = (result[0].ToString() ?? String.Empty).ToInt();
 
             if (result[1] is Object[] items)
             {

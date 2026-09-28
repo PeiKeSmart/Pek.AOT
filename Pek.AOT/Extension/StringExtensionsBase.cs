@@ -246,7 +246,7 @@ public static class StringExtensionsBase
     /// <param name="value">值</param>
     /// <param name="maxLength">指定最大长度</param>
     /// <returns></returns>
-    public static String TrimToMaxLength(this String value, Int32 maxLength)
+    public static String? TrimToMaxLength(this String value, Int32 maxLength)
     {
         return (value == null || value.Length <= maxLength ? value : value.Substring(0, maxLength));
     }
@@ -258,7 +258,7 @@ public static class StringExtensionsBase
     /// <param name="maxLength">指定最大长度</param>
     /// <param name="suffix">后缀</param>
     /// <returns></returns>
-    public static String TrimToMaxLength(this String value, Int32 maxLength, String suffix)
+    public static String? TrimToMaxLength(this String value, Int32 maxLength, String suffix)
     {
         return (value == null || value.Length <= maxLength ? value : String.Concat(value.Substring(0, maxLength), suffix));
     }
@@ -404,7 +404,7 @@ public static class StringExtensionsBase
         {
             separator = String.Empty;
         }
-        Converter<T, String> converter = o => o.ToString();
+        Converter<T, String> converter = o => o?.ToString() ?? String.Empty;
         StringBuilder sb = new StringBuilder();
         sb.Append(value);
         sb.Append(separator);
@@ -711,7 +711,7 @@ public static class StringExtensionsBase
         //替换回实体
         for (i = 0; i < mcentiry.Count; i++) r = rxEntityReverse.Replace(r, mcentiry[i].Value, 1);
         //封闭标签
-        for (i = inputHTMLTag.Count - 1; i >= 0; i--) r += "</" + rxTagName.Match(inputHTMLTag[i].ToString()).Groups[1].Value + ">";
+        for (i = inputHTMLTag.Count - 1; i >= 0; i--) r += "</" + rxTagName.Match(inputHTMLTag[i]?.ToString() ?? String.Empty).Groups[1].Value + ">";
         return r;
     }
 
@@ -1051,7 +1051,7 @@ public static class StringExtensionsBase
         var parameters = new StringDictionary();
         var spliter = new Regex(@"^-{1,2}|^/|=|:", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         var remover = new Regex(@"^['""]?(.*?)['""]?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        String parameter = null;
+        String? parameter = null;
         // Valid parameters forms:
         // {-,/,--}param{ ,=,:}((",')value(",'))
         // Examples: -param1 value1 --param2 /param3:"Test-:-work" /param4=happy -param5 '--=nice=--'
@@ -1292,7 +1292,7 @@ public static class StringExtensionsBase
     /// <param name="s">源字符串</param>
     /// <param name="isMatch">是否匹配成功，若返回true，则会得到一个Match对象，否则为null</param>
     /// <returns>匹配对象</returns>
-    public static IPAddress MatchInetAddress(this String s, out Boolean isMatch)
+    public static IPAddress? MatchInetAddress(this String s, out Boolean isMatch)
     {
         isMatch = IPAddress.TryParse(s, out var ip);
         return ip;

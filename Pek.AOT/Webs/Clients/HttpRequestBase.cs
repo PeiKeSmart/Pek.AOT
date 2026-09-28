@@ -37,7 +37,7 @@ public abstract class HttpRequestBase<TRequest> where TRequest : IRequest<TReque
     /// <summary>
     /// 参数集合
     /// </summary>
-    private IDictionary<String, Object> _params;
+    private IDictionary<String, Object?> _params;
 
     /// <summary>
     /// 参数
@@ -82,7 +82,7 @@ public abstract class HttpRequestBase<TRequest> where TRequest : IRequest<TReque
     /// <summary>
     /// ssl证书验证委托
     /// </summary>
-    private Func<HttpRequestMessage, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
+    private Func<HttpRequestMessage?, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
         _serverCertificateCustomValidationCallback;
 
     /// <summary>
@@ -128,7 +128,7 @@ public abstract class HttpRequestBase<TRequest> where TRequest : IRequest<TReque
 #endif
         _url = url;
         _httpMethod = httpMethod;
-        _params = new Dictionary<String, Object>();
+        _params = new Dictionary<String, Object?>();
         _contentType = HttpContentType.FormUrlEncoded.Description();
         _cookieContainer = new CookieContainer();
         _timeout = new TimeSpan(0, 0, 30);
@@ -268,7 +268,7 @@ public abstract class HttpRequestBase<TRequest> where TRequest : IRequest<TReque
     /// 添加参数字典
     /// </summary>
     /// <param name="parameters">参数字典</param>
-    public TRequest Data(IDictionary<String, Object> parameters)
+    public TRequest Data(IDictionary<String, Object?> parameters)
     {
         _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
         return This();

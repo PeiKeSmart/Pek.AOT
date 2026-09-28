@@ -20,7 +20,7 @@ public static class StringSafeExtensions
     /// <param name="source">url编码字符串</param>
     /// <param name="encoding">编码格式</param>
     /// <returns></returns>
-    public static String UrlEncode(String source, Encoding encoding = null)
+    public static String UrlEncode(String source, Encoding? encoding = null)
     {
         if (encoding == null)
         {
@@ -39,7 +39,7 @@ public static class StringSafeExtensions
     /// <param name="source">url编码字符串</param>
     /// <param name="encoding">编码格式</param>
     /// <returns></returns>
-    public static String UrlDecode(String source, Encoding encoding = null)
+    public static String UrlDecode(String source, Encoding? encoding = null)
     {
         if (encoding == null)
         {
@@ -130,7 +130,7 @@ public static class StringSafeExtensions
     /// <param name="value">字符串</param>
     /// <param name="encoding">编码格式</param>
     /// <returns>Base64编码字符串</returns>
-    public static String EncodeBase64(this String value, Encoding encoding = null)
+    public static String EncodeBase64(this String value, Encoding? encoding = null)
     {
         encoding = (encoding ?? Encoding.UTF8);
         var bytes = encoding.GetBytes(value);
@@ -147,7 +147,7 @@ public static class StringSafeExtensions
     /// <param name="value">字符串</param>
     /// <param name="encoding">编码格式</param>
     /// <returns>解码字符串</returns>
-    public static String DecodeBase64(this String value, Encoding encoding = null)
+    public static String DecodeBase64(this String value, Encoding? encoding = null)
     {
         encoding = (encoding ?? Encoding.UTF8);
         var bytes = Convert.FromBase64String(value);
@@ -181,7 +181,7 @@ public static class StringSafeExtensions
     private static Byte[] CryptBytes(String pwd, Byte[] bytes, Boolean encrypt)
     {
         //第三方加密服务商
-        var desProvider = new TripleDESCryptoServiceProvider();
+        var desProvider = TripleDES.Create();
         //找到此提供程序的有效密钥大小
         Int32 keySizeBits = 0;
         for (Int32 i = 1024; i >= 1; i--)
@@ -195,13 +195,11 @@ public static class StringSafeExtensions
         //获取此提供程序的块大小
         Int32 blockSizeBits = desProvider.BlockSize;
         //生成密钥和初始化向量
-        Byte[] key = null;
-        Byte[] iv = null;
         Byte[] salt =
         {
                 0x10, 0x20, 0x12, 0x23, 0x37, 0xA4, 0xC5, 0xA6, 0xF1, 0xF0, 0xEE, 0x21, 0x22, 0x45
             };
-        MakeKeyAndIv(pwd, salt, keySizeBits, blockSizeBits, ref key, ref iv);
+        MakeKeyAndIv(pwd, salt, keySizeBits, blockSizeBits, out var key, out var iv);
         //进行加密或解密
         ICryptoTransform cryptoTransform = encrypt
             ? desProvider.CreateEncryptor(key, iv)
@@ -244,12 +242,13 @@ public static class StringSafeExtensions
     /// <param name="blockSizeBits">加密提供程序所使用的输入块的大小</param>
     /// <param name="key">生成输出密匙字节</param>
     /// <param name="iv">生成输出初始化向量</param>
-    private static void MakeKeyAndIv(String pwd, Byte[] salt, Int32 keySizeBits, Int32 blockSizeBits, ref Byte[] key,
-        ref Byte[] iv)
+    private static void MakeKeyAndIv(String pwd, Byte[] salt, Int32 keySizeBits, Int32 blockSizeBits, out Byte[] key,
+        out Byte[] iv)
     {
-        var deriveBytes = new Rfc2898DeriveBytes(pwd, salt, 1234);
-        key = deriveBytes.GetBytes(keySizeBits / 8);
-        iv = deriveBytes.GetBytes(blockSizeBits / 8);
+        // 迭代次数与哈希算法为兼容历史密文的值，不可更改，否则旧数据无法解密
+        var keyIv = Rfc2898DeriveBytes.Pbkdf2(pwd, salt, 1234, HashAlgorithmName.SHA1, keySizeBits / 8 + blockSizeBits / 8);
+        key = keyIv.AsSpan(0, keySizeBits / 8).ToArray();
+        iv = keyIv.AsSpan(keySizeBits / 8).ToArray();
     }
 
     #endregion
@@ -281,7 +280,7 @@ public static class StringSafeExtensions
     /// <returns></returns>
     public static String EncryptToString(this String value, String pwd)
     {
-        return value.EncryptToBytes(pwd).ToString();
+        return value.EncryptToBytes(pwd).ToString() ?? String.Empty;
     }
 
     #endregion

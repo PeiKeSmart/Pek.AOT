@@ -119,7 +119,7 @@ public class OAuthServer
 
         Cache.Remove(k);
 
-        return model.Token;
+        return model.Token ?? throw new InvalidOperationException("令牌尚未生成。");
     }
 
     /// <summary>解码令牌</summary>
@@ -168,6 +168,6 @@ public class OAuthServer
     /// <summary>写日志</summary>
     /// <param name="format">日志格式</param>
     /// <param name="args">格式化参数</param>
-    public void WriteLog(String format, params Object[] args) => Log?.Info(format, args);
+    public void WriteLog(String format, params Object?[] args) => Log?.Info(format, args);
     #endregion
 }

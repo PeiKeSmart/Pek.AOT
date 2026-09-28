@@ -74,7 +74,7 @@ public static class ManageUserHelper
         pass = pass[p..];
 
         // 楠岃瘉瀵嗙爜
-        var tpass = user.Password.GetBytes();
+        var tpass = (user.Password ?? String.Empty).GetBytes();
         if (salt.RC4(tpass).ToHexString() != pass) throw new Exception($"Password error for user [{user}]");
 
         return true;

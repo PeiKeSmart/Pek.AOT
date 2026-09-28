@@ -26,7 +26,7 @@ public static class TaskFactoryExtensions
             return new Task(() => { }, factory.CancellationToken);
 
         // 创建定时任务
-        var tcs = new TaskCompletionSource<Object>(factory.CreationOptions);
+        var tcs = new TaskCompletionSource<Object?>(factory.CreationOptions);
         var ctr = default(CancellationTokenRegistration);
 
         // 创建计时器但尚未启动它。如果我们现在开始，它可能会在ctr设置为正确注册之前触发。
@@ -35,7 +35,8 @@ public static class TaskFactoryExtensions
         {
             // 清除取消令牌和计时器，并尝试转换为已完成状态
             ctr1.Dispose();
-            ((Timer)self).Dispose();
+            // 回调的 state 参数为 null，安全转换避免直接强转引发空引用异常
+            (self as Timer)?.Dispose();
             tcs.TrySetResult(null);
         }, null, -1, -1);
 

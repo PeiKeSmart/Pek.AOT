@@ -100,7 +100,7 @@ public static class DictionaryExtensions
     /// <typeparam name="TKey">键类型</typeparam>
     /// <typeparam name="TValue">值类型</typeparam>
     /// <param name="dictionary">字典</param>
-    public static IDictionary<TKey, TValue> Sort<TKey, TValue>(this IDictionary<TKey, TValue> dictionary)
+    public static IDictionary<TKey, TValue> Sort<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) where TKey : notnull
     {
         if (dictionary == null)
             throw new ArgumentNullException(nameof(dictionary));
@@ -116,7 +116,7 @@ public static class DictionaryExtensions
     /// <param name="comparer">比较器，用于排序字典</param>
     /// <exception cref="ArgumentNullException"></exception>
     public static IDictionary<TKey, TValue> Sort<TKey, TValue>(this IDictionary<TKey, TValue> dictionary,
-        IComparer<TKey> comparer)
+        IComparer<TKey> comparer) where TKey : notnull
     {
         if (dictionary == null)
             throw new ArgumentNullException(nameof(dictionary));
@@ -131,7 +131,7 @@ public static class DictionaryExtensions
     /// <typeparam name="TKey">键类型</typeparam>
     /// <typeparam name="TValue">值类型</typeparam>
     /// <param name="dictionary">字典</param>
-    public static IDictionary<TKey, TValue> SortByValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) =>
+    public static IDictionary<TKey, TValue> SortByValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) where TKey : notnull =>
         new SortedDictionary<TKey, TValue>(dictionary).OrderBy(x => x.Value)
             .ToDictionary(x => x.Key, x => x.Value);
 
@@ -206,7 +206,7 @@ public static class DictionaryExtensions
     /// <typeparam name="TKey">键类型</typeparam>
     /// <typeparam name="TValue">值类型</typeparam>
     /// <param name="dictionary">字典</param>
-    public static Hashtable ToHashTable<TKey, TValue>(this IDictionary<TKey, TValue> dictionary)
+    public static Hashtable ToHashTable<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) where TKey : notnull
     {
         var table = new Hashtable();
         foreach (var item in dictionary)
@@ -224,7 +224,7 @@ public static class DictionaryExtensions
     /// <typeparam name="TKey">键类型</typeparam>
     /// <typeparam name="TValue">值类型</typeparam>
     /// <param name="dictionary">字典</param>
-    public static IDictionary<TValue, TKey> Reverse<TKey, TValue>(this IDictionary<TKey, TValue> dictionary)
+    public static IDictionary<TValue, TKey> Reverse<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) where TValue : notnull
     {
         if (dictionary == null)
             throw new ArgumentNullException(nameof(dictionary));
@@ -241,7 +241,7 @@ public static class DictionaryExtensions
     /// <typeparam name="TKey">键类型</typeparam>
     /// <typeparam name="TValue">值类型</typeparam>
     /// <param name="dictionary">字典</param>
-    public static IReadOnlyDictionary<TKey, TValue> AsReadOnly<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) => new ReadOnlyDictionary<TKey, TValue>(dictionary);
+    public static IReadOnlyDictionary<TKey, TValue> AsReadOnly<TKey, TValue>(this IDictionary<TKey, TValue> dictionary) where TKey : notnull => new ReadOnlyDictionary<TKey, TValue>(dictionary);
 
     #endregion
 }

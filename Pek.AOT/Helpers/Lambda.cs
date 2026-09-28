@@ -16,7 +16,7 @@ public static class Lambda
 
     /// <summary>获取类型</summary>
     /// <param name="expression">表达式，范例：t => t.Name</param>
-    public static Type? GetType(Expression expression)
+    public static Type? GetType(Expression? expression)
     {
         var memberExpression = GetMemberExpression(expression);
         return memberExpression?.Type;
@@ -37,7 +37,7 @@ public static class Lambda
     /// <summary>获取成员表达式</summary>
     /// <param name="expression">表达式</param>
     /// <param name="right">取表达式右侧，(l,r)=> l.LId == r.RId，设置为true，返回 RID</param>
-    public static MemberExpression? GetMemberExpression(Expression expression, Boolean right = false)
+    public static MemberExpression? GetMemberExpression(Expression? expression, Boolean right = false)
     {
         if (expression == null)
             return null;
@@ -72,7 +72,7 @@ public static class Lambda
     {
         var methodCallExpression = (MethodCallExpression)expression;
         var left = (MemberExpression)methodCallExpression.Object!;
-        if (Reflection.IsGenericCollection(left?.Type))
+        if (Reflection.IsGenericCollection(left.Type))
         {
             var argumentExpression = methodCallExpression.Arguments.FirstOrDefault();
             if (argumentExpression != null && argumentExpression.NodeType == ExpressionType.MemberAccess)

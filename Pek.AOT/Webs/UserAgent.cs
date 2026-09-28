@@ -215,7 +215,7 @@ public class UserAgent
         {"DataForSeoBot", "DataForSeoBot"},
     };
 
-    private readonly String _agent;
+    private readonly String _agent = String.Empty;
 
     /// <summary>是否为浏览器</summary>
     public Boolean IsBrowser { get; set; }
@@ -316,6 +316,7 @@ public class UserAgent
     /// <returns>UserAgent 实例</returns>
     public static UserAgent Parse(String userAgentString)
     {
-        return Cache.Default.GetOrAdd(userAgentString, entry => new UserAgent(entry), 3600);
+        return Cache.Default.GetOrAdd(userAgentString, entry => new UserAgent(entry), 3600)
+            ?? new UserAgent(userAgentString);
     }
 }

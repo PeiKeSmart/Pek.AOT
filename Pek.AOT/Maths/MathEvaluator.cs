@@ -6,7 +6,7 @@ namespace Pek.Maths;
 public class MathEvaluator
 {
     /// <summary>计算表达式解析器</summary>
-    private CalculateExpressionParser _parser;
+    private CalculateExpressionParser? _parser;
 
     /// <summary>计算节点</summary>
     private CalculateNode _node;
@@ -79,7 +79,11 @@ public class MathEvaluator
     }
 
     /// <summary>获取下一个计算节点</summary>
-    private void NextNode() => _node = _parser.GetNextNode();
+    private void NextNode()
+    {
+        if (_parser == null) throw new InvalidOperationException("解析器尚未初始化，请先调用 Eval 方法。");
+        _node = _parser.GetNextNode();
+    }
 }
 
 /// <summary>计算表达式解析器</summary>

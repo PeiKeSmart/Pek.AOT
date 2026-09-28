@@ -28,14 +28,9 @@ public static partial class DHExtensions
             return Expression.Property(expression, propertyName);
 
         var propertyNameList = propertyName.Split('.');
-        Expression result = null;
-        for (var i = 0; i < propertyNameList.Length; i++)
+        Expression result = Expression.Property(expression, propertyNameList[0]);
+        for (var i = 1; i < propertyNameList.Length; i++)
         {
-            if (i == 0)
-            {
-                result = Expression.Property(expression, propertyNameList[0]);
-                continue;
-            }
             result = result.Property(propertyNameList[i]);
         }
         return result;
@@ -242,7 +237,7 @@ public static partial class DHExtensions
     /// <typeparam name="TDelegate">委托类型</typeparam>
     /// <param name="body">表达式体</param>
     /// <param name="parameters">参数列表</param>
-    public static Expression<TDelegate> ToLambda<TDelegate>(this Expression body, params ParameterExpression[] parameters)
+    public static Expression<TDelegate>? ToLambda<TDelegate>(this Expression body, params ParameterExpression[] parameters)
     {
         if (body == null) return null;
         return Expression.Lambda<TDelegate>(body, parameters);
@@ -257,7 +252,7 @@ public static partial class DHExtensions
     /// <param name="body">表达式体</param>
     /// <param name="parameters">参数列表</param>
     public static Expression<Func<T, Boolean>> ToPredicate<T>(this Expression body, params ParameterExpression[] parameters)
-        => ToLambda<Func<T, Boolean>>(body, parameters);
+        => ToLambda<Func<T, Boolean>>(body, parameters) ?? throw new InvalidOperationException("无法创建谓词表达式。");
 
     #endregion
 

@@ -11,7 +11,7 @@ public static class TaskExtensions
     /// <typeparam name="TResult">结果类型</typeparam>
     /// <param name="task">异步操作</param>
     /// <param name="timeout">超时时间。单位：毫秒</param>
-    public static TResult WaitResult<TResult>(this Task<TResult> task, Int32 timeout)
+    public static TResult? WaitResult<TResult>(this Task<TResult> task, Int32 timeout)
     {
         if (task.Wait(timeout))
             return task.Result;

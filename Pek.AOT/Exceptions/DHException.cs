@@ -63,6 +63,7 @@ public class DHException : Exception
     /// <summary>使用序列化的数据初始化Exception类的新实例</summary>
     /// <param name="info">包含有关引发异常的序列化对象数据的序列化信息</param>
     /// <param name="context">包含有关源或目标的上下文信息的流上下文</param>
+    [Obsolete("基于格式化器的序列化已过时，不应在应用代码中调用或扩展。", DiagnosticId = "SYSLIB0051")]
     protected DHException(SerializationInfo info, StreamingContext context)
         : base(info, context)
     {
@@ -94,6 +95,7 @@ public class DHException : Exception
     }
 
     /// <summary>序列化支持，写入自定义字段</summary>
+    [Obsolete("基于格式化器的序列化已过时，不应在应用代码中调用或扩展。", DiagnosticId = "SYSLIB0051")]
     public override void GetObjectData(SerializationInfo info, StreamingContext context)
     {
         base.GetObjectData(info, context);

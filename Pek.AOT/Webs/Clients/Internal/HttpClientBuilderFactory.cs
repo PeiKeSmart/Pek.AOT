@@ -57,7 +57,7 @@ internal static class HttpClientBuilderFactory
     /// <param name="url">请求地址</param>
     /// <param name="timeout">超时时间</param>
     /// <param name="serverCertificateCustomValidationCallback">证书回调</param>
-    public static HttpClient CreateClient(String url, TimeSpan timeout, Func<HttpRequestMessage, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
+    public static HttpClient CreateClient(String url, TimeSpan timeout, Func<HttpRequestMessage?, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
         serverCertificateCustomValidationCallback)
     {
         var domain = GetDomainByUrl(url);
@@ -109,7 +109,7 @@ internal static class HttpClientBuilderFactory
     /// <summary>
     /// 创建Http客户端
     /// </summary>
-    private static HttpClient Create(TimeSpan timeout, Func<HttpRequestMessage, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
+    private static HttpClient Create(TimeSpan timeout, Func<HttpRequestMessage?, X509Certificate2?, X509Chain?, SslPolicyErrors, Boolean>?
         serverCertificateCustomValidationCallback)
     {
 #if NET462 || NET472

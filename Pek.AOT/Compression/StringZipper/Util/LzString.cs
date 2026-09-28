@@ -21,7 +21,7 @@ public class LzString
     /// <summary>压缩为 Base64</summary>
     /// <param name="input">输入字符串</param>
     /// <returns>Base64 编码的压缩字符串</returns>
-    public static String CompressToBase64(String input)
+    public static String? CompressToBase64(String input)
     {
         if (input == null)
         {
@@ -46,7 +46,7 @@ public class LzString
     /// <summary>从 Base64 解压</summary>
     /// <param name="input">Base64 编码字符串</param>
     /// <returns>解压后的字符串</returns>
-    public static String DecompressFromBase64(String input)
+    public static String? DecompressFromBase64(String input)
     {
         if (String.IsNullOrEmpty(input))
         {
@@ -70,7 +70,7 @@ public class LzString
     /// <summary>从 UTF16 解压</summary>
     /// <param name="compressed">压缩字符串</param>
     /// <returns>解压后的字符串</returns>
-    public static String DecompressFromUTF16(String compressed)
+    public static String? DecompressFromUTF16(String compressed)
     {
         if (String.IsNullOrWhiteSpace(compressed))
         {
@@ -101,7 +101,7 @@ public class LzString
     /// <summary>从字节数组解压</summary>
     /// <param name="compressed">压缩字节数组</param>
     /// <returns>解压后的字符串</returns>
-    public static String DecompressFromUint8Array(Byte[] compressed)
+    public static String? DecompressFromUint8Array(Byte[] compressed)
     {
         if (compressed == null)
         {
@@ -138,7 +138,7 @@ public class LzString
     /// <summary>从 URI 安全字符串解压</summary>
     /// <param name="input">URI 安全的压缩字符串</param>
     /// <returns>解压后的字符串</returns>
-    public static String DecompressFromEncodedURIComponent(String input)
+    public static String? DecompressFromEncodedURIComponent(String input)
     {
         if (String.IsNullOrWhiteSpace(input))
         {
@@ -433,7 +433,7 @@ public class LzString
     /// <summary>解压</summary>
     /// <param name="compressed">压缩字符串</param>
     /// <returns>解压后的字符串</returns>
-    public static String Decompress(String compressed)
+    public static String? Decompress(String compressed)
     {
         if (String.IsNullOrWhiteSpace(compressed))
         {
@@ -442,7 +442,7 @@ public class LzString
         return LzString.Decompress(compressed.Length, 32768, (Int32 index) => Convert.ToInt32(compressed[index]));
     }
 
-    private static String Decompress(Int32 length, Int32 resetValue, LzString.GetNextValue getNextValue)
+    private static String? Decompress(Int32 length, Int32 resetValue, LzString.GetNextValue getNextValue)
     {
         var dictionary = new Dictionary<Int32, String>();
         var enlargeIn = 4;

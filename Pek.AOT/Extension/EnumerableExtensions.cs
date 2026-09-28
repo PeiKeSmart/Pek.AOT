@@ -110,9 +110,9 @@ public static class EnumerableExtensions
     /// <param name="collection">要处理的集合</param>
     /// <param name="separator">分隔符，默认为逗号</param>
     /// <param name="wrapItem">项目包裹符</param>
-    public static String ExpandAndToString<T>(this IEnumerable<T> collection, String separator = ",",
+    public static String? ExpandAndToString<T>(this IEnumerable<T> collection, String separator = ",",
         String wrapItem = "") =>
-        collection.ExpandAndToString(t => t.ToString(), separator, wrapItem);
+        collection.ExpandAndToString(t => t?.ToString() ?? String.Empty, separator, wrapItem);
 
     /// <summary>
     /// 将集合展开并转为字符串，循环集合每一项，调用委托生成字符串，返回合并后的字符串。默认分隔符为逗号
@@ -122,7 +122,7 @@ public static class EnumerableExtensions
     /// <param name="itemFormatFunc">单个集合项的转换委托</param>
     /// <param name="separator">分隔符，默认为逗号</param>
     /// <param name="wrapItem">项目包裹符</param>
-    public static String ExpandAndToString<T>(this IEnumerable<T> collection, Func<T, String> itemFormatFunc,
+    public static String? ExpandAndToString<T>(this IEnumerable<T> collection, Func<T, String> itemFormatFunc,
         String separator = ",", String wrapItem = "")
     {
         collection = collection as IList<T> ?? collection.ToList();

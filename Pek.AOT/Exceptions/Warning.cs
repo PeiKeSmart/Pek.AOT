@@ -31,7 +31,7 @@ public class Warning : Exception
     /// <summary>初始化一个<see cref="Warning"/>类型的实例</summary>
     /// <param name="message">错误消息</param>
     /// <param name="code">错误码</param>
-    public Warning(String message, String code) : this(message, code, null)
+    public Warning(String message, String? code) : this(message, code, null)
     {
     }
 
@@ -39,7 +39,7 @@ public class Warning : Exception
     /// <param name="message">错误消息</param>
     /// <param name="code">错误码</param>
     /// <param name="exception">异常</param>
-    public Warning(String message, String code, Exception exception) : base(message ?? "", exception) => Code = code;
+    public Warning(String? message, String? code, Exception? exception) : base(message ?? "", exception) => Code = code ?? String.Empty;
 
     #endregion
 
@@ -85,7 +85,7 @@ public class Warning : Exception
     /// <summary>添加内部异常</summary>
     /// <param name="result">异常列表</param>
     /// <param name="exception">异常</param>
-    private static void AddException(List<Exception> result, Exception exception)
+    private static void AddException(List<Exception> result, Exception? exception)
     {
         if (exception == null)
             return;

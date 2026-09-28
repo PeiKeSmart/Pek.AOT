@@ -19,9 +19,9 @@ public static class ExpressionExtension
         var parameter = Expression.Parameter(typeof(T));
 
         var leftVisitor = new ReplaceExpressionVisitor(expr1.Parameters[0], parameter);
-        var left = leftVisitor.Visit(expr1.Body);
+        var left = leftVisitor.Visit(expr1.Body) ?? throw new InvalidOperationException("表达式访问结果为空。");
         var rightVisitor = new ReplaceExpressionVisitor(expr2.Parameters[0], parameter);
-        var right = rightVisitor.Visit(expr2.Body);
+        var right = rightVisitor.Visit(expr2.Body) ?? throw new InvalidOperationException("表达式访问结果为空。");
 
         return Expression.Lambda<Func<T, Boolean>>(
             Expression.OrElse(left, right), parameter);
@@ -38,9 +38,9 @@ public static class ExpressionExtension
         var parameter = Expression.Parameter(typeof(T));
 
         var leftVisitor = new ReplaceExpressionVisitor(expr1.Parameters[0], parameter);
-        var left = leftVisitor.Visit(expr1.Body);
+        var left = leftVisitor.Visit(expr1.Body) ?? throw new InvalidOperationException("表达式访问结果为空。");
         var rightVisitor = new ReplaceExpressionVisitor(expr2.Parameters[0], parameter);
-        var right = rightVisitor.Visit(expr2.Body);
+        var right = rightVisitor.Visit(expr2.Body) ?? throw new InvalidOperationException("表达式访问结果为空。");
 
         return Expression.Lambda<Func<T, Boolean>>(
             Expression.AndAlso(left, right), parameter);

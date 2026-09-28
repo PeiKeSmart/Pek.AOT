@@ -24,7 +24,7 @@ public static class StringConvertExtensions
     /// <param name="value">字符串</param>
     /// <param name="encoding">编码格式</param>
     /// <returns>byte[]数组</returns>
-    public static Byte[] ToBytes(this String value, Encoding encoding = null)
+    public static Byte[] ToBytes(this String value, Encoding? encoding = null)
     {
         encoding = (encoding ?? Encoding.UTF8);
         return encoding.GetBytes(value);
@@ -152,7 +152,7 @@ public static class StringConvertExtensions
     /// <param name="value">普通字符串</param>
     /// <param name="markReadOnly">是否只读</param>
     /// <returns>安全字符串</returns>
-    public static SecureString ToSecureString(this String value, Boolean markReadOnly = true)
+    public static SecureString? ToSecureString(this String value, Boolean markReadOnly = true)
     {
         if (value.IsEmpty())
         {
@@ -179,7 +179,7 @@ public static class StringConvertExtensions
     /// </summary>
     /// <param name="value">安全字符串</param>
     /// <returns>普通字符串</returns>
-    public static String ToUnSecureString(this SecureString value)
+    public static String? ToUnSecureString(this SecureString value)
     {
         if (ReferenceEquals(value, null))
         {

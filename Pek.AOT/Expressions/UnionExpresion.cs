@@ -35,7 +35,7 @@ namespace Pek.Expressions
         }
 
         /// <summary>容器</summary>
-        IList<IndexInfoResult> Container { get; set; }
+        IList<IndexInfoResult>? Container { get; set; }
 
         /// <summary>解逆波兰表达式</summary>
         /// <param name="expression">标准逆波兰表达式</param>
@@ -106,7 +106,7 @@ namespace Pek.Expressions
 
         /// <summary>所有掩码</summary>
         /// <returns></returns>
-        public IEnumerable<String> GetAllMarks()
+        public IEnumerable<String?> GetAllMarks()
         {
             if (String.IsNullOrWhiteSpace(Value)) yield return null;
 

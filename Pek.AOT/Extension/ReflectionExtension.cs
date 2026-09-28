@@ -165,12 +165,10 @@ public static class ReflectionExtension
 
     #region 类型判断（AOT 安全，仅使用 typeof/is 检查）
 
-    /// <summary>
-    /// 是否有无参构造函数（委托给 Type 扩展方法）
-    /// </summary>
-    /// <typeparam name="T">类型</typeparam>
-    /// <param name="this">实例</param>
-    /// <returns></returns>
+    // 是否有无参构造函数（委托给 Type 扩展方法）（原 XML 注释因无承载成员改为普通注释）
+    // <typeparam name="T">类型</typeparam>
+    // <param name="this">实例</param>
+    // <returns></returns>
     // AOT: skipped - unsafe (依赖动态反射 HasEmptyConstructor)
     // public static Boolean HasEmptyConstructor<T>(this T @this) => typeof(T).HasEmptyConstructor();
 

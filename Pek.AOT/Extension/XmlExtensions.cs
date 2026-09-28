@@ -14,7 +14,7 @@ public static class XmlExtensions
     /// 将XmlNode转换为XElement
     /// </summary>
     /// <param name="node">Xml节点</param>
-    public static XElement ToXElement(this XmlNode node)
+    public static XElement? ToXElement(this XmlNode node)
     {
         var xdoc = new XDocument();
         using (var xmlWriter = xdoc.CreateWriter())

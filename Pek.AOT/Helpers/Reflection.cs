@@ -128,7 +128,7 @@ public static class Reflection
         if (member == null)
             return String.Empty;
         if (member.GetCustomAttribute<DisplayAttribute>() is DisplayAttribute displayAttribute)
-            return displayAttribute.Name;
+            return displayAttribute.Name ?? String.Empty;
         if (member.GetCustomAttribute<DisplayNameAttribute>() is DisplayNameAttribute displayNameAttribute)
             return displayNameAttribute.DisplayName;
         return String.Empty;
@@ -594,7 +594,7 @@ public static class Reflection
 public class Item
 {
     /// <summary>名称</summary>
-    public String Name { get; set; }
+    public String Name { get; set; } = String.Empty;
 
     /// <summary>值</summary>
     public Object? Value { get; set; }

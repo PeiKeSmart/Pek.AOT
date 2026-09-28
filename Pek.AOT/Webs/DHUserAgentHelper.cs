@@ -103,35 +103,35 @@ public class UserAgentInfo
     /// <summary>
     /// 浏览器
     /// </summary>
-    public String Browser { get; set; }
+    public String Browser { get; set; } = String.Empty;
 
     /// <summary>
     /// 版本号
     /// </summary>
-    public String Version { get; set; }
+    public String Version { get; set; } = String.Empty;
 
     /// <summary>
     /// 内核
     /// </summary>
-    public String Engine { get; set; }
+    public String Engine { get; set; } = String.Empty;
 
     /// <summary>
     /// 操作系统
     /// </summary>
-    public String Os { get; set; }
+    public String Os { get; set; } = String.Empty;
 
     /// <summary>
     /// 操作系统版本号
     /// </summary>
-    public String OsVersion { get; set; }
+    public String OsVersion { get; set; } = String.Empty;
 
     /// <summary>
     /// 设备
     /// </summary>
-    public String Device { get; set; }
+    public String Device { get; set; } = String.Empty;
 
     /// <summary>
     /// 语言
     /// </summary>
-    public String Language { get; set; }
+    public String Language { get; set; } = String.Empty;
 }

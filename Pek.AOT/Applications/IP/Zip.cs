@@ -45,12 +45,13 @@ namespace Pek.IP
         {
             var ms = new MemoryStream();
 
+            // 探测GZip魔数，精确读取3字节；读不满则按普通流处理
             var buf = new Byte[3];
-            stream.Read(buf, 0, buf.Length);
-            stream.Position -= 3;
+            var count = stream.Read(buf, 0, buf.Length);
+            stream.Position -= count;
 
             // 仅支持Gzip压缩，可用7z软件先压缩为gz格式
-            if (buf[0] == 0x1F & buf[1] == 0x8B && buf[2] == 0x08)
+            if (count == buf.Length && buf[0] == 0x1F & buf[1] == 0x8B && buf[2] == 0x08)
                 IOHelper.DecompressGZip(stream, ms);
             else
                 stream.CopyTo(ms);
@@ -210,7 +211,7 @@ namespace Pek.IP
             if (ms == null) return 0;
 
             var array = new Byte[4];
-            ms.Read(array, 0, 4);
+            ms.ReadExactly(array, 0, 4);
             return BitConverter.ToUInt32(array, 0);
         }
         #endregion

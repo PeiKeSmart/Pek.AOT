@@ -65,9 +65,9 @@ public static class DHTypeExtensions
 
     private static void AddTypeAndBaseTypesRecursively(
         [NotNull] List<Type> types,
-         Type type,
+         Type? type,
          Boolean includeObject,
-         Type stoppingType = null)
+         Type? stoppingType = null)
     {
         if (type == null || type == stoppingType)
         {

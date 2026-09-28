@@ -14,7 +14,7 @@ namespace Pek.IO
         /// <summary>检测文件编码</summary>
         /// <param name="filename">文件名</param>
         /// <returns></returns>
-        public static Encoding Detect(String filename)
+        public static Encoding? Detect(String filename)
         {
             using var fs = File.OpenRead(filename);
             return Detect(fs);
@@ -23,7 +23,7 @@ namespace Pek.IO
         /// <summary>检测文件编码</summary>
         /// <param name="file"></param>
         /// <returns></returns>
-        public static Encoding DetectEncoding(this FileInfo file)
+        public static Encoding? DetectEncoding(this FileInfo file)
         {
             using var fs = file.OpenRead();
             return fs.Detect();
@@ -33,7 +33,7 @@ namespace Pek.IO
         /// <param name="stream">数据流</param>
         /// <param name="sampleSize">BOM检测失败时用于启发式探索的数据大小</param>
         /// <returns></returns>
-        public static Encoding Detect(this Stream stream, Int64 sampleSize = 0x400)
+        public static Encoding? Detect(this Stream stream, Int64 sampleSize = 0x400)
         {
             // 记录数据流原始位置，后面需要复原
             var pos = stream.Position;
@@ -41,7 +41,7 @@ namespace Pek.IO
 
             // 首先检查BOM
             var boms = new Byte[stream.Length > 4 ? 4 : stream.Length];
-            stream.Read(boms, 0, boms.Length);
+            ReadAtMost(stream, boms, 0, boms.Length);
 
             var encoding = DetectBOM(boms);
             if (encoding != null)
@@ -54,7 +54,7 @@ namespace Pek.IO
             // 抽查一段字节数组
             var data = new Byte[sampleSize > stream.Length ? stream.Length : sampleSize];
             Array.Copy(boms, data, boms.Length);
-            if (stream.Length > boms.Length) stream.Read(data, boms.Length, data.Length - boms.Length);
+            if (stream.Length > boms.Length) ReadAtMost(stream, data, boms.Length, data.Length - boms.Length);
             stream.Position = pos;
 
             return DetectInternal(data);
@@ -63,7 +63,7 @@ namespace Pek.IO
         /// <summary>检测字节数组编码</summary>
         /// <param name="data">字节数组</param>
         /// <returns></returns>
-        public static Encoding Detect(this Byte[] data)
+        public static Encoding? Detect(this Byte[] data)
         {
             // 探测BOM头
             var encoding = DetectBOM(data);
@@ -72,9 +72,9 @@ namespace Pek.IO
             return DetectInternal(data);
         }
 
-        static Encoding DetectInternal(Byte[] data)
+        static Encoding? DetectInternal(Byte[] data)
         {
-            Encoding encoding = null;
+            Encoding? encoding = null;
             // 最笨的办法尝试
             var encs = new Encoding[] {
                 // 常用
@@ -112,7 +112,7 @@ namespace Pek.IO
         /// <summary>检测BOM字节序</summary>
         /// <param name="boms"></param>
         /// <returns></returns>
-        public static Encoding DetectBOM(this Byte[] boms)
+        public static Encoding? DetectBOM(this Byte[] boms)
         {
             if (boms.Length < 2) return null;
 
@@ -137,10 +137,28 @@ namespace Pek.IO
             return null;
         }
 
+        /// <summary>尽力读满指定字节数，流不足时返回实际读取数量</summary>
+        /// <param name="stream">数据流</param>
+        /// <param name="buffer">目标缓冲区</param>
+        /// <param name="offset">起始偏移</param>
+        /// <param name="count">期望读取数量</param>
+        /// <returns>实际读取数量</returns>
+        static Int32 ReadAtMost(Stream stream, Byte[] buffer, Int32 offset, Int32 count)
+        {
+            var total = 0;
+            while (total < count)
+            {
+                var n = stream.Read(buffer, offset + total, count - total);
+                if (n <= 0) break;
+                total += n;
+            }
+            return total;
+        }
+
         /// <summary>检测是否ASCII</summary>
         /// <param name="data"></param>
         /// <returns></returns>
-        static Encoding DetectASCII(Byte[] data)
+        static Encoding? DetectASCII(Byte[] data)
         {
             // 如果所有字节都小于128，则可以使用ASCII编码
             for (var i = 0; i < data.Length; i++)
@@ -184,7 +202,7 @@ namespace Pek.IO
         /// <summary>启发式探测Unicode编码</summary>
         /// <param name="data"></param>
         /// <returns></returns>
-        static Encoding DetectUnicode(Byte[] data)
+        static Encoding? DetectUnicode(Byte[] data)
         {
             Int64 oddBinaryNullsInSample = 0;
             Int64 evenBinaryNullsInSample = 0;

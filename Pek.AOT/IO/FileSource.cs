@@ -3,16 +3,11 @@
 using Pek.Extension;
 using System.Collections.Generic;
 
-using Pek.Extension;
 using System.IO;
 
-using Pek.Extension;
 using System.Linq;
 
-using Pek.Extension;
 using System.Reflection;
-
-using Pek.Extension;
 
 namespace Pek.IO;
 
@@ -24,7 +19,7 @@ public static class FileSource
     /// <param name="fileName"></param>
     /// <param name="destFile"></param>
     /// <param name="overWrite"></param>
-    public static void ReleaseFile(this Assembly asm, String fileName, String destFile = null, Boolean overWrite = false)
+    public static void ReleaseFile(this Assembly asm, String fileName, String? destFile = null, Boolean overWrite = false)
     {
         if (fileName.IsNullOrEmpty()) return;
 
@@ -69,14 +64,14 @@ public static class FileSource
     /// <param name="dest"></param>
     /// <param name="overWrite"></param>
     /// <param name="filenameResolver"></param>
-    public static void ReleaseFolder(this Assembly asm, String prefix, String dest, Boolean overWrite = false, Func<String, String> filenameResolver = null)
+    public static void ReleaseFolder(this Assembly asm, String prefix, String dest, Boolean overWrite = false, Func<String, String>? filenameResolver = null)
     {
         if (asm == null) asm = Assembly.GetCallingAssembly();
 
         // 鎵惧埌绗﹀悎鏉′欢鐨勮祫婧?
         var names = asm.GetManifestResourceNames();
         if (names == null || names.Length <= 0) return;
-        IEnumerable<String> ns = null;
+        IEnumerable<String> ns;
         if (prefix.IsNullOrWhiteSpace())
             ns = names.AsEnumerable();
         else
@@ -89,9 +84,10 @@ public static class FileSource
         foreach (var item in ns)
         {
             var stream = asm.GetManifestResourceStream(item);
+            if (stream == null) continue;
 
-            // 璁＄畻filename
-            String filename = null;
+            // 计算filename
+            String? filename = null;
             // 鍘绘帀鍓嶇紑
             if (filenameResolver != null) filename = filenameResolver(item);
 
@@ -129,7 +125,7 @@ public static class FileSource
     /// <param name="asm"></param>
     /// <param name="filename"></param>
     /// <returns></returns>
-    public static Stream GetFileResource(this Assembly asm, String filename)
+    public static Stream? GetFileResource(this Assembly asm, String filename)
     {
         if (String.IsNullOrEmpty(filename)) return null;
 

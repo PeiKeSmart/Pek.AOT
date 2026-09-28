@@ -17,7 +17,7 @@ namespace Pek.Expressions
     public abstract class RpnExpression
     {
         /// <summary>操作符数组</summary>
-        public Char[] OperationChars { get; protected set; }
+        public Char[] OperationChars { get; protected set; } = [];
 
         /// <summary>是否括号</summary>
         /// <param name="ch"></param>
@@ -70,12 +70,12 @@ namespace Pek.Expressions
         protected virtual String AdapteAndReplace(String expression) => expression;
 
         /// <summary>值</summary>
-        public String Value { get; private set; }
+        public String Value { get; private set; } = String.Empty;
 
         /// <summary>将中缀表达式转换为逆波兰表达式</summary>
         /// <param name="expression">标准中缀表达式</param>
         /// <returns>标准逆波兰表达式</returns>
-        public String[] ToExpression(String expression)
+        public String[]? ToExpression(String expression)
         {
             if (String.IsNullOrWhiteSpace(expression)) return null;
 

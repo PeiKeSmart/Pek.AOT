@@ -11,7 +11,7 @@ public class PredicateExpressionBuilder<TEntity>
     /// <summary>参数</summary>
     private readonly ParameterExpression _parameter;
     /// <summary>结果表达式</summary>
-    private Expression _result;
+    private Expression? _result;
 
     /// <summary>初始化谓词表达式生成器</summary>
     public PredicateExpressionBuilder()
@@ -32,8 +32,9 @@ public class PredicateExpressionBuilder<TEntity>
     }
 
     /// <summary>转换为Lambda表达式</summary>
-    public Expression<Func<TEntity, Boolean>> ToLambda()
+    public Expression<Func<TEntity, Boolean>>? ToLambda()
     {
+        if (_result == null) throw new InvalidOperationException("尚未构建表达式，无法转换为 Lambda。");
         return _result.ToLambda<Func<TEntity, Boolean>>(_parameter);
     }
 }

@@ -43,7 +43,10 @@ public static class FormatExtensions
                 sb.AppendLine($"{appString}内部异常：");
                 count++;
             }
-            e = e.InnerException;
+
+            var innerException = e.InnerException;
+            if (innerException == null) break;
+            e = innerException;
         }
         return sb.ToString();
     }

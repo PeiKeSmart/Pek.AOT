@@ -54,7 +54,7 @@ public static class XmlNodeExtensions
     /// 获取CData节点的内容
     /// </summary>
     /// <param name="parentNode">父节点</param>
-    public static String GetCdataSection(this XmlNode parentNode) => parentNode.ChildNodes.OfType<XmlCDataSection>().Select(node => node.Value).FirstOrDefault();
+    public static String? GetCdataSection(this XmlNode parentNode) => parentNode.ChildNodes.OfType<XmlCDataSection>().Select(node => node.Value).FirstOrDefault();
 
     #endregion
 
@@ -66,7 +66,7 @@ public static class XmlNodeExtensions
     /// <param name="node">节点</param>
     /// <param name="name">属性名</param>
     /// <param name="defaultValue">默认值。如果没有匹配属性存在</param>
-    public static String GetAttribute(this XmlNode node, String name, String defaultValue = null)
+    public static String? GetAttribute(this XmlNode node, String name, String? defaultValue = null)
     {
         if (node.Attributes == null)
             return defaultValue;
@@ -120,7 +120,8 @@ public static class XmlNodeExtensions
         var attribute = node.Attributes[name, node.NamespaceURI];
         if (attribute == null)
         {
-            attribute = node.OwnerDocument?.CreateAttribute(name, node.OwnerDocument.NamespaceURI);
+            attribute = node.OwnerDocument?.CreateAttribute(name, node.OwnerDocument.NamespaceURI)
+                ?? throw new InvalidOperationException("无法创建XML属性，节点缺少所属文档。");
             node.Attributes.Append(attribute);
         }
 

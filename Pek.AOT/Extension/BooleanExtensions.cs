@@ -104,7 +104,7 @@ public static class BooleanExtensions
     /// <param name="value">值</param>
     /// <param name="t">输出参数</param>
     /// <returns></returns>
-    public static T IfTrue<T>(this Boolean value, T t)
+    public static T? IfTrue<T>(this Boolean value, T t)
     {
         return value ? t : default(T);
     }
@@ -116,7 +116,7 @@ public static class BooleanExtensions
     /// <param name="value">值</param>
     /// <param name="t">输出参数</param>
     /// <returns></returns>
-    public static T IfTrue<T>(this Boolean? value, T t)
+    public static T? IfTrue<T>(this Boolean? value, T t)
     {
         return value.GetValueOrDefault() ? t : default(T);
     }
@@ -162,7 +162,7 @@ public static class BooleanExtensions
     /// <param name="value">值</param>
     /// <param name="t">输出参数</param>
     /// <returns></returns>
-    public static T IfFalse<T>(this Boolean value, T t)
+    public static T? IfFalse<T>(this Boolean value, T t)
     {
         return !value ? t : default(T);
     }
@@ -174,7 +174,7 @@ public static class BooleanExtensions
     /// <param name="value">值</param>
     /// <param name="t">输出参数</param>
     /// <returns></returns>
-    public static T IfFalse<T>(this Boolean? value, T t)
+    public static T? IfFalse<T>(this Boolean? value, T t)
     {
         return !value.GetValueOrDefault() ? t : default(T);
     }

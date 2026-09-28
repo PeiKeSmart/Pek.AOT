@@ -192,7 +192,7 @@ public class RedisSortedSet<T> : RedisBase
             if (result[0] is IPacket packet)
                 position = packet.ToStr().ToInt();
             else if (result[0] != null)
-                position = result[0].ToString().ToInt();
+                position = (result[0].ToString() ?? String.Empty).ToInt();
 
             if (result[1] is not Object[] items) yield break;
 

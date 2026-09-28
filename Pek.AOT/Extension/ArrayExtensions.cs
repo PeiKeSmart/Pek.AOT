@@ -226,14 +226,16 @@ public static class ArrayExtensions
     /// 	</code>
     /// </example>
     /// <returns></returns>
-    public static T[] CombineArray<T>(this T[] combineWith, T[] arrayToCombine)
+    public static T[]? CombineArray<T>(this T[]? combineWith, T[]? arrayToCombine)
     {
-        if (combineWith != default(T[]) && arrayToCombine != default(T[]))
+        if (combineWith != null && arrayToCombine != null)
         {
             Int32 initialSize = combineWith.Length;
-            Array.Resize(ref combineWith, initialSize + arrayToCombine.Length);
-            Array.Copy(arrayToCombine, arrayToCombine.GetLowerBound(0), combineWith, initialSize,
+            var result = new T[initialSize + arrayToCombine.Length];
+            Array.Copy(combineWith, result, initialSize);
+            Array.Copy(arrayToCombine, arrayToCombine.GetLowerBound(0), result, initialSize,
                 arrayToCombine.Length);
+            return result;
         }
         return combineWith;
     }
@@ -248,14 +250,11 @@ public static class ArrayExtensions
     /// <typeparam name="T">数组类型</typeparam>
     /// <param name="source">源数组</param>
     /// <returns></returns>
-    public static T[] ClearAll<T>(this T[] source)
+    public static T[]? ClearAll<T>(this T[]? source)
     {
         if (source != null)
         {
-            for (Int32 i = source.GetLowerBound(0); i <= source.GetUpperBound(0); ++i)
-            {
-                source[i] = default(T);
-            }
+            Array.Clear(source);
         }
 
         return source;
@@ -271,7 +270,7 @@ public static class ArrayExtensions
     /// <param name="array">数组</param>
     /// <param name="index">索引</param>
     /// <returns></returns>
-    public static Array ClearAt(this Array array, Int32 index)
+    public static Array? ClearAt(this Array? array, Int32 index)
     {
         if (array != null)
         {
@@ -292,14 +291,14 @@ public static class ArrayExtensions
     /// <param name="array">数组</param>
     /// <param name="index">索引</param>
     /// <returns></returns>
-    public static T[] ClearAt<T>(this T[] array, Int32 index)
+    public static T[]? ClearAt<T>(this T[]? array, Int32 index)
     {
         if (array != null)
         {
             var arrayIndex = index.GetArrayIndex();
             if (arrayIndex.IsIndexInArray(array))
             {
-                array[arrayIndex] = default(T);
+                Array.Clear(array, arrayIndex, 1);
             }
         }
 
@@ -338,7 +337,7 @@ public static class ArrayExtensions
             throw new NullReferenceException(nameof(source));
 
         Int32 n = length;
-        T[] b = null;
+        T[]? b = null;
         if (source.Length < index + length)
         {
             n = source.Length - index;// n=source数组剩余长度

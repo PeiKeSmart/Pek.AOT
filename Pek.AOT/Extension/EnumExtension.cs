@@ -9,16 +9,14 @@ namespace Pek;
 /// </summary>
 public static class EnumExtension
 {
-    private static ConcurrentDictionary<String, Dictionary<String, String>> _enumCache;
+    private static ConcurrentDictionary<String, Dictionary<String, String>>? _enumCache;
 
     private static ConcurrentDictionary<String, Dictionary<String, String>> EnumCache
     {
         get
         {
-            if (_enumCache == null)
-            {
-                _enumCache = new ConcurrentDictionary<String, Dictionary<String, String>>();
-            }
+            // C#14 空条件赋值：为 null 时才创建
+            _enumCache ??= new ConcurrentDictionary<String, Dictionary<String, String>>();
             return _enumCache;
         }
         set { _enumCache = value; }

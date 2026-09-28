@@ -4,10 +4,10 @@ namespace Pek.Models;
 public class DelayQueue
 {
     /// <summary>消息类型</summary>
-    public String Type { get; set; }
+    public String Type { get; set; } = String.Empty;
 
     /// <summary>入参。传递给该服务的参数，常见Json格式</summary>
-    public String InputData { get; set; }
+    public String InputData { get; set; } = String.Empty;
 
     /// <summary>开始执行时间。用于提前下发指令后延期执行，暂时不支持取消</summary>
     public DateTime StartTime { get; set; }

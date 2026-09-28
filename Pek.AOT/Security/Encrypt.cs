@@ -324,7 +324,7 @@ public static partial class Encrypt
     /// <summary>
     /// 128位0向量
     /// </summary>
-    private static byte[] _iv;
+    private static byte[]? _iv;
 
     /// <summary>
     /// 128位0向量
@@ -335,12 +335,8 @@ public static partial class Encrypt
         {
             if (_iv == null)
             {
-                var size = 16;
-                _iv = new byte[size];
-                for (var i = 0; i < size; i++)
-                {
-                    _iv[i] = 0;
-                }
+                // byte 数组默认全 0，无需逐位赋值
+                _iv = new byte[16];
             }
             return _iv;
         }
@@ -835,7 +831,7 @@ public static partial class Encrypt
     public static string SHA256File(this Stream stream)
     {
         using var fs = new BufferedStream(stream, 1048576);
-        var sha = new SHA256Managed();
+        using var sha = SHA256.Create();
         var checksum = sha.ComputeHash(fs);
         return BitConverter.ToString(checksum).Replace("-", string.Empty);
     }

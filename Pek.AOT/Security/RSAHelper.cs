@@ -119,7 +119,7 @@ public static class RSAHelper
     public static Byte[] Encrypt(Byte[] data, String pubKey, Boolean fOAEP = true)
     {
         using var rsa = Create(pubKey);
-        return rsa.Encrypt(data, fOAEP);
+        return rsa.Encrypt(data, fOAEP ? RSAEncryptionPadding.OaepSHA1 : RSAEncryptionPadding.Pkcs1);
     }
 
     /// <summary>RSA私钥解密。仅用于加密少量数据</summary>
@@ -130,7 +130,7 @@ public static class RSAHelper
     public static Byte[] Decrypt(Byte[] data, String priKey, Boolean fOAEP = true)
     {
         using var rsa = Create(priKey);
-        return rsa.Decrypt(data, fOAEP);
+        return rsa.Decrypt(data, fOAEP ? RSAEncryptionPadding.OaepSHA1 : RSAEncryptionPadding.Pkcs1);
     }
     #endregion
 

@@ -318,7 +318,7 @@ public abstract class FileSystemObject
     /// <summary>获取文件流编码</summary>
     /// <param name="stream">文件流</param>
     /// <returns></returns>
-    public static Encoding GetEncoding(FileStream stream)
+    public static Encoding GetEncoding(FileStream? stream)
     {
         var bigEndianUnicode = Encoding.UTF8;
         if ((stream != null) && (stream.Length >= 2L))
@@ -347,7 +347,7 @@ public abstract class FileSystemObject
 
             stream.Seek(offset, SeekOrigin.Begin);
         }
-        stream.Dispose();
+        stream?.Dispose();
         return bigEndianUnicode;
     }
 
@@ -524,15 +524,15 @@ public abstract class FileSystemObject
 public class DirectoryAllInfo
 {
     /// <summary>名称</summary>
-    public String name { get; set; }
+    public String name { get; set; } = String.Empty;
     /// <summary>真实名称</summary>
-    public String rname { get; set; }
+    public String rname { get; set; } = String.Empty;
     /// <summary>内容类型</summary>
-    public String content_type { get; set; }
+    public String content_type { get; set; } = String.Empty;
     /// <summary>类型：1-文件夹，2-文件</summary>
     public Int32 type { get; set; }
     /// <summary>路径</summary>
-    public String path { get; set; }
+    public String path { get; set; } = String.Empty;
     /// <summary>创建时间</summary>
     public DateTime creatime { get; set; }
     /// <summary>最后写入时间</summary>
@@ -547,11 +547,11 @@ public class DirectoryInfos
     /// <summary>ID</summary>
     public Int32 Id { get; set; }
     /// <summary>名称</summary>
-    public String name { get; set; }
+    public String name { get; set; } = String.Empty;
     /// <summary>类型：1-文件夹，2-文件</summary>
     public Int32 type { get; set; }
     /// <summary>内容类型</summary>
-    public String content_type { get; set; }
+    public String content_type { get; set; } = String.Empty;
     /// <summary>大小</summary>
     public Int64 size { get; set; }
     /// <summary>创建时间</summary>
@@ -559,5 +559,5 @@ public class DirectoryInfos
     /// <summary>最后写入时间</summary>
     public DateTime lastWriteTime { get; set; }
     /// <summary>路径</summary>
-    public String path { get; set; }
+    public String path { get; set; } = String.Empty;
 }

@@ -14,7 +14,7 @@ public static class LambdaExpressionExtensions
     /// </summary>
     /// <param name="expression">表达式</param>
     /// <returns></returns>
-    public static PropertyInfo ExtractPropertyInfo(this LambdaExpression expression)
+    public static PropertyInfo? ExtractPropertyInfo(this LambdaExpression expression)
     {
         return expression.ExtractMemberInfo() as PropertyInfo;
     }
@@ -24,7 +24,7 @@ public static class LambdaExpressionExtensions
     /// </summary>
     /// <param name="expression">表达式</param>
     /// <returns></returns>
-    public static FieldInfo ExtractFieldInfo(this LambdaExpression expression)
+    public static FieldInfo? ExtractFieldInfo(this LambdaExpression expression)
     {
         return expression.ExtractMemberInfo() as FieldInfo;
     }
@@ -41,7 +41,7 @@ public static class LambdaExpressionExtensions
         MemberInfo info;
         try
         {
-            MemberExpression operand;
+            MemberExpression? operand;
             LambdaExpression lambda = expression;
             if (lambda.Body is UnaryExpression body)
             {
@@ -51,6 +51,9 @@ public static class LambdaExpressionExtensions
             {
                 operand = lambda.Body as MemberExpression;
             }
+
+            // 非成员访问表达式由 catch 统一转换为 ArgumentNullException（保持原行为）
+            if (operand == null) throw new NullReferenceException();
 
             MemberInfo member = operand.Member;
             info = member;

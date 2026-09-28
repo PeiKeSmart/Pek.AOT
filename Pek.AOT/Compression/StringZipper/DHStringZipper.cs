@@ -1,4 +1,5 @@
 #if NET8_0_OR_GREATER
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -47,11 +48,11 @@ public static class DHStringZipper
     /// <param name="id">标识符</param>
     /// <param name="component">组件实例</param>
     /// <returns>是否成功获取</returns>
-    public static Boolean TryGetComponent<T>(String id, out T component)
+    public static Boolean TryGetComponent<T>(String id, [MaybeNullWhen(false)] out T component)
     {
-        if (_components.TryGetValue(id, out var value) && value is T)
+        if (_components.TryGetValue(id, out var value) && value is T t)
         {
-            component = (T)value;
+            component = t;
             return true;
         }
         component = default;
@@ -249,7 +250,7 @@ public static class DHStringZipper
 
         public Byte[] Compress(String value) => Util.LzString.CompressToUint8Array(value);
 
-        public String Decompress(Byte[] data) => Util.LzString.DecompressFromUint8Array(data);
+        public String Decompress(Byte[] data) => Util.LzString.DecompressFromUint8Array(data) ?? String.Empty;
     }
 
     /// <summary>基于 Stream 的压缩器基类</summary>

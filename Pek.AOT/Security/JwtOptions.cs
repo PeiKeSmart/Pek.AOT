@@ -4,7 +4,7 @@ namespace Pek.Security;
 public class JwtOptions
 {
     /// <summary>密钥。密钥加密算法：HmacSha256</summary>
-    public String Secret { get; set; }
+    public String Secret { get; set; } = String.Empty;
 
     /// <summary>发行方</summary>
     public String Issuer { get; set; } = "bing_identity";

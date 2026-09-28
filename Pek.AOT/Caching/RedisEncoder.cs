@@ -25,7 +25,7 @@ public class RedisJsonEncoder : IPacketEncoder
         var text = typeCode switch
         {
             TypeCode.Object => value.ToJson(),
-            TypeCode.String => value as String,
+            TypeCode.String => value as String ?? String.Empty,
             TypeCode.DateTime => ((DateTime)value).ToString("yyyy-MM-dd HH:mm:ss.fff"),
             _ => value + String.Empty,
         };

@@ -105,7 +105,7 @@ public static class CheckExtensions
 
     #region IsEmpty(是否为空)
     /// <summary>判断字符串是否为空、null 或空白字符串</summary>
-    public static Boolean IsEmpty(this String value) => String.IsNullOrWhiteSpace(value);
+    public static Boolean IsEmpty(this String? value) => String.IsNullOrWhiteSpace(value);
 
     /// <summary>判断 Guid 是否为 Guid.Empty</summary>
     public static Boolean IsEmpty(this Guid value) => value == Guid.Empty;
@@ -128,7 +128,7 @@ public static class CheckExtensions
 
     #region 判断对象是否为空
     /// <summary>字符串是否为 Null 或为空</summary>
-    public static Boolean StrIsNullOrEmpty(this String str)
+    public static Boolean StrIsNullOrEmpty(this String? str)
     {
         if (str == null || str.Trim() == String.Empty) return true;
         return false;

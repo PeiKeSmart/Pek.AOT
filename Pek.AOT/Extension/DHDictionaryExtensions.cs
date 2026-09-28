@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 
 namespace System.Collections.Generic;
@@ -16,12 +17,11 @@ public static class DHDictionaryExtensions
     /// <param name="key">键</param>
     /// <param name="value">键的值(如果键不存在，则为默认值)</param>
     /// <returns>如果字典中确实存在键，则为True</returns>
-    internal static Boolean TryGetValue<T>(this IDictionary<String, Object> dictionary, String key, out T value)
+    internal static Boolean TryGetValue<T>(this IDictionary<String, Object> dictionary, String key, [MaybeNullWhen(false)] out T value)
     {
-        Object valueObj;
-        if (dictionary.TryGetValue(key, out valueObj) && valueObj is T)
+        if (dictionary.TryGetValue(key, out var valueObj) && valueObj is T t)
         {
-            value = (T)valueObj;
+            value = t;
             return true;
         }
 
@@ -37,20 +37,7 @@ public static class DHDictionaryExtensions
     /// <typeparam name="TKey">键的类型</typeparam>
     /// <typeparam name="TValue">值的类型</typeparam>
     /// <returns>如果找不到就用默认值。</returns>
-    public static TValue GetOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key)
-    {
-        return dictionary.TryGetValue(key, out TValue obj) ? obj : default;
-    }
-
-    /// <summary>
-    /// 从具有给定键的字典中获取值。如果找不到，则返回默认值。
-    /// </summary>
-    /// <param name="dictionary">要检查和获取的字典</param>
-    /// <param name="key">查找值的键</param>
-    /// <typeparam name="TKey">键的类型</typeparam>
-    /// <typeparam name="TValue">值的类型</typeparam>
-    /// <returns>如果找不到就用默认值。</returns>
-    public static TValue GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key)
+    public static TValue? GetOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key) where TKey : notnull
     {
         return dictionary.TryGetValue(key, out var obj) ? obj : default;
     }
@@ -63,7 +50,7 @@ public static class DHDictionaryExtensions
     /// <typeparam name="TKey">键的类型</typeparam>
     /// <typeparam name="TValue">值的类型</typeparam>
     /// <returns>如果找不到就用默认值。</returns>
-    public static TValue GetOrDefault<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> dictionary, TKey key)
+    public static TValue? GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key)
     {
         return dictionary.TryGetValue(key, out var obj) ? obj : default;
     }
@@ -76,7 +63,20 @@ public static class DHDictionaryExtensions
     /// <typeparam name="TKey">键的类型</typeparam>
     /// <typeparam name="TValue">值的类型</typeparam>
     /// <returns>如果找不到就用默认值。</returns>
-    public static TValue GetOrDefault<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> dictionary, TKey key)
+    public static TValue? GetOrDefault<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> dictionary, TKey key)
+    {
+        return dictionary.TryGetValue(key, out var obj) ? obj : default;
+    }
+
+    /// <summary>
+    /// 从具有给定键的字典中获取值。如果找不到，则返回默认值。
+    /// </summary>
+    /// <param name="dictionary">要检查和获取的字典</param>
+    /// <param name="key">查找值的键</param>
+    /// <typeparam name="TKey">键的类型</typeparam>
+    /// <typeparam name="TValue">值的类型</typeparam>
+    /// <returns>如果找不到就用默认值。</returns>
+    public static TValue? GetOrDefault<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> dictionary, TKey key) where TKey : notnull
     {
         return dictionary.TryGetValue(key, out var obj) ? obj : default;
     }
@@ -92,7 +92,7 @@ public static class DHDictionaryExtensions
     /// <returns>如果找不到就用默认值。</returns>
     public static TValue GetOrAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, Func<TKey, TValue> factory)
     {
-        TValue obj;
+        TValue? obj;
         if (dictionary.TryGetValue(key, out obj))
         {
             return obj;
@@ -124,7 +124,7 @@ public static class DHDictionaryExtensions
     /// <typeparam name="TKey">键的类型</typeparam>
     /// <typeparam name="TValue">值的类型</typeparam>
     /// <returns>如果找不到就用默认值。</returns>
-    public static TValue GetOrAdd<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> dictionary, TKey key, Func<TValue> factory)
+    public static TValue GetOrAdd<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> dictionary, TKey key, Func<TValue> factory) where TKey : notnull
     {
         return dictionary.GetOrAdd(key, k => factory());
     }
@@ -137,11 +137,11 @@ public static class DHDictionaryExtensions
     public static dynamic ConvertToDynamicObject(this Dictionary<String, Object> dictionary)
     {
         var expandoObject = new ExpandoObject();
-        var expendObjectCollection = (ICollection<KeyValuePair<String, Object>>)expandoObject;
+        var expendObjectCollection = (ICollection<KeyValuePair<String, Object?>>)expandoObject;
 
         foreach (var keyValuePair in dictionary)
         {
-            expendObjectCollection.Add(keyValuePair);
+            expendObjectCollection.Add(new KeyValuePair<String, Object?>(keyValuePair.Key, keyValuePair.Value));
         }
 
         return expandoObject;

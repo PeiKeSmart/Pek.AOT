@@ -111,9 +111,9 @@ public static class DirectoryHelper
             return Directory.GetFiles(directoryPath, searchPattern,
                 isSearchChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
         }
-        catch (IOException e)
+        catch (IOException)
         {
-            throw e;
+            throw;
         }
     }
 
@@ -148,9 +148,9 @@ public static class DirectoryHelper
             var fileNames = GetFileNames(directoryPath, searchPattern, isSearchChild);
             return fileNames.Length != 0;
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            throw e;
+            throw;
         }
     }
 
